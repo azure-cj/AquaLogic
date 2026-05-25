@@ -1,0 +1,22 @@
+{
+  "name": "DIYables LCD I2C",
+  "version": "1.0.0",
+  "description": "The Arduino library for controlling I2C LCD displays (16x2, 20x4) with helper functions, custom characters, and multiple I2C bus support. Compatible with Arduino, ESP32, ESP8266, STM32, Raspberry Pi Pico, and more.",
+  "keywords": "lcd, i2c, display, hd44780, 16x2, 20x4, diyables",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DIYables/DIYables-LCD-I2C.git"
+  },
+  "authors": [
+    {
+      "name": "DIYables.io",
+      "url": "https://diyables.io",
+      "email": "diyables.io@gmail.com",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://diyables.io",
+  "frameworks": "arduino",
+  "platforms": "*"
+}
