@@ -1,0 +1,2 @@
+# AquaLogic-Water-Monitoring-with-IOT-sensor-and-Fish-Information-Management-System
+AquaLogic is an IoT-based aquarium monitoring and automation system for JRed Aquatics that tracks water parameters like temperature, pH, and clarity in real time. It features automated feeding, lighting, chemical dispensing, and water replacement to maintain optimal fish tank conditions while reducing manual workload.
