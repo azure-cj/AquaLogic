@@ -13,9 +13,16 @@ def _loop() -> None:
     while True:
         with SessionLocal() as db:
             tanks = list(db.scalars(select(Tank).order_by(Tank.id)).all())
-            for index, tank in enumerate(tanks):
-                # Sustained, deterministic patterns expose normal, warning, and critical states.
-                ammonia = 0.1 if index % 3 == 0 else (0.35 if index % 3 == 1 else 0.7)
+            for tank in tanks:
+                # Keep one service tank deliberately stale while the other demo
+                # habitats report deterministic normal, warning, and critical states.
+                if tank.tank_code == "SERVICE-01":
+                    continue
+                ammonia = 0.1
+                if tank.tank_code == "DISPLAY-02":
+                    ammonia = 0.35
+                elif tank.tank_code == "BREED-01":
+                    ammonia = 0.7
                 ingest_reading(db, tank.id, {"temperature": 25.5 + (cycle % 2) * .1, "ph": 7.1, "turbidity": 3, "dissolved_oxygen": 6.2, "tds": 180, "ammonia": ammonia, "is_mock": True})
         cycle += 1
         time.sleep(settings.demo_sensor_interval_seconds)

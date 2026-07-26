@@ -14,8 +14,16 @@ Last reviewed: 2026-07-27
 - Warning/critical alert creation, listing, filtering, and resolution.
 - Public tank API using UUID-style public IDs.
 - Fleet overview, threshold administration, and fleet analytics endpoints.
+- Fleet analytics provide complete bucket timelines, three-tank overlays,
+  historical threshold segments, exact alert events, previous-period
+  comparisons, reporting-gap diagnostics, and classified uptime.
 - Optional demo sensor generation behind two explicit flags.
+- The local seed workflow creates seven days of deterministic demo sensor
+  history, representative normal/warning/critical/offline fleet states, alert
+  history, and populated public-tank details.
 - Backend behavior covered by pytest tests.
+- Fish species expose care groups, categorical diets, and tank usage counts;
+  assigned species are protected from deletion.
 
 ### Web
 
@@ -24,8 +32,15 @@ Last reviewed: 2026-07-27
   and thresholds.
 - Lazy route loading, feature-first structure, shared API client, responsive
   layouts, and accessible loading/dialog patterns.
+- Floating-island navigation uses one grouped configuration and adapts from
+  flat links to clustered menus as the viewport or navigation count requires.
 - Local typecheck, tests, and production build have been recorded as passing in
   `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`.
+- Fish species use a grouped directory by default with a remembered compact-list
+  alternative, diet badges, thumbnails, filters, and assignment-aware actions.
+- Analytics support URL-persisted range/resolution/tank/metric controls,
+  threshold and alert overlays, synchronized parameter previews, aligned
+  comparison charts, operational insights, deep links, and filtered CSV export.
 
 ### Mobile
 
@@ -58,7 +73,9 @@ Last reviewed: 2026-07-27
 - SQLite is the normal local database; PostgreSQL production behavior remains
   to be exercised.
 - Dashboard list endpoints do not yet paginate.
-- Fleet analytics aggregates selected periods in application memory.
+- Fleet analytics stream required reading columns and aggregate them in the
+  application; custom windows are therefore capped at 30 days and 1,000
+  buckets.
 - The current public API exposes the latest configured sensor values; this needs
   a final privacy and threat review before production.
 - Staff management does not yet prevent removing the final active administrator.
@@ -67,10 +84,14 @@ Last reviewed: 2026-07-27
 
 ## Validation checkpoint — 2026-07-27
 
-- Backend: `pytest -q` passed with 16 tests and one third-party deprecation
+- Backend: `pytest -q` passed with 18 tests and one third-party deprecation
   warning.
-- Web: `npm run typecheck` passed.
-- Web: `npm test` passed with 29 tests across 7 test files.
+- Database: `alembic upgrade head` reached
+  `0005_analytics_threshold_history`.
+- Web: `npm run typecheck` and `npm run build` passed.
+- Web: `npm test` passed with 38 tests across 9 test files.
+- Browser: authenticated analytics regression passed at desktop, tablet, and
+  mobile widths with no console errors or document-level horizontal overflow.
 - Mobile: validation is pending a Flutter/Dart SDK compatible with the
   `mobile_app/pubspec.yaml` requirement (`^3.12.1`); the available Dart SDK is
   3.12.0.

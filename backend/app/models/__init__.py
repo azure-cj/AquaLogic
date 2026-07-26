@@ -4,7 +4,7 @@ from .sensor import SensorReading
 from .tank import Tank
 from .user import User
 from .customer import Customer
-from .threshold import ThresholdConfig
+from .threshold import ThresholdConfig, ThresholdRevision
 
 __all__ = [
     "Alert",
@@ -16,4 +16,5 @@ __all__ = [
     "User",
     "Customer",
     "ThresholdConfig",
+    "ThresholdRevision",
 ]

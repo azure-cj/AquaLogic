@@ -1,0 +1,75 @@
+.fish-directory__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.fish-view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid #d7e4e6;
+  border-radius: 10px;
+  background: #edf3f4;
+}
+
+.fish-view-toggle button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.45rem 0.62rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #687e87;
+  font-size: 0.67rem;
+  font-weight: 780;
+  box-shadow: none;
+}
+
+.fish-view-toggle button.is-active {
+  background: #fff;
+  color: var(--teal-700);
+  box-shadow: 0 1px 4px rgba(24, 57, 68, 0.12);
+}
+
+.fish-directory__state {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.fish-directory__compact-panel {
+  margin-top: 1rem;
+}
+
+.compact-fish__diet-badge--unset,
+.fdg-unset {
+  border-color: #dbe5e7;
+  background: #f0f4f5;
+  color: #637982;
+}
+
+.fish-directory .field select {
+  min-height: 40px;
+  padding: 0.62rem 0.7rem;
+}
+
+@media (max-width: 767px) {
+  .fish-directory__header-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .fish-view-toggle,
+  .fish-directory__header-actions .fdg-primary-button {
+    width: 100%;
+  }
+
+  .fish-view-toggle button {
+    flex: 1;
+    justify-content: center;
+  }
+}

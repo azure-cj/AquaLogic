@@ -231,6 +231,33 @@ SAMPLE_FISH_SPECIES = [
     },
 ]
 
+CATEGORY_BY_NAME = {
+    "Betta": "Labyrinth fish",
+    "Guppy": "Livebearers",
+    "Molly": "Livebearers",
+    "Platy": "Livebearers",
+    "Swordtail": "Livebearers",
+    "Goldfish": "Coldwater",
+    "Koi": "Coldwater",
+    "Angelfish": "Cichlids",
+    "Discus": "Cichlids",
+    "Oscar": "Cichlids",
+    "Neon Tetra": "Schooling fish",
+    "Zebra Danio": "Schooling fish",
+    "Cherry Barb": "Schooling fish",
+    "Corydoras Catfish": "Bottom dwellers",
+    "Clownfish": "Marine",
+}
+
+
+def _diet_type(diet: str | None) -> str | None:
+    normalized = (diet or "").lower()
+    if "carnivor" in normalized:
+        return "Carnivore"
+    if "herbivor" in normalized:
+        return "Herbivore"
+    return "Omnivore" if normalized else None
+
 
 def seed_fish_species(db: Session) -> int:
     created = 0
@@ -239,7 +266,12 @@ def seed_fish_species(db: Session) -> int:
     for fish_data in SAMPLE_FISH_SPECIES:
         if fish_data["common_name"] in existing_names:
             continue
-        db.add(FishSpecies(**fish_data))
+        directory_data = {
+            **fish_data,
+            "category": CATEGORY_BY_NAME.get(fish_data["common_name"], "Other"),
+            "diet_type": _diet_type(fish_data.get("diet")),
+        }
+        db.add(FishSpecies(**directory_data))
         created += 1
 
     return created

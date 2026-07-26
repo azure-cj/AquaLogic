@@ -1,8 +1,9 @@
 import AdminShell from './AdminShell';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { adminNavigation, adminNavigationItemCount, NAVIGATION_FLAT_ITEM_LIMIT } from './navigation';
 
 const mocked = vi.hoisted(() => ({
   prefetch: vi.fn(),
@@ -34,13 +35,14 @@ vi.mock('@/shared/api/client', async (importOriginal) => {
   };
 });
 
-function renderShell() {
+function renderShell(initialEntry = '/admin/fleet') {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={['/admin/fleet']}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/admin" element={<AdminShell />}>
             <Route path="fleet" element={<div>Fleet content</div>} />
+            <Route path="*" element={<div>Admin content</div>} />
           </Route>
           <Route path="/admin/login" element={<div>Login destination</div>} />
           <Route
@@ -88,6 +90,22 @@ describe('admin shell guards and navigation', () => {
     expect(await screen.findByText('Fleet content')).toBeInTheDocument();
     expect(screen.queryByText('Staff & roles')).not.toBeInTheDocument();
     expect(screen.queryByText('Thresholds')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Configure' })).not.toBeInTheDocument();
+  });
+
+  it('keeps all flat navigation entries in the grouped config order', () => {
+    expect(adminNavigation.map((group) => group.label)).toEqual(['Monitor', 'Manage', 'Configure']);
+    expect(adminNavigation.flatMap((group) => group.items.map((item) => item.label))).toEqual([
+      'Fleet overview',
+      'Alerts',
+      'Analytics',
+      'Tanks',
+      'Fish species',
+      'Customers',
+      'Staff & roles',
+      'Thresholds',
+    ]);
+    expect(adminNavigationItemCount).toBe(NAVIGATION_FLAT_ITEM_LIMIT);
   });
 
   it('prefetches a destination when navigation intent is shown', async () => {
@@ -98,8 +116,69 @@ describe('admin shell guards and navigation', () => {
       must_change_password: false,
     };
     renderShell();
-    const alertsLink = await screen.findByRole('link', { name: 'Alerts' });
-    fireEvent.pointerEnter(alertsLink);
+    const alertsLinks = await screen.findAllByRole('link', { name: 'Alerts' });
+    fireEvent.pointerEnter(alertsLinks[0]);
     expect(mocked.prefetch).toHaveBeenCalledWith('/admin/alerts');
+  });
+
+  it('toggles cluster menus and dismisses them with Escape or an outside pointer', async () => {
+    mocked.me.isError = false;
+    mocked.me.data = {
+      name: 'Demo Admin',
+      role: 'admin',
+      must_change_password: false,
+    };
+    renderShell();
+
+    const monitorToggle = screen.getByRole('button', { name: 'Monitor' });
+    fireEvent.click(monitorToggle);
+    expect(monitorToggle).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+
+    fireEvent.click(monitorToggle);
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+  });
+
+  it('closes an open cluster after navigating to one of its pages', async () => {
+    mocked.me.isError = false;
+    mocked.me.data = {
+      name: 'Demo Admin',
+      role: 'admin',
+      must_change_password: false,
+    };
+    renderShell();
+
+    const monitorToggle = screen.getByRole('button', { name: 'Monitor' });
+    fireEvent.click(monitorToggle);
+    fireEvent.click(screen.getAllByRole('link', { name: 'Alerts' })[0]);
+
+    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+  });
+
+  it('clears stale horizontal scroll before painting a client-side route', async () => {
+    mocked.me.isError = false;
+    mocked.me.data = {
+      name: 'Demo Admin',
+      role: 'admin',
+      must_change_password: false,
+    };
+    renderShell();
+
+    const main = document.querySelector<HTMLElement>('.admin-main');
+    expect(main).not.toBeNull();
+    document.documentElement.scrollLeft = 96;
+    document.body.scrollLeft = 96;
+    main!.scrollLeft = 96;
+
+    fireEvent.click(screen.getAllByRole('link', { name: 'Tanks' })[0]);
+
+    await waitFor(() => {
+      expect(document.documentElement.scrollLeft).toBe(0);
+      expect(document.body.scrollLeft).toBe(0);
+      expect(main!.scrollLeft).toBe(0);
+    });
   });
 });

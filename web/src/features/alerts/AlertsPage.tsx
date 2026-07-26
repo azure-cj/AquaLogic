@@ -21,26 +21,41 @@ import {
   X
 } from 'lucide-react';
 import {
+  useEffect,
   useState
 } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './styles.css';
 
 export function Alerts() {
   const client = useQueryClient();
-  const [severity, setSeverity] = useState('');
-  const [parameter, setParameter] = useState('');
-  const [resolved, setResolved] = useState('');
-  const [tankId, setTankId] = useState('');
-  const [after, setAfter] = useState('');
-  const [before, setBefore] = useState('');
+  const [urlParams, setUrlParams] = useSearchParams();
+  const inputDate = (value: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    const offset = date.getTimezoneOffset() * 60_000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  };
+  const [severity, setSeverity] = useState(urlParams.get('severity') ?? '');
+  const [parameter, setParameter] = useState(urlParams.get('parameter') ?? '');
+  const [resolved, setResolved] = useState(urlParams.get('resolved') ?? '');
+  const [tankId, setTankId] = useState(urlParams.get('tank_id') ?? '');
+  const [after, setAfter] = useState(inputDate(urlParams.get('created_after')));
+  const [before, setBefore] = useState(inputDate(urlParams.get('created_before')));
   const [notice, setNotice] = useState('');
   const filters = new URLSearchParams();
   if (severity) filters.set('severity', severity);
   if (parameter) filters.set('parameter', parameter);
   if (resolved) filters.set('resolved', resolved);
+  if (tankId) filters.set('tank_id', tankId);
   if (after) filters.set('created_after', new Date(after).toISOString());
-  if (before) filters.set('created_before', new Date(`${before}T23:59:59`).toISOString());
+  if (before) filters.set('created_before', new Date(before).toISOString());
   const query = filters.toString();
+  useEffect(() => {
+    if (query !== urlParams.toString()) {
+      setUrlParams(filters, { replace: true });
+    }
+  }, [query, setUrlParams, urlParams]);
   const alerts = useQuery({
     queryKey: ['alerts', query],
     queryFn: () => api<Alert[]>(`/alerts/history${query ? `?${query}` : ''}`),
@@ -53,9 +68,7 @@ export function Alerts() {
       client.invalidateQueries({ queryKey: ['alerts'] });
     },
   });
-  const visibleAlerts = (alerts.data ?? []).filter(
-    (alert) => !tankId || String(alert.tank_id) === tankId,
-  );
+  const visibleAlerts = alerts.data ?? [];
   const clear = () => {
     setSeverity('');
     setParameter('');
@@ -120,11 +133,11 @@ export function Alerts() {
           </label>
           <label className="field">
             <span>From</span>
-            <input type="date" value={after} onChange={(event) => setAfter(event.target.value)} />
+            <input type="datetime-local" value={after} onChange={(event) => setAfter(event.target.value)} />
           </label>
           <label className="field">
             <span>To</span>
-            <input type="date" value={before} onChange={(event) => setBefore(event.target.value)} />
+            <input type="datetime-local" value={before} onChange={(event) => setBefore(event.target.value)} />
           </label>
         </div>
       </Panel>

@@ -8,23 +8,16 @@ import {
   initials
 } from '@/shared/utils/formatting';
 import { useQuery } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
 import {
-  BarChart3,
-  BellRing,
-  Droplets,
-  FishSymbol,
-  LayoutDashboard,
+  ChevronDown,
   LogOut,
   Menu,
-  Plus,
-  SlidersHorizontal,
-  UserRoundCog,
-  UsersRound
 } from 'lucide-react';
 import {
   Suspense,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState
 } from 'react';
 import {
@@ -39,47 +32,13 @@ import {
 import { Brand } from '@/shared/components/Brand';
 import { RouteLoading } from '@/shared/components/RouteLoading';
 import { useMe } from '@/shared/hooks/useMe';
+import {
+  adminNavigation,
+  adminNavigationItemCount,
+  NAVIGATION_FLAT_ITEM_LIMIT,
+  type AdminNavigationItem,
+} from './navigation';
 import './styles.css';
-
-const navigation: Array<{
-  label: string;
-  items: Array<{
-    to: string;
-    label: string;
-    icon: LucideIcon;
-    badge?: boolean;
-    adminOnly?: boolean;
-  }>;
-}> = [
-    {
-      label: 'Monitor',
-      items: [
-        { to: '/admin/fleet', label: 'Fleet overview', icon: LayoutDashboard },
-        { to: '/admin/alerts', label: 'Alerts', icon: BellRing, badge: true },
-        { to: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-      ],
-    },
-    {
-      label: 'Manage',
-      items: [
-        { to: '/admin/tanks', label: 'Tanks', icon: Droplets },
-        { to: '/admin/fish', label: 'Fish species', icon: FishSymbol },
-        { to: '/admin/customers', label: 'Customers', icon: UsersRound },
-        { to: '/admin/staff', label: 'Staff & roles', icon: UserRoundCog, adminOnly: true },
-      ],
-    },
-    {
-      label: 'System',
-      items: [
-        {
-          to: '/admin/settings/thresholds',
-          label: 'Thresholds',
-          icon: SlidersHorizontal,
-          adminOnly: true,
-        },
-      ],
-    },
-  ];
 
 const pageTitles: Record<string, string> = {
   fleet: 'Fleet command center',
@@ -97,6 +56,9 @@ export function AdminShell() {
   const location = useLocation();
   const me = useMe();
   const [mobileNav, setMobileNav] = useState(false);
+  const [openCluster, setOpenCluster] = useState<string | null>(null);
+  const desktopNavRef = useRef<HTMLElement>(null);
+  const adminMainRef = useRef<HTMLElement>(null);
   const alertQuery = useQuery({
     queryKey: ['alerts', 'nav-unresolved'],
     queryFn: () => api<Alert[]>('/alerts/history?resolved=false'),
@@ -110,7 +72,37 @@ export function AdminShell() {
     return () => window.removeEventListener('aqualogic:unauthorized', unauthorized);
   }, [nav]);
 
-  useEffect(() => setMobileNav(false), [location.pathname]);
+  useEffect(() => {
+    setMobileNav(false);
+    setOpenCluster(null);
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    // React Router preserves document scroll during client-side navigation.
+    // Reset only the horizontal axis before the new route paints.
+    if (document.scrollingElement) document.scrollingElement.scrollLeft = 0;
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+    if (adminMainRef.current) adminMainRef.current.scrollLeft = 0;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!openCluster) return undefined;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!desktopNavRef.current?.contains(event.target as Node)) setOpenCluster(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenCluster(null);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openCluster]);
 
   if (me.isLoading) {
     return (
@@ -125,6 +117,34 @@ export function AdminShell() {
 
   const admin = me.data!.role === 'admin';
   const segment = location.pathname.split('/')[2] || 'fleet';
+  const visibleNavigation = adminNavigation
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.adminOnly || admin),
+    }))
+    .filter((group) => group.items.length);
+  const clusteredByCount = adminNavigationItemCount > NAVIGATION_FLAT_ITEM_LIMIT;
+  const renderNavigationLink = (item: AdminNavigationItem, className: string, iconSize: number) => {
+    const Icon = item.icon;
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        className={({ isActive }) => (isActive ? `${className} active` : className)}
+        onPointerEnter={() => void prefetchAdminRoute(item.to)}
+        onFocus={() => void prefetchAdminRoute(item.to)}
+        onTouchStart={() => void prefetchAdminRoute(item.to)}
+      >
+        <Icon size={iconSize} aria-hidden="true" />
+        <span>{item.label}</span>
+        {item.badge === 'unresolved-alerts' && Boolean(alertQuery.data?.length) && (
+          <b className="nav-badge" aria-label={`${alertQuery.data!.length} unresolved`}>
+            {alertQuery.data!.length > 99 ? '99+' : alertQuery.data!.length}
+          </b>
+        )}
+      </NavLink>
+    );
+  };
 
   return (
     <div className={`admin-shell ${mobileNav ? 'nav-open' : ''}`}>
@@ -134,49 +154,108 @@ export function AdminShell() {
         aria-label="Close navigation"
         onClick={() => setMobileNav(false)}
       />
-      <aside className="admin-sidebar">
-        <Link className="sidebar-brand" to="/admin/fleet" aria-label="AquaLogic fleet overview">
-          <Brand />
-        </Link>
-        <nav className="sidebar-nav" aria-label="Admin navigation">
-          {navigation.map((group) => {
-            const items = group.items.filter((item) => !item.adminOnly || admin);
-            if (!items.length) return null;
-            return (
-              <div className="nav-group" key={group.label}>
-                <p>{group.label}</p>
-                {items.map(({ to, label, icon: Icon, badge }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className={({ isActive }) => (isActive ? 'active' : undefined)}
-                    onPointerEnter={() => void prefetchAdminRoute(to)}
-                    onFocus={() => void prefetchAdminRoute(to)}
-                    onTouchStart={() => void prefetchAdminRoute(to)}
+
+      <div className="floating-island-wrapper">
+        <header className="floating-island">
+          <Link className="island-brand" to="/admin/fleet" aria-label="AquaLogic fleet overview">
+            <Brand />
+          </Link>
+
+          <nav
+            className={`island-nav ${clusteredByCount ? 'island-nav-count-clustered' : ''}`}
+            aria-label="Admin navigation"
+            ref={desktopNavRef}
+          >
+            {visibleNavigation.map((group) => {
+              const isOpen = openCluster === group.id;
+              const isActive = group.items.some((item) => location.pathname === item.to);
+              return (
+                <div
+                  className={`island-nav-group ${isOpen ? 'cluster-open' : ''} ${isActive ? 'cluster-active' : ''}`}
+                  key={group.id}
+                >
+                  <button
+                    className="cluster-toggle"
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={`admin-navigation-${group.id}`}
+                    onClick={() => setOpenCluster(isOpen ? null : group.id)}
                   >
-                    <Icon size={18} aria-hidden="true" />
-                    <span>{label}</span>
-                    {badge && Boolean(alertQuery.data?.length) && (
-                      <b className="nav-badge" aria-label={`${alertQuery.data!.length} unresolved`}>
-                        {alertQuery.data!.length > 99 ? '99+' : alertQuery.data!.length}
-                      </b>
-                    )}
-                  </NavLink>
-                ))}
+                    <span>{group.label}</span>
+                    <ChevronDown size={15} aria-hidden="true" />
+                  </button>
+                  <div className="cluster-menu" id={`admin-navigation-${group.id}`}>
+                    {group.items.map((item) => renderNavigationLink(item, 'nav-pill', 16))}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+
+          <div className="island-actions">
+            <div className="island-status">
+              <span className="live-dot" aria-hidden="true" />
+              <span className="live-text">Live data</span>
+              <small className="refresh-rate">30s refresh</small>
+            </div>
+            <div className="island-user-menu">
+              <span className="avatar" aria-hidden="true">
+                {initials(me.data!.name)}
+              </span>
+              <div className="user-details">
+                <strong>{me.data!.name}</strong>
+                <small>{me.data!.role}</small>
+              </div>
+              <button
+                className="icon-button island-signout"
+                type="button"
+                aria-label="Sign out"
+                onClick={() => {
+                  clearSession();
+                  nav('/admin/login');
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+            <button
+              className="icon-button mobile-menu"
+              type="button"
+              aria-label="Open navigation"
+              aria-expanded={mobileNav}
+              onClick={() => setMobileNav(!mobileNav)}
+            >
+              <Menu size={20} />
+            </button>
+          </div>
+        </header>
+      </div>
+
+      <aside className="mobile-nav-drawer" aria-label="Mobile navigation drawer">
+        <div className="mobile-drawer-header">
+          <p className="eyebrow">Live operations</p>
+          <strong>{pageTitles[segment] ?? 'AquaLogic admin'}</strong>
+        </div>
+        <nav className="mobile-drawer-nav" aria-label="Mobile menu navigation">
+          {visibleNavigation.map((group) => {
+            return (
+              <div className="mobile-nav-group" key={group.id}>
+                <p>{group.label}</p>
+                {group.items.map((item) => renderNavigationLink(item, 'mobile-nav-link', 18))}
               </div>
             );
           })}
         </nav>
-        <div className="sidebar-user">
+        <div className="mobile-drawer-user">
           <span className="avatar" aria-hidden="true">
             {initials(me.data!.name)}
           </span>
-          <span>
+          <div className="user-info">
             <strong>{me.data!.name}</strong>
             <small>{me.data!.role}</small>
-          </span>
+          </div>
           <button
-            className="icon-button sidebar-signout"
+            className="icon-button mobile-signout"
             type="button"
             aria-label="Sign out"
             onClick={() => {
@@ -188,36 +267,14 @@ export function AdminShell() {
           </button>
         </div>
       </aside>
-      <main className="admin-main">
-        <header className="admin-topbar">
-          <button
-            className="icon-button mobile-menu"
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded={mobileNav}
-            onClick={() => setMobileNav(true)}
-          >
-            <Menu size={21} />
-          </button>
+
+      <main className="admin-main" ref={adminMainRef}>
+        <div className="admin-context-header">
           <div>
             <p className="eyebrow">Live operations</p>
-            <strong>{pageTitles[segment] ?? 'AquaLogic admin'}</strong>
+            <h1 className="page-title">{pageTitles[segment] ?? 'AquaLogic admin'}</h1>
           </div>
-          {segment === 'fleet' && (
-            <Link className="button button-primary topbar-primary-action" to="/admin/tanks">
-              <Plus size={17} />
-              <span>Add tank</span>
-            </Link>
-          )}
-          <div className="topbar-status">
-            <span className="live-dot" aria-hidden="true" />
-            <span>Live data</span>
-            <small>30 sec refresh</small>
-          </div>
-          <span className="topbar-avatar avatar" aria-hidden="true">
-            {initials(me.data!.name)}
-          </span>
-        </header>
+        </div>
         <div className="admin-content">
           <Suspense
             fallback={

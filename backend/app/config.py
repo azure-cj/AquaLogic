@@ -34,6 +34,8 @@ class Settings:
     demo_sensor_instance: bool
     demo_sensor_interval_seconds: int
     public_base_url: str
+    analytics_uptime_warning: float
+    analytics_uptime_critical: float
 
 
 @lru_cache
@@ -55,6 +57,8 @@ def get_settings() -> Settings:
         demo_sensor_instance=_parse_bool(os.getenv("DEMO_SENSOR_INSTANCE")),
         demo_sensor_interval_seconds=int(os.getenv("DEMO_SENSOR_INTERVAL_SECONDS", "30")),
         public_base_url=os.getenv("PUBLIC_BASE_URL", "http://localhost:5173"),
+        analytics_uptime_warning=float(os.getenv("ANALYTICS_UPTIME_WARNING", "99")),
+        analytics_uptime_critical=float(os.getenv("ANALYTICS_UPTIME_CRITICAL", "95")),
     )
 
 

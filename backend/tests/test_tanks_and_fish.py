@@ -19,6 +19,9 @@ def _create_fish(client, headers, common_name="Test Guppy"):
         json={
             "common_name": common_name,
             "scientific_name": "Poecilia reticulata",
+            "category": "Livebearers",
+            "diet_type": "Omnivore",
+            "diet": "Flakes, pellets, and vegetable supplements.",
             "ideal_temp_min": 22.0,
             "ideal_temp_max": 28.0,
             "ideal_ph_min": 7.0,
@@ -70,6 +73,16 @@ def test_fish_crud_and_assignment_flow(client, auth_headers):
     )
     assert assign_response.status_code == 201
 
+    fish_list = client.get("/fish", headers=auth_headers)
+    assert fish_list.status_code == 200
+    assert fish_list.json()[0]["tank_count"] == 1
+    assert fish_list.json()[0]["category"] == "Livebearers"
+    assert fish_list.json()[0]["diet_type"] == "Omnivore"
+
+    protected_delete = client.delete(f"/fish/{fish['id']}", headers=auth_headers)
+    assert protected_delete.status_code == 409
+    assert protected_delete.json()["detail"] == "Fish species is assigned to 1 tank"
+
     tank_detail = client.get(f"/tanks/{tank['id']}", headers=auth_headers)
     assert tank_detail.status_code == 200
     assert len(tank_detail.json()["fish_species"]) == 1
@@ -79,6 +92,10 @@ def test_fish_crud_and_assignment_flow(client, auth_headers):
         headers=auth_headers,
     )
     assert remove_response.status_code == 204
+
+    fish_detail = client.get(f"/fish/{fish['id']}", headers=auth_headers)
+    assert fish_detail.status_code == 200
+    assert fish_detail.json()["tank_count"] == 0
 
     fish_delete = client.delete(f"/fish/{fish['id']}", headers=auth_headers)
     assert fish_delete.status_code == 204

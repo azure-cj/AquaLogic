@@ -16,6 +16,7 @@ import { Brand } from '@/shared/components/Brand';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Copy,
+  CheckCircle2,
   Download,
   Droplets,
   ExternalLink,
@@ -30,15 +31,33 @@ import {
 import QRCode from 'qrcode';
 import {
   FormEvent,
+  ReactNode,
   useCallback,
+  useEffect,
   useState
 } from 'react';
 import {
   Link,
   useNavigate,
-  useParams
+  useParams,
+  useSearchParams
 } from 'react-router-dom';
 import './styles.css';
+
+function ActionTooltip({ label, children }: { label: string; children: ReactNode }) {
+  const [dismissed, setDismissed] = useState(false);
+  return (
+    <span
+      className={`action-tooltip${dismissed ? ' is-dismissed' : ''}`}
+      data-tooltip={label}
+      onClick={() => setDismissed(true)}
+      onBlur={() => setDismissed(false)}
+      onMouseEnter={() => setDismissed(false)}
+    >
+      {children}
+    </span>
+  );
+}
 
 function TankForm({
   initial,
@@ -242,6 +261,7 @@ function QrModal({
 export function Tanks() {
   const client = useQueryClient();
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const nav = useNavigate();
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
@@ -249,6 +269,11 @@ export function Tanks() {
   const [deleteTarget, setDeleteTarget] = useState<Tank | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 3600);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
   const tanks = useQuery({ queryKey: ['tanks'], queryFn: () => api<Tank[]>('/tanks') });
   const fleet = useQuery({ queryKey: ['fleet'], queryFn: () => api<FleetTank[]>('/fleet') });
   const customers = useQuery({
@@ -266,6 +291,7 @@ export function Tanks() {
   const visible = (tanks.data ?? []).filter((tank) =>
     [tank.name, tank.location].some((value) => value.toLowerCase().includes(search.toLowerCase())),
   );
+  const highlightedTankId = Number(searchParams.get('tank_id'));
   const closeDrawer = useCallback(() => {
     setCreating(false);
     nav('/admin/tanks');
@@ -325,7 +351,15 @@ export function Tanks() {
           </button>
         }
       />
-      {notice && <Notice>{notice}</Notice>}
+      {notice && (
+        <div className="tanks-toast" role="status" aria-live="polite">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification">
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <Panel
         title="Registered tanks"
         description={`${visible.length} of ${tanks.data?.length ?? 0} tanks`}
@@ -349,7 +383,10 @@ export function Tanks() {
             {visible.map((tank) => {
               const health = fleet.data?.find((item) => item.id === tank.id);
               return (
-                <div className="data-row" key={tank.id}>
+                <div
+                  className={`data-row${tank.id === highlightedTankId ? ' analytics-target-row' : ''}`}
+                  key={tank.id}
+                >
                   <span className="tank-cell">
                     <span className="tank-mark" aria-hidden="true">
                       <Droplets size={16} />
@@ -369,45 +406,55 @@ export function Tanks() {
                     <small>{tank.is_public ? 'Published' : 'Private'}</small>
                   </span>
                   <span className="row-actions">
-                    <Link
-                      className="icon-button"
-                      to={`/admin/tanks/${tank.id}`}
-                      aria-label={`Edit ${tank.name}`}
-                    >
-                      <Pencil size={16} />
-                    </Link>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      onClick={() => showQr(tank)}
-                      aria-label={`Show QR code for ${tank.name}`}
-                    >
-                      <QrCode size={16} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      onClick={() => copyUrl(tank)}
-                      aria-label={`Copy public URL for ${tank.name}`}
-                    >
-                      <Copy size={16} />
-                    </button>
-                    <Link
-                      className="icon-button"
-                      to={`/tank/${tank.public_id}`}
-                      target="_blank"
-                      aria-label={`Preview ${tank.name} public page`}
-                    >
-                      <ExternalLink size={16} />
-                    </Link>
-                    <button
-                      className="icon-button icon-danger"
-                      type="button"
-                      onClick={() => setDeleteTarget(tank)}
-                      aria-label={`Delete ${tank.name}`}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <ActionTooltip label="Edit tank">
+                      <Link
+                        className="icon-button"
+                        to={`/admin/tanks/${tank.id}`}
+                        aria-label={`Edit ${tank.name}`}
+                      >
+                        <Pencil size={16} />
+                      </Link>
+                    </ActionTooltip>
+                    <ActionTooltip label="Show QR code">
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={() => showQr(tank)}
+                        aria-label={`Show QR code for ${tank.name}`}
+                      >
+                        <QrCode size={16} />
+                      </button>
+                    </ActionTooltip>
+                    <ActionTooltip label="Copy public URL">
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={() => copyUrl(tank)}
+                        aria-label={`Copy public URL for ${tank.name}`}
+                      >
+                        <Copy size={16} />
+                      </button>
+                    </ActionTooltip>
+                    <ActionTooltip label="Preview public page">
+                      <Link
+                        className="icon-button"
+                        to={`/tank/${tank.public_id}`}
+                        target="_blank"
+                        aria-label={`Preview ${tank.name} public page`}
+                      >
+                        <ExternalLink size={16} />
+                      </Link>
+                    </ActionTooltip>
+                    <ActionTooltip label="Delete tank">
+                      <button
+                        className="icon-button icon-danger"
+                        type="button"
+                        onClick={() => setDeleteTarget(tank)}
+                        aria-label={`Delete ${tank.name}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </ActionTooltip>
                   </span>
                 </div>
               );

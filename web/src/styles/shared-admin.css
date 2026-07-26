@@ -219,10 +219,12 @@
 
 .panel-header {
   display: flex;
+  min-width: 0;
   min-height: 67px;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
   padding: 0.85rem 1.05rem;
   border-bottom: 1px solid var(--border);
 }
@@ -282,6 +284,9 @@
 
 .data-table {
   width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
 }
 
 .data-head,
@@ -611,6 +616,41 @@ a.data-row:hover {
   font-weight: 730;
 }
 
+.field input,
+.field select,
+.field textarea,
+.range-select select,
+.compact-select select,
+.search-field input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #cddde0;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.76rem;
+  transition: border-color 130ms ease, box-shadow 130ms ease;
+}
+
+.field input,
+.field select,
+.range-select select,
+.compact-select select,
+.search-field input {
+  padding: 0.58rem 0.68rem;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.range-select select:focus,
+.compact-select select:focus,
+.search-field input:focus {
+  border-color: var(--teal-600);
+  box-shadow: 0 0 0 3px rgba(14, 159, 151, 0.12);
+}
+
 .field textarea {
   min-height: 88px;
   padding: 0.7rem;
@@ -680,7 +720,8 @@ a.data-row:hover {
 .modal-layer {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* Modal dialogs must cover the sticky floating navigation (z-index: 100). */
+  z-index: 200;
   display: flex;
   justify-content: flex-end;
 }

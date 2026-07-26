@@ -12,6 +12,7 @@ class FishSpecies(Base):
     scientific_name: Mapped[str] = mapped_column(String(150), nullable=False)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(80), nullable=False, default="Other")
     ideal_temp_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideal_temp_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideal_ph_min: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -20,6 +21,7 @@ class FishSpecies(Base):
     ideal_tds_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     ideal_tds_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     diet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diet_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     compatibility_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     care_tips: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
@@ -40,6 +42,10 @@ class FishSpecies(Base):
         back_populates="fish_species",
         overlaps="tank_links,fish_species,tank_fish_links",
     )
+
+    @property
+    def tank_count(self) -> int:
+        return len(self.tank_links)
 
 
 class TankFish(Base):

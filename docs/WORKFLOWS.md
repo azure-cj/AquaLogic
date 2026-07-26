@@ -40,8 +40,9 @@ From the repository root:
 ```
 
 This starts the API at `http://127.0.0.1:8000` and the Vite web app at
-`http://localhost:5173`. API documentation is available at
-`http://127.0.0.1:8000/docs`.
+`http://localhost:5173`, with the local-only demo sensor generator enabled.
+It keeps the seeded fleet fresh with representative normal, warning, critical,
+and offline states. API documentation is available at `http://127.0.0.1:8000/docs`.
 
 For manual control, run the backend and web commands in separate terminals:
 

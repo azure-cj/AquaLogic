@@ -43,7 +43,7 @@ flow before accessing dashboard operations.
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
-| GET | `/analytics/fleet` | Staff | Fleet trends, alert counts, and uptime |
+| GET | `/analytics/fleet` | Staff | Fleet/tank trends, historical threshold context, alert events, comparisons, and uptime |
 | GET | `/thresholds` | Staff | Read threshold configuration |
 | PUT | `/thresholds/{parameter}` | Admin | Update one parameter threshold |
 | GET/POST | `/customers` | Staff | List or create customers |
@@ -70,5 +70,15 @@ The web route consuming it is `/tank/:publicId`.
   `DEMO_SENSOR_INSTANCE` to be enabled.
 - Pagination is not yet available on the main list endpoints and is a known
   scaling limitation.
+- Fish species responses include `category`, categorical `diet_type`, and the
+  derived `tank_count`. Deleting a species with active tank assignments returns
+  `409 Conflict`; assignments must be removed first.
+- `GET /analytics/fleet` accepts `range=24h|7d|30d|custom`,
+  `bucket=auto|15m|1h|6h|1d`, and up to three repeated `tank_id` values.
+  Custom requests require ISO `start` and `end` values, are limited to 30 days,
+  and all requests are capped at 1,000 buckets. The response contains complete
+  nullable timelines, fleet and selected-tank series, previous-period
+  statistics, alert events, effective threshold segments, and classified
+  reporting uptime.
 - A future WebSocket path may be added; the current
   `backend/app/websockets/sensor_stream.py` is only a placeholder.

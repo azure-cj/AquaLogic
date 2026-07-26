@@ -163,7 +163,8 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
 
 export function Fleet() {
   const [filter, setFilter] = useState<'all' | FleetStatus>('all');
-  const [uptimeRange, setUptimeRange] = useState<AnalyticsRange>('24h');
+  const [uptimeRange, setUptimeRange] =
+    useState<Exclude<AnalyticsRange, 'custom'>>('24h');
   const fleet = useQuery({
     queryKey: ['fleet'],
     queryFn: () => api<FleetTank[]>('/fleet'),
@@ -222,10 +223,10 @@ export function Fleet() {
       (rangeConfig.barCount - 1 - index) * rangeConfig.barHours * 60 * 60 * 1000;
     const start = end - rangeConfig.barHours * 60 * 60 * 1000;
     const bucketCount = new Set(
-      (analytics.data?.series ?? [])
+      (analytics.data?.fleet_series ?? [])
         .filter((point) => {
           const timestamp = new Date(point.timestamp).getTime();
-          return timestamp >= start && timestamp < end;
+          return point.sample_count > 0 && timestamp >= start && timestamp < end;
         })
         .map((point) =>
           Math.floor(
@@ -355,7 +356,9 @@ export function Fleet() {
                   className="uptime-range"
                   value={uptimeRange}
                   onChange={(event) =>
-                    setUptimeRange(event.target.value as AnalyticsRange)
+                    setUptimeRange(
+                      event.target.value as Exclude<AnalyticsRange, 'custom'>,
+                    )
                   }
                 >
                   <option value="24h">24 hours</option>

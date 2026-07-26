@@ -4,8 +4,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.dependencies import require_admin, require_password_change_complete
-from app.models import Alert, SensorReading, Tank, ThresholdConfig, User
+from app.models import Alert, SensorReading, Tank, ThresholdConfig, ThresholdRevision, User
+from app.schemas.analytics import AnalyticsResponse
 from app.schemas.threshold import ThresholdRead, ThresholdUpdate
+from app.services.analytics import build_fleet_analytics
 from app.services.decision_engine import status_for_reading
 
 router = APIRouter(tags=["dashboard"])
@@ -31,90 +33,73 @@ def thresholds(db: Session = Depends(get_db), _: User = Depends(require_password
 def update_threshold(parameter: str, payload: ThresholdUpdate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     item = db.scalar(select(ThresholdConfig).where(ThresholdConfig.parameter == parameter))
     if not item: raise HTTPException(404, "Threshold parameter not found")
+    now = datetime.now(timezone.utc)
+    if not db.scalar(select(ThresholdRevision.id).where(ThresholdRevision.parameter == parameter).limit(1)):
+        earliest = db.scalar(select(SensorReading.timestamp).order_by(SensorReading.timestamp).limit(1))
+        db.add(ThresholdRevision(
+            parameter=item.parameter, unit=item.unit,
+            warning_min=item.warning_min, warning_max=item.warning_max,
+            critical_min=item.critical_min, critical_max=item.critical_max,
+            enabled=item.enabled, effective_from=earliest or now,
+        ))
     for key, value in payload.dict().items(): setattr(item, key, value)
+    db.add(ThresholdRevision(
+        parameter=parameter, unit=payload.unit,
+        warning_min=payload.warning_min, warning_max=payload.warning_max,
+        critical_min=payload.critical_min, critical_max=payload.critical_max,
+        enabled=payload.enabled, effective_from=now,
+    ))
     db.commit(); db.refresh(item); return item
 
-@router.get("/analytics/fleet")
-def analytics(range: str = Query("24h", regex="^(24h|7d|30d)$"), db: Session = Depends(get_db), _: User = Depends(require_password_change_complete)):
-    hours, bucket_hours = {"24h": (24, .25), "7d": (168, 1), "30d": (720, 6)}[range]
+@router.get("/analytics/fleet", response_model=AnalyticsResponse)
+def analytics(
+    range: str = Query("24h", regex="^(24h|7d|30d|custom)$"),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    bucket: str = Query("auto", regex="^(auto|15m|1h|6h|1d)$"),
+    tank_id: list[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_password_change_complete),
+):
+    if len(tank_id) > 3:
+        raise HTTPException(422, "Select no more than three tanks")
+    if len(set(tank_id)) != len(tank_id):
+        raise HTTPException(422, "Tank selections must be unique")
     now = datetime.now(timezone.utc)
-    start = now - timedelta(hours=hours)
-    previous_start = start - timedelta(hours=hours)
-    period_readings = list(db.scalars(
-        select(SensorReading)
-        .where(SensorReading.timestamp >= previous_start, SensorReading.timestamp < now)
-        .order_by(SensorReading.timestamp)
-    ).all())
-    readings = [
-        reading for reading in period_readings
-        if (reading.timestamp.replace(tzinfo=timezone.utc) if reading.timestamp.tzinfo is None else reading.timestamp) >= start
-    ]
-    previous_readings = [
-        reading for reading in period_readings
-        if (reading.timestamp.replace(tzinfo=timezone.utc) if reading.timestamp.tzinfo is None else reading.timestamp) < start
-    ]
-    buckets = {}
-    for r in readings:
-        stamp = r.timestamp.replace(tzinfo=timezone.utc) if r.timestamp.tzinfo is None else r.timestamp
-        epoch = int(stamp.timestamp() // (bucket_hours * 3600)) * bucket_hours * 3600
-        bucket = buckets.setdefault(epoch, {"count": 0, "temperature": 0, "ph": 0, "turbidity": 0, "dissolved_oxygen": 0, "tds": 0, "ammonia": 0})
-        bucket["count"] += 1
-        for key in ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia"): bucket[key] += getattr(r, key)
-    series = [{"timestamp": datetime.fromtimestamp(k, timezone.utc).isoformat(), **{p: v[p]/v["count"] for p in ("temperature","ph","turbidity","dissolved_oxygen","tds","ammonia")}} for k,v in sorted(buckets.items())]
-    alerts = list(db.scalars(select(Alert).where(Alert.created_at >= start)).all())
-    counts = {"warning": sum(a.severity.value == "warning" for a in alerts), "critical": sum(a.severity.value == "critical" for a in alerts)}
-    alert_buckets: dict[float, dict] = {}
-    for alert in alerts:
-        stamp = alert.created_at.replace(tzinfo=timezone.utc) if alert.created_at.tzinfo is None else alert.created_at
-        epoch = int(stamp.timestamp() // (bucket_hours * 3600)) * bucket_hours * 3600
-        bucket = alert_buckets.setdefault(epoch, {"warning": 0, "critical": 0})
-        bucket[alert.severity.value] += 1
-    alert_series = [
-        {"timestamp": datetime.fromtimestamp(epoch, timezone.utc).isoformat(), **values}
-        for epoch, values in sorted(alert_buckets.items())
-    ]
-    tanks = list(db.scalars(select(Tank)).all())
-    expected_intervals = max(1, hours * 120)
-
-    def unique_intervals(items: list[SensorReading], tank_id: int) -> int:
-        return len({
-            int(
-                (
-                    reading.timestamp.replace(tzinfo=timezone.utc)
-                    if reading.timestamp.tzinfo is None
-                    else reading.timestamp
-                ).timestamp()
-                // 30
-            )
-            for reading in items
-            if reading.tank_id == tank_id
-        })
-
-    uptime = []
-    for tank in tanks:
-        current_intervals = unique_intervals(readings, tank.id)
-        previous_intervals = unique_intervals(previous_readings, tank.id)
-        uptime.append({
-            "tank_id": tank.id,
-            "tank_name": tank.name,
-            "uptime": min(100, round(100 * current_intervals / expected_intervals, 1)),
-            "previous_uptime": min(100, round(100 * previous_intervals / expected_intervals, 1)),
-            "reported_intervals": current_intervals,
-            "previous_reported_intervals": previous_intervals,
-            "expected_intervals": expected_intervals,
-        })
-
-    current_fleet_uptime = round(sum(item["uptime"] for item in uptime) / len(uptime), 1) if uptime else 0.0
-    previous_fleet_uptime = round(sum(item["previous_uptime"] for item in uptime) / len(uptime), 1) if uptime else 0.0
-    return {
-        "range": range,
-        "series": series,
-        "alert_counts": counts,
-        "alert_series": alert_series,
-        "uptime": uptime,
-        "uptime_comparison": {
-            "current": current_fleet_uptime,
-            "previous": previous_fleet_uptime,
-            "change": round(current_fleet_uptime - previous_fleet_uptime, 1),
-        },
-    }
+    if range == "custom":
+        if start is None or end is None:
+            raise HTTPException(422, "Custom range requires start and end")
+        start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        end = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
+    else:
+        if start is not None or end is not None:
+            raise HTTPException(422, "Start and end are only valid for a custom range")
+        hours = {"24h": 24, "7d": 168, "30d": 720}[range]
+        end, start = now, now - timedelta(hours=hours)
+    if start >= end:
+        raise HTTPException(422, "Analytics start must be before end")
+    duration_seconds = (end - start).total_seconds()
+    if duration_seconds > 30 * 86_400:
+        raise HTTPException(422, "Analytics range cannot exceed 30 days")
+    bucket_seconds = {
+        "15m": 900,
+        "1h": 3_600,
+        "6h": 21_600,
+        "1d": 86_400,
+    }.get(bucket)
+    if bucket_seconds is None:
+        bucket_seconds = 900 if duration_seconds <= 86_400 else 3_600 if duration_seconds <= 7 * 86_400 else 21_600
+    if (duration_seconds + bucket_seconds - 1) // bucket_seconds > 1_000:
+        raise HTTPException(422, "Selected resolution would produce more than 1,000 buckets")
+    known_ids = set(db.scalars(select(Tank.id).where(Tank.id.in_(tank_id))).all()) if tank_id else set()
+    missing = [value for value in tank_id if value not in known_ids]
+    if missing:
+        raise HTTPException(422, f"Unknown tank selection: {missing[0]}")
+    return build_fleet_analytics(
+        db,
+        range_name=range,
+        start=start,
+        end=end,
+        bucket_seconds=bucket_seconds,
+        selected_tank_ids=tank_id,
+    )

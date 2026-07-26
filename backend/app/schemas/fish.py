@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -8,6 +9,7 @@ class FishSpeciesBase(BaseModel):
     scientific_name: str
     photo_url: str | None = None
     description: str | None = None
+    category: str = "Other"
     ideal_temp_min: float | None = None
     ideal_temp_max: float | None = None
     ideal_ph_min: float | None = None
@@ -16,6 +18,7 @@ class FishSpeciesBase(BaseModel):
     ideal_tds_min: float | None = None
     ideal_tds_max: float | None = None
     diet: str | None = None
+    diet_type: Literal["Carnivore", "Omnivore", "Herbivore"] | None = None
     compatibility_notes: str | None = None
     care_tips: str | None = None
 
@@ -29,6 +32,7 @@ class FishSpeciesUpdate(BaseModel):
     scientific_name: str | None = None
     photo_url: str | None = None
     description: str | None = None
+    category: str | None = None
     ideal_temp_min: float | None = None
     ideal_temp_max: float | None = None
     ideal_ph_min: float | None = None
@@ -37,6 +41,7 @@ class FishSpeciesUpdate(BaseModel):
     ideal_tds_min: float | None = None
     ideal_tds_max: float | None = None
     diet: str | None = None
+    diet_type: Literal["Carnivore", "Omnivore", "Herbivore"] | None = None
     compatibility_notes: str | None = None
     care_tips: str | None = None
 
@@ -44,6 +49,7 @@ class FishSpeciesUpdate(BaseModel):
 class FishSpeciesRead(FishSpeciesBase):
     id: int
     created_at: datetime
+    tank_count: int = 0
 
     class Config:
         orm_mode = True

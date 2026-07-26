@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig
+from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, ThresholdRevision
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
 DEFAULT_THRESHOLDS = {
@@ -18,6 +18,28 @@ def ensure_default_thresholds(db: Session) -> None:
         if not db.scalar(select(ThresholdConfig).where(ThresholdConfig.parameter == parameter)):
             unit, warning_min, warning_max, critical_min, critical_max = values
             db.add(ThresholdConfig(parameter=parameter, unit=unit, warning_min=warning_min, warning_max=warning_max, critical_min=critical_min, critical_max=critical_max))
+    db.flush()
+    earliest = db.scalar(select(SensorReading.timestamp).order_by(SensorReading.timestamp).limit(1))
+    effective_from = earliest or datetime.now(timezone.utc)
+    for threshold in db.scalars(select(ThresholdConfig)).all():
+        exists = db.scalar(
+            select(ThresholdRevision.id)
+            .where(ThresholdRevision.parameter == threshold.parameter)
+            .limit(1)
+        )
+        if exists is None:
+            db.add(
+                ThresholdRevision(
+                    parameter=threshold.parameter,
+                    unit=threshold.unit,
+                    warning_min=threshold.warning_min,
+                    warning_max=threshold.warning_max,
+                    critical_min=threshold.critical_min,
+                    critical_max=threshold.critical_max,
+                    enabled=threshold.enabled,
+                    effective_from=effective_from,
+                )
+            )
     db.commit()
 
 

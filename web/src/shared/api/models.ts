@@ -24,11 +24,14 @@ export type Fish = {
   id: number;
   common_name: string;
   scientific_name: string;
+  category: string;
   photo_url?: string | null;
   description?: string | null;
+  diet_type?: 'Carnivore' | 'Omnivore' | 'Herbivore' | null;
   diet?: string | null;
   compatibility_notes?: string | null;
   care_tips?: string | null;
+  tank_count: number;
 };
 
 export type Alert = {

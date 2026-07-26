@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import require_password_change_complete
@@ -11,7 +11,11 @@ router = APIRouter(prefix="/fish", tags=["fish"])
 
 
 def _get_fish_or_404(db: Session, fish_id: int) -> FishSpecies:
-    fish = db.scalar(select(FishSpecies).where(FishSpecies.id == fish_id))
+    fish = db.scalar(
+        select(FishSpecies)
+        .options(selectinload(FishSpecies.tank_links))
+        .where(FishSpecies.id == fish_id)
+    )
     if fish is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -26,7 +30,11 @@ def list_fish_species(
     current_user: User = Depends(require_password_change_complete),
 ) -> list[FishSpecies]:
     _ = current_user
-    species = db.scalars(select(FishSpecies).order_by(FishSpecies.id)).all()
+    species = db.scalars(
+        select(FishSpecies)
+        .options(selectinload(FishSpecies.tank_links))
+        .order_by(FishSpecies.category, FishSpecies.common_name)
+    ).all()
     return list(species)
 
 
@@ -84,6 +92,14 @@ def delete_fish_species(
 ) -> Response:
     _ = current_user
     fish = _get_fish_or_404(db, fish_id)
+    if fish.tank_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Fish species is assigned to {fish.tank_count} "
+                f"{'tank' if fish.tank_count == 1 else 'tanks'}"
+            ),
+        )
     db.delete(fish)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

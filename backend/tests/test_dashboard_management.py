@@ -1,6 +1,16 @@
 from datetime import datetime, timedelta, timezone
 
-from app.models import Alert, AlertSeverity, SensorReading, Tank, ThresholdConfig, User
+from sqlalchemy import select
+
+from app.models import (
+    Alert,
+    AlertSeverity,
+    SensorReading,
+    Tank,
+    ThresholdConfig,
+    ThresholdRevision,
+    User,
+)
 from app.security import get_password_hash
 
 
@@ -28,12 +38,34 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
     assert len(response.json()) == 1
     analytics = client.get("/analytics/fleet?range=24h", headers=auth_headers)
     assert analytics.status_code == 200
-    assert analytics.json()["alert_series"][0]["critical"] == 1
+    payload = analytics.json()
+    assert sum(bucket["critical"] for bucket in payload["alert_series"]) == 1
+    assert payload["alert_events"][0]["value"] == .1
+    assert len(payload["fleet_series"]) == 96
+    assert any(point["values"]["temperature"] == 25 for point in payload["fleet_series"])
+    assert any(point["values"]["temperature"] is None for point in payload["fleet_series"])
     tank_uptime = next(item for item in analytics.json()["uptime"] if item["tank_id"] == tank["id"])
     assert tank_uptime["reported_intervals"] == 2
     assert tank_uptime["previous_reported_intervals"] == 1
     assert tank_uptime["expected_intervals"] == 24 * 120
-    assert analytics.json()["uptime_comparison"]["change"] > 0
+    assert tank_uptime["status"] == "critical"
+    assert payload["uptime_comparison"]["change"] > 0
+
+    selected = client.get(
+        f"/analytics/fleet?range=24h&tank_id={tank['id']}",
+        headers=auth_headers,
+    )
+    assert selected.status_code == 200
+    assert selected.json()["tank_series"][0]["tank_name"] == tank["name"]
+
+    custom_start = (base - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    custom_end = (base + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    custom = client.get(
+        f"/analytics/fleet?range=custom&start={custom_start}&end={custom_end}&bucket=15m",
+        headers=auth_headers,
+    )
+    assert custom.status_code == 200
+    assert len(custom.json()["fleet_series"]) == 8
 
 
 def test_admin_staff_lifecycle_and_threshold_validation(client, db_session):
@@ -50,3 +82,67 @@ def test_admin_staff_lifecycle_and_threshold_validation(client, db_session):
     assert client.post(f"/users/{new_id}/reset-password", headers=headers).status_code == 200
     invalid = client.put("/thresholds/ammonia", headers=headers, json={"unit": "ppm", "critical_min": 3, "warning_min": 2, "warning_max": 1, "critical_max": 0, "enabled": True})
     assert invalid.status_code == 422
+    valid = client.put(
+        "/thresholds/ammonia",
+        headers=headers,
+        json={
+            "unit": "ppm",
+            "warning_min": None,
+            "warning_max": .2,
+            "critical_min": None,
+            "critical_max": .4,
+            "enabled": True,
+        },
+    )
+    assert valid.status_code == 200
+    revisions = list(
+        db_session.scalars(
+            select(ThresholdRevision)
+            .where(ThresholdRevision.parameter == "ammonia")
+            .order_by(ThresholdRevision.effective_from)
+        ).all()
+    )
+    assert len(revisions) == 2
+    assert revisions[-1].warning_max == .2
+    revision_boundary = datetime.now(timezone.utc) - timedelta(minutes=20)
+    revisions[0].effective_from = revision_boundary - timedelta(minutes=20)
+    revisions[1].effective_from = revision_boundary
+    db_session.commit()
+    threshold_start = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    threshold_end = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    analytics = client.get(
+        "/analytics/fleet?range=custom"
+        f"&start={threshold_start}&end={threshold_end}&bucket=15m",
+        headers=headers,
+    )
+    assert analytics.status_code == 200
+    segments = [
+        segment
+        for segment in analytics.json()["threshold_segments"]
+        if segment["parameter"] == "ammonia"
+    ]
+    assert len(segments) == 2
+    assert segments[-1]["warning_max"] == .2
+
+
+def test_analytics_query_validation(client, auth_headers):
+    first = _tank(client, auth_headers, "One")
+    second = _tank(client, auth_headers, "Two")
+    third = _tank(client, auth_headers, "Three")
+    fourth = _tank(client, auth_headers, "Four")
+    too_many = "&".join(
+        f"tank_id={tank['id']}" for tank in (first, second, third, fourth)
+    )
+    assert client.get(
+        f"/analytics/fleet?range=24h&{too_many}",
+        headers=auth_headers,
+    ).status_code == 422
+    assert client.get(
+        "/analytics/fleet?range=custom",
+        headers=auth_headers,
+    ).status_code == 422
+    assert client.get(
+        "/analytics/fleet?range=custom"
+        "&start=2026-01-01T00:00:00Z&end=2026-03-01T00:00:00Z",
+        headers=auth_headers,
+    ).status_code == 422
