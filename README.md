@@ -1,17 +1,18 @@
 # AquaLogic
 
-AquaLogic is a smart aquarium monitoring and automation system for JRed Aquatics. It combines ESP32-based water sensing, a FastAPI backend, a Flutter staff mobile app, and a planned customer-facing React web app for QR-accessible tank pages.
+AquaLogic is a smart aquarium monitoring and automation system for JRed Aquatics. It combines ESP32-based water sensing, a FastAPI backend, a Flutter staff mobile app prototype, and a React web application for staff operations and QR-accessible public tank pages.
 
 The system is designed to help staff monitor water quality, manage tank and fish information, respond to alerts, and eventually control aquarium equipment such as feeding, lighting, filtration, chemical dosing, and partial water replacement.
 
 ## Current Status
 
-This repository is in active prototype development.
+This repository is in active prototype development. The current implementation is
+software-first and local-first; live hardware integration is a later phase.
 
 - ESP32 firmware: initial Arduino sketch and sensor libraries are included.
 - Backend: FastAPI foundation is included with database models, auth, tank/fish/sensor/alert endpoints, seed scripts, and tests.
 - Staff mobile app: Flutter Android-first prototype is included with dashboard, tanks, tank detail, controls, alerts, fish library, splash screen, and app icon.
-- Customer web app: planned, not yet implemented.
+- Web app: React customer/public pages and the staff/admin dashboard are implemented under `web/`.
 - Hardware integration: planned after mock data, backend, mobile app, and public web flows are stable.
 
 ## Features
@@ -31,7 +32,7 @@ This repository is in active prototype development.
 - Tank-fish assignment endpoints.
 - Sensor reading persistence.
 - Alert listing and resolution.
-- Public tank endpoint for future QR pages.
+- Public tank endpoint for QR pages.
 
 ### Staff Mobile App
 
@@ -43,23 +44,26 @@ This repository is in active prototype development.
 - Fish library with search.
 - AquaLogic app icon and startup splash scene.
 
-### Planned Customer Web App
+### Web App
 
-AquaLogic will include a public React + Tailwind web app for customers. The web app will provide mobile-first tank pages that can be opened from QR codes displayed near tanks.
+AquaLogic includes a React + TypeScript web app for staff operations and public
+customer pages. The public experience provides mobile-first tank pages that can
+be opened from QR codes displayed near tanks.
 
-Planned route:
-
-```text
-/tank/:id
-```
-
-Planned backend API:
+Public route:
 
 ```text
-GET /public/tanks/{id}
+/tank/:publicId
 ```
 
-The customer page will show tank name, location, water status, fish species cards, care notes, and AquaLogic branding. Customers will not need accounts or login. This should be developed after the backend public tank endpoint and fish/tank seed data are stable.
+Backend API:
+
+```text
+GET /public/tanks/{public_id}
+```
+
+The customer page shows tank name, location, water status, fish species cards,
+care notes, and AquaLogic branding. Customers do not need accounts or login.
 
 ## Repository Structure
 
@@ -68,15 +72,16 @@ AquaLogic/
   Aqualogic.ino                 # ESP32/Arduino firmware
   backend/                      # FastAPI backend
   mobile_app/                   # Flutter staff mobile app
-  docs/                         # Project plans and context documents
+  docs/                         # Canonical context, plans, and implementation notes
   DallasTemperature/            # Arduino library dependency
   DIYables_LCD_I2C/             # Arduino library dependency
   LiquidCrystal_I2C/            # Arduino library dependency
   OneWire/                      # Arduino library dependency
-  customer-web/                 # Planned React + Tailwind public QR pages
+  web/                          # React public tank pages and staff/admin dashboard
 ```
 
-`customer-web/` is listed as planned architecture and does not exist yet.
+The Flutter app currently uses local demo data and is not yet connected to the
+backend API. The firmware is also not a prerequisite for local software work.
 
 ## Quick Start
 
@@ -85,10 +90,10 @@ AquaLogic/
 ```powershell
 cd mobile_app
 
-& 'C:\Users\admin\devtools\flutter\bin\flutter.bat' pub get
-& 'C:\Users\admin\devtools\flutter\bin\flutter.bat' analyze
-& 'C:\Users\admin\devtools\flutter\bin\flutter.bat' test
-& 'C:\Users\admin\devtools\flutter\bin\flutter.bat' run -d "adb-93419779-vLKFy6._adb-tls-connect._tcp"
+flutter pub get
+flutter analyze
+flutter test
+flutter run
 ```
 
 ### Backend
@@ -132,24 +137,30 @@ Hardware integration is still planned, so mobile and backend development current
 
 ## Development Roadmap
 
-1. Backend foundation and seed data.
-2. Mock sensor flow and rule-based alert decision engine.
-3. Customer React web pages for QR-accessible tank views.
-4. Flutter staff app core with login, tank overview, and tank detail.
-5. Flutter fish management.
-6. Flutter alerts and controls.
-7. ESP32 hardware integration and Raspberry Pi deployment.
-
-The best time to build `customer-web/` is after the backend public tank endpoint and realistic sample fish/tank data are stable. Building it then will avoid reworking the web app around changing API shapes.
+1. Backend foundation, seed data, authentication, and API contract.
+2. Rule-based status/alert flow and optional demo sensor ingestion.
+3. React public tank pages and staff/admin dashboard stabilization.
+4. Flutter staff app integration with the backend.
+5. ESP32 hardware integration and Raspberry Pi deployment.
 
 ## Documentation
 
-Project planning and context documents live in `docs/`:
+Start with the workspace instructions and documentation index:
+
+- `AGENTS.md`
+- `docs/INDEX.md`
+- `docs/DEVELOPMENT_STATUS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/API_CONTRACT.md`
+- `docs/WORKFLOWS.md`
+
+Historical and planning documents are also preserved in `docs/`:
 
 - `docs/AQUALOGIC_CONTEXT.md`
 - `docs/AquaLogic_Full_Software_Development_Plan.md`
 - `docs/AquaLogic_Implementation_Plan.md`
 - `docs/MOBILE_APP_DEVELOPMENT_PLAN.md`
+- `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`
 
 ## Scope Notes
 

@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_password_change_complete
 from app.models import FishSpecies, User
 from app.schemas.fish import FishSpeciesCreate, FishSpeciesRead, FishSpeciesUpdate
 
@@ -23,7 +23,7 @@ def _get_fish_or_404(db: Session, fish_id: int) -> FishSpecies:
 @router.get("", response_model=list[FishSpeciesRead])
 def list_fish_species(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> list[FishSpecies]:
     _ = current_user
     species = db.scalars(select(FishSpecies).order_by(FishSpecies.id)).all()
@@ -34,7 +34,7 @@ def list_fish_species(
 def get_fish_species(
     fish_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> FishSpecies:
     _ = current_user
     return _get_fish_or_404(db, fish_id)
@@ -44,7 +44,7 @@ def get_fish_species(
 def create_fish_species(
     payload: FishSpeciesCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> FishSpecies:
     _ = current_user
     fish = FishSpecies(**payload.dict())
@@ -59,7 +59,7 @@ def update_fish_species(
     fish_id: int,
     payload: FishSpeciesUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> FishSpecies:
     _ = current_user
     fish = _get_fish_or_404(db, fish_id)
@@ -80,7 +80,7 @@ def update_fish_species(
 def delete_fish_species(
     fish_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Response:
     _ = current_user
     fish = _get_fish_or_404(db, fish_id)

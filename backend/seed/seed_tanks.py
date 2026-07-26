@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -46,10 +48,19 @@ def seed_tanks(db: Session) -> int:
     created = 0
     existing_names = set(db.scalars(select(Tank.name)).all())
 
-    for tank_data in SAMPLE_TANKS:
+    for index, tank_data in enumerate(SAMPLE_TANKS, start=1):
         if tank_data["name"] in existing_names:
             continue
-        db.add(Tank(**tank_data))
+        db.add(
+            Tank(
+                **tank_data,
+                tank_code=f"TANK-{index:02d}",
+                habitat_label="Tropical community",
+                water_type="freshwater",
+                volume_liters=180,
+                established_on=date(2026, 3, 1),
+            )
+        )
         created += 1
 
     return created

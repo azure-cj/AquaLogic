@@ -4,8 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user
-from app.models import FishSpecies, Tank, TankFish, User
+from app.dependencies import require_password_change_complete
+from app.models import Customer, FishSpecies, Tank, TankFish, User
 from app.schemas.fish import FishAssignmentRequest
 from app.schemas.tank import TankCreate, TankDetail, TankRead, TankUpdate
 
@@ -26,7 +26,7 @@ def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
 @router.get("", response_model=list[TankRead])
 def list_tanks(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> list[Tank]:
     _ = current_user
     tanks = db.scalars(select(Tank).order_by(Tank.id)).all()
@@ -37,7 +37,7 @@ def list_tanks(
 def get_tank(
     tank_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Tank:
     _ = current_user
     return _get_tank_or_404(db, tank_id)
@@ -47,9 +47,11 @@ def get_tank(
 def create_tank(
     payload: TankCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Tank:
     _ = current_user
+    if payload.customer_id is not None and not db.get(Customer, payload.customer_id):
+        raise HTTPException(status_code=404, detail="Customer not found")
     tank = Tank(**payload.dict())
     db.add(tank)
     try:
@@ -69,11 +71,13 @@ def update_tank(
     tank_id: int,
     payload: TankUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Tank:
     _ = current_user
     tank = _get_tank_or_404(db, tank_id)
     updates = payload.dict(exclude_unset=True)
+    if updates.get("customer_id") is not None and not db.get(Customer, updates["customer_id"]):
+        raise HTTPException(status_code=404, detail="Customer not found")
     if not updates:
         return tank
 
@@ -96,7 +100,7 @@ def update_tank(
 def delete_tank(
     tank_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Response:
     _ = current_user
     tank = _get_tank_or_404(db, tank_id)
@@ -110,7 +114,7 @@ def assign_fish_to_tank(
     tank_id: int,
     payload: FishAssignmentRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> dict[str, str]:
     _ = current_user
     _get_tank_or_404(db, tank_id)
@@ -144,7 +148,7 @@ def remove_fish_from_tank(
     tank_id: int,
     fish_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_password_change_complete),
 ) -> Response:
     _ = current_user
     _get_tank_or_404(db, tank_id)

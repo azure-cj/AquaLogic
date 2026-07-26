@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import select
 
 from app.database import Base, SessionLocal, engine
@@ -6,24 +7,20 @@ from app.security import get_password_hash
 from seed.seed_fish import seed_fish_species
 from seed.seed_tanks import seed_tanks
 
-DEFAULT_ADMIN = {
-    "name": "AquaLogic Staff Admin",
-    "email": "admin@aqualogic.local",
-    "password": "admin123",
-    "role": "admin",
-}
-
-
 def seed_admin_user(db) -> bool:
-    existing = db.scalar(select(User).where(User.email == DEFAULT_ADMIN["email"]))
+    email = os.getenv("ADMIN_SEED_EMAIL")
+    password = os.getenv("ADMIN_SEED_PASSWORD")
+    if not email or not password:
+        raise RuntimeError("ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD are required to seed an admin")
+    existing = db.scalar(select(User).where(User.email == email))
     if existing:
         return False
 
     user = User(
-        name=DEFAULT_ADMIN["name"],
-        email=DEFAULT_ADMIN["email"],
-        hashed_password=get_password_hash(DEFAULT_ADMIN["password"]),
-        role=DEFAULT_ADMIN["role"],
+        name=os.getenv("ADMIN_SEED_NAME", "AquaLogic Administrator"),
+        email=email,
+        hashed_password=get_password_hash(password),
+        role="admin",
     )
     db.add(user)
     return True
@@ -42,9 +39,7 @@ def run_seed() -> None:
     print(f"- Tanks created: {created_tanks}")
     print(f"- Fish species created: {created_fish}")
     print(f"- Admin user created: {created_admin}")
-    print(f"- Admin login email: {DEFAULT_ADMIN['email']}")
-    if created_admin:
-        print(f"- Admin temporary password: {DEFAULT_ADMIN['password']}")
+    print("- Admin account seeded from environment variables" if created_admin else "- Admin account already exists")
 
 
 if __name__ == "__main__":

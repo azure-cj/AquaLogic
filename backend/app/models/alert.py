@@ -34,11 +34,14 @@ class Alert(Base):
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    resolved_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
+    resolved_by_user: Mapped["User | None"] = relationship("User", back_populates="resolved_alerts")
 
     tank: Mapped["Tank"] = relationship("Tank", back_populates="alerts")
     reading: Mapped["SensorReading | None"] = relationship(

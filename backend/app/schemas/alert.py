@@ -13,6 +13,8 @@ class AlertRead(BaseModel):
     severity: AlertSeverity
     message: str
     is_resolved: bool
+    resolved_at: datetime | None = None
+    resolved_by_user_id: int | None = None
     created_at: datetime
 
     class Config:

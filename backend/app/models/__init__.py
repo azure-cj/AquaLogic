@@ -3,6 +3,8 @@ from .fish import FishSpecies, TankFish
 from .sensor import SensorReading
 from .tank import Tank
 from .user import User
+from .customer import Customer
+from .threshold import ThresholdConfig
 
 __all__ = [
     "Alert",
@@ -12,4 +14,6 @@ __all__ = [
     "Tank",
     "TankFish",
     "User",
+    "Customer",
+    "ThresholdConfig",
 ]
