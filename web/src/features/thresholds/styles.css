@@ -1,0 +1,84 @@
+.threshold-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.threshold-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.threshold-card > header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: #fbfdfd;
+}
+
+.threshold-card h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.83rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.threshold-card header small {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.threshold-fields {
+  display: grid;
+  grid-template-columns: 0.6fr repeat(4, 1fr) auto;
+  gap: 0.7rem;
+  align-items: end;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.threshold-fields .field span {
+  padding-left: 0.45rem;
+  border-left: 3px solid var(--border);
+}
+
+.threshold-fields .warning-field span {
+  border-color: var(--warning);
+}
+
+.threshold-fields .critical-field span {
+  border-color: var(--critical);
+}
+
+@media (max-width: 1023px) {
+
+  .threshold-fields {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .threshold-fields .button {
+    align-self: end;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .threshold-card > header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .threshold-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .threshold-fields .unit-field,
+  .threshold-fields .button {
+    grid-column: span 2;
+  }
+}

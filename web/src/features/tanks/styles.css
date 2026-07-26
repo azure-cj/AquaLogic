@@ -1,0 +1,112 @@
+.tanks-table .data-head,
+.tanks-table .data-row {
+  grid-template-columns: minmax(190px, 1.4fr) minmax(130px, 0.85fr) 100px minmax(100px, 0.7fr) minmax(190px, auto);
+}
+
+.assignment-section {
+  margin-top: 1rem;
+}
+
+.assignment-list {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.assignment-list > div {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.assignment-list strong,
+.assignment-list small {
+  display: block;
+}
+
+.assignment-list strong {
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.assignment-list small {
+  margin-top: 0.17rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.confirm-dialog,
+.qr-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 94vw);
+  padding: 1.4rem;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 24, 38, 0.25);
+  text-align: center;
+}
+
+.qr-dialog {
+  width: min(420px, 94vw);
+}
+
+.qr-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+}
+
+.print-label {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.print-label > p {
+  margin: 0.75rem 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.69rem;
+}
+
+.print-label > img {
+  width: 210px;
+  height: 210px;
+}
+
+.print-label h2 {
+  margin: 0.5rem 0 0.18rem;
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
+.print-label > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+@media print {
+
+  .print-label,
+  .print-label * {
+    visibility: visible !important;
+  }
+
+  .print-label {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    width: 100%;
+    min-height: 100vh;
+    place-content: center;
+    background: #fff;
+  }
+
+  .print-label > img {
+    width: 280px;
+    height: 280px;
+  }
+}

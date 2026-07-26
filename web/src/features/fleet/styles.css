@@ -1,0 +1,350 @@
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.stat-card {
+  position: relative;
+  display: flex;
+  min-height: 113px;
+  align-items: flex-start;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.stat-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--status-color, var(--teal-600));
+  content: '';
+  opacity: 0;
+}
+
+.stat-card:hover,
+.stat-card.active {
+  border-color: color-mix(in srgb, var(--status-color, var(--teal-600)) 34%, var(--border));
+  box-shadow: 0 12px 28px rgba(20, 58, 70, 0.1);
+}
+
+.stat-card.active::before {
+  opacity: 1;
+}
+
+.stat-card small,
+.stat-card em {
+  display: block;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-style: normal;
+}
+
+.stat-card small {
+  font-weight: 720;
+}
+
+.stat-card strong {
+  display: block;
+  margin: 0.55rem 0 0.32rem;
+  color: var(--text);
+  font-size: 1.68rem;
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.fleet-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(300px, 0.65fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.fleet-health-panel {
+  min-height: 560px;
+}
+
+.fleet-rail {
+  display: grid;
+  gap: 1rem;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.segmented button {
+  min-height: 29px;
+  padding: 0.35rem 0.58rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 720;
+  box-shadow: none;
+}
+
+.segmented button.active {
+  background: #fff;
+  color: var(--teal-700);
+  box-shadow: 0 2px 7px rgba(27, 64, 73, 0.09);
+}
+
+.fleet-table .data-head,
+.fleet-table .data-row {
+  grid-template-columns:
+    minmax(180px, 1.7fr) minmax(82px, 0.72fr) minmax(72px, 0.68fr)
+    minmax(50px, 0.48fr) minmax(70px, 0.7fr) minmax(120px, 1.05fr) 18px;
+}
+
+.alert-feed {
+  display: grid;
+  padding: 0.18rem 1rem;
+}
+
+.alert-feed-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: start;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid #e8eff1;
+}
+
+.alert-feed-item:last-child {
+  border-bottom: 0;
+}
+
+.alert-feed-item strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.67rem;
+  line-height: 1.35;
+  text-transform: capitalize;
+}
+
+.alert-feed-item small {
+  display: -webkit-box;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.59rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.alert-feed-item time {
+  color: #92a2a8;
+  font-size: 0.57rem;
+  white-space: nowrap;
+}
+
+.uptime-range {
+  appearance: auto;
+  min-height: 31px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfdfd;
+  color: #607983;
+  font-size: 0.62rem;
+  font-weight: 720;
+}
+
+.uptime-card-body {
+  padding: 1rem;
+}
+
+.uptime-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.uptime-value-row > strong {
+  color: var(--text);
+  font-size: 1.55rem;
+  font-weight: 850;
+  letter-spacing: -0.04em;
+}
+
+.uptime-value-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--teal-700);
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+
+.uptime-value-row i,
+.uptime-footer i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--teal-600);
+}
+
+.uptime-bars {
+  display: flex;
+  height: 72px;
+  align-items: flex-end;
+  gap: 4px;
+  padding-top: 0.25rem;
+  border-bottom: 1px solid #dfe9eb;
+}
+
+.uptime-bars > span {
+  min-width: 3px;
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #51c7bc, #229f98);
+  transition: height 160ms ease;
+}
+
+.uptime-bars > span.partial-report {
+  background: linear-gradient(180deg, #efb553, #d99023);
+}
+
+.uptime-bars > span.no-report {
+  background: #d9e4e6;
+}
+
+.uptime-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+  color: #8699a1;
+  font-size: 0.5rem;
+}
+
+.uptime-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.52rem;
+}
+
+.uptime-footer > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fleet-card-list {
+  display: none;
+}
+
+.uptime-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.uptime-list > div {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.uptime-list > div > span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.uptime-list strong {
+  color: var(--text);
+  font-size: 0.68rem;
+}
+
+.uptime-list small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+@media (max-width: 1279px) {
+
+  .fleet-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .fleet-rail {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 1023px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat-card:first-child {
+    grid-column: span 2;
+  }
+
+  .fleet-table {
+    display: none;
+  }
+
+  .fleet-card-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0.8rem;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .stats-grid {
+    gap: 0.6rem;
+  }
+
+  .stat-card {
+    min-height: 103px;
+    padding: 0.8rem;
+  }
+
+  .stat-card strong {
+    font-size: 1.4rem;
+  }
+
+  .stat-card em {
+    display: none;
+  }
+
+  .segmented,
+  .search-field {
+    width: 100%;
+  }
+
+  .segmented button {
+    flex: 1;
+  }
+
+  .fleet-card-list,
+  .fleet-rail {
+    grid-template-columns: 1fr;
+  }
+}

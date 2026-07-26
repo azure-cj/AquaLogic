@@ -1,0 +1,166 @@
+.metric-cell {
+  color: #294550;
+  font-variant-numeric: tabular-nums;
+  font-weight: 690;
+}
+
+.analytics-stats .trend-up {
+  color: var(--normal);
+}
+
+.field input,
+.field select,
+.field textarea,
+.range-select select,
+.compact-select select,
+.search-field input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #cddde0;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.76rem;
+  transition:
+    border-color 130ms ease,
+    box-shadow 130ms ease;
+}
+
+.field input,
+.field select,
+.range-select select,
+.compact-select select,
+.search-field input {
+  padding: 0.58rem 0.68rem;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.range-select select:focus,
+.compact-select select:focus,
+.search-field input:focus {
+  border-color: var(--teal-600);
+  box-shadow: 0 0 0 3px rgba(14, 159, 151, 0.12);
+}
+
+.metric-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 0.35rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.metric-tabs button {
+  min-height: 37px;
+  padding: 0.5rem 0.72rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.metric-tabs button:hover {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.metric-tabs button.active {
+  border-color: #cce4e3;
+  background: #eaf7f5;
+  color: var(--teal-700);
+}
+
+.range-select select {
+  min-width: 150px;
+}
+
+.analytics-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.analytics-stats > div {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.analytics-stats small,
+.analytics-stats strong {
+  display: block;
+}
+
+.analytics-stats small {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.analytics-stats strong {
+  margin-top: 0.4rem;
+  color: var(--text);
+  font-size: 1.18rem;
+  font-weight: 830;
+}
+
+.analytics-stats em {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.chart-panel {
+  margin-bottom: 1rem;
+}
+
+.chart-panel > .recharts-responsive-container {
+  padding: 0.4rem 0.6rem 0.6rem;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr;
+  gap: 1rem;
+}
+
+.progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8eff0;
+}
+
+.progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal-700), #4fc4b9);
+}
+
+@media (max-width: 1023px) {
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .analytics-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -1,0 +1,4 @@
+.staff-table .data-head,
+.staff-table .data-row {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(140px, 0.65fr) minmax(100px, 0.55fr) minmax(230px, 1fr);
+}
