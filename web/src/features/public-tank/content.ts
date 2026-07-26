@@ -69,5 +69,5 @@ export const publicFaqs: PublicFaq[] = [
 export const businessProfile: BusinessProfile = {
   name: 'JRed Aquatics',
   tagline: 'Ornamental fish care · Aquarium supplies · Maintenance',
-  address: 'Villa Magdalena, Camarin Road, Novaliches, Caloocan City',
+  address: 'Villa Magdalena, Block 4 Lot 2 Villa Magdalena 1 Camarin Road Novaliches Caloocan City, 1 Camarin Rd, Caloocan, 1422 Metro Manila',
 };
