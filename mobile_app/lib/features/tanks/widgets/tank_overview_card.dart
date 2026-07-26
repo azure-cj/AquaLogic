@@ -26,9 +26,9 @@ class TankOverviewCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: AppColors.tealDark.withValues(alpha: 0.10),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
+                color: AppColors.tealDark.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
