@@ -80,6 +80,129 @@ AquaLogic/
 
 ## Quick Start
 
+### Prerequisites
+
+For the local web and API development environment, install:
+
+- Git
+- Node.js 20 LTS or newer, which includes `npm`
+- Python 3.11 or newer
+- Flutter SDK only if you will work on `mobile_app/`
+- Arduino IDE only if you will work on the ESP32 firmware
+
+Check the installations from PowerShell:
+
+```powershell
+git --version
+node --version
+npm --version
+python --version
+```
+
+If `npm` is missing, install Node.js from <https://nodejs.org/> and choose the
+LTS version. After installation, close and reopen PowerShell, then run the
+version checks again. The repository already contains `web/package-lock.json`,
+so teammates should use `npm ci` to install the exact web dependencies.
+
+### Recommended first-time setup
+
+From the repository root (`AquaLogic/`):
+
+```powershell
+# Install the web dependencies
+cd web
+npm ci
+npm run typecheck
+npm test
+cd ..
+
+# Create and prepare the backend environment
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+alembic upgrade head
+python -m seed.seed_data
+cd ..
+```
+
+If PowerShell blocks virtual-environment activation, run this once in an
+Administrator PowerShell or use the activation command shown by Python:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+### Start the local web and API
+
+The simplest Windows workflow is to double-click `start-dev.bat` from the
+repository root. It opens separate terminals for the API and web app.
+
+For manual startup, use two PowerShell windows:
+
+**Terminal 1 — backend API**
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = 'sqlite:///./aqualogic.db'
+$env:DEMO_SENSOR_ENABLED = 'true'
+$env:DEMO_SENSOR_INSTANCE = 'true'
+$env:DEMO_SENSOR_INTERVAL_SECONDS = '30'
+alembic upgrade head
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+**Terminal 2 — React web app**
+
+```powershell
+cd web
+npm run dev
+```
+
+Open these addresses in a browser:
+
+- Staff web app: <http://localhost:5173/admin>
+- API documentation: <http://127.0.0.1:8000/docs>
+- API alternative documentation: <http://127.0.0.1:8000/redoc>
+
+The demo sensor environment variables create simulated readings for local
+testing. They do not connect to the ESP32 hardware.
+
+### If a teammate only needs to inspect the project
+
+They still need Node.js and the npm dependencies to run the web app locally.
+After cloning or pulling the repository, they should run:
+
+```powershell
+cd AquaLogic\web
+npm ci
+npm run dev
+```
+
+If they only need to read the source, review the screenshots, or inspect the
+documentation, no npm installation is required. If they need a live page but
+cannot install Node.js, use a shared development machine or screen-share the
+running app; the repository does not currently include a self-contained web
+runtime or hosted preview.
+
+### Common development checks
+
+```powershell
+# Web checks
+cd web
+npm run typecheck
+npm test
+npm run build
+
+# Backend checks
+cd ..\backend
+.\.venv\Scripts\Activate.ps1
+pytest -q
+```
+
 ### Mobile App
 
 ```powershell
