@@ -7,7 +7,7 @@ import {
 import {
   initials
 } from '@/shared/utils/formatting';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   LogOut,
@@ -46,6 +46,7 @@ const pageTitles: Record<string, string> = {
   tanks: 'Tank management',
   fish: 'Fish species',
   customers: 'Customer management',
+  security: 'Account security',
   analytics: 'Fleet analytics',
   staff: 'Staff & roles',
   settings: 'System thresholds',
@@ -55,6 +56,7 @@ export function AdminShell() {
   const nav = useNavigate();
   const location = useLocation();
   const me = useMe();
+  const queryClient = useQueryClient();
   const [mobileNav, setMobileNav] = useState(false);
   const [openCluster, setOpenCluster] = useState<string | null>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
@@ -65,6 +67,15 @@ export function AdminShell() {
     enabled: Boolean(me.data),
     refetchInterval: 30_000,
   });
+  const signOut = async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } finally {
+      clearSession();
+      queryClient.clear();
+      nav('/admin/login');
+    }
+  };
 
   useEffect(() => {
     const unauthorized = () => nav('/admin/login');
@@ -116,6 +127,9 @@ export function AdminShell() {
   if (me.data!.must_change_password) return <Navigate to="/admin/change-password" replace />;
 
   const admin = me.data!.role === 'admin';
+  if (!admin && (location.pathname.startsWith('/admin/staff') || location.pathname.startsWith('/admin/settings/thresholds'))) {
+    return <Navigate to="/admin/fleet" replace />;
+  }
   const segment = location.pathname.split('/')[2] || 'fleet';
   const isTankDetail = /^\/admin\/tanks\/\d+$/.test(location.pathname);
   const visibleNavigation = adminNavigation
@@ -206,10 +220,7 @@ export function AdminShell() {
                 className="icon-button island-signout"
                 type="button"
                 aria-label="Sign out"
-                onClick={() => {
-                  clearSession();
-                  nav('/admin/login');
-                }}
+                onClick={() => void signOut()}
               >
                 <LogOut size={16} />
               </button>
@@ -254,10 +265,7 @@ export function AdminShell() {
             className="icon-button mobile-signout"
             type="button"
             aria-label="Sign out"
-            onClick={() => {
-              clearSession();
-              nav('/admin/login');
-            }}
+            onClick={() => void signOut()}
           >
             <LogOut size={18} />
           </button>

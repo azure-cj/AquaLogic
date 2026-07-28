@@ -19,10 +19,38 @@ export type User = {
   must_change_password: boolean;
 };
 
-const base = import.meta.env.VITE_API_BASE_URL || '/api';
+export type AuthToken = {
+  access_token: string;
+  expires_at: string;
+  user: User;
+  must_change_password: boolean;
+};
 
-export const token = () => sessionStorage.getItem('aqualogic_token');
-export const clearSession = () => sessionStorage.removeItem('aqualogic_token');
+const base = import.meta.env.VITE_API_BASE_URL || '/api';
+let accessToken: string | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
+const authChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('aqualogic-auth');
+
+export const token = () => accessToken;
+
+export function setAccessToken(value: string | null) {
+  accessToken = value;
+}
+
+function notifyUnauthorized(broadcast: boolean) {
+  accessToken = null;
+  window.dispatchEvent(new Event('aqualogic:unauthorized'));
+  window.dispatchEvent(new Event('aqualogic:session-cleared'));
+  if (broadcast) authChannel?.postMessage({ type: 'logout' });
+}
+
+export function clearSession({ broadcast = true }: { broadcast?: boolean; } = {}) {
+  notifyUnauthorized(broadcast);
+}
+
+authChannel?.addEventListener('message', (event: MessageEvent<{ type?: string; }>) => {
+  if (event.data?.type === 'logout') notifyUnauthorized(false);
+});
 
 export function apiErrorMessage(payload: unknown, status: number) {
   if (payload && typeof payload === 'object' && 'detail' in payload) {
@@ -30,11 +58,7 @@ export function apiErrorMessage(payload: unknown, status: number) {
     if (typeof detail === 'string') return detail;
     if (Array.isArray(detail)) {
       const messages = detail
-        .map((item) =>
-          item && typeof item === 'object' && 'msg' in item
-            ? String((item as { msg: unknown; }).msg)
-            : '',
-        )
+        .map((item) => item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown; }).msg) : '')
         .filter(Boolean);
       if (messages.length) return messages.join('. ');
     }
@@ -49,19 +73,44 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${base}${path}`, {
+async function request(path: string, init: RequestInit = {}, includeToken = true): Promise<Response> {
+  return fetch(`${base}${path}`, {
     ...init,
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+      ...(includeToken && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init.headers || {}),
     },
   });
-  if (response.status === 401) {
-    clearSession();
-    window.dispatchEvent(new Event('aqualogic:unauthorized'));
+}
+
+export async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = request('/auth/refresh', { method: 'POST' }, false)
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const payload = await response.json() as AuthToken;
+        accessToken = payload.access_token;
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => { refreshInFlight = null; });
   }
+  return refreshInFlight;
+}
+
+function canRefresh(path: string) {
+  return !['/auth/login', '/auth/setup-password', '/auth/refresh'].includes(path)
+    && (Boolean(accessToken) || path === '/auth/me');
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let response = await request(path, init);
+  if (response.status === 401 && canRefresh(path) && await refreshAccessToken()) {
+    response = await request(path, init);
+  }
+  if (response.status === 401) clearSession();
   if (!response.ok) {
     const payload: unknown = await response.json().catch(() => ({}));
     throw new ApiError(apiErrorMessage(payload, response.status), response.status);
@@ -71,8 +120,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const statusText = (status: string) =>
   ({
-    normal: 'Normal — readings are within configured limits',
-    warning: 'Warning — a reading needs attention',
-    critical: 'Critical — immediate attention required',
-    offline: 'Offline — no recent sensor report',
+    normal: 'Normal â€” readings are within configured limits',
+    warning: 'Warning â€” a reading needs attention',
+    critical: 'Critical â€” immediate attention required',
+    offline: 'Offline â€” no recent sensor report',
   })[status] || status;

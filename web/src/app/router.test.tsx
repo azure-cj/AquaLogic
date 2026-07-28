@@ -12,6 +12,12 @@ vi.mock('@/features/auth/LoginPage', () => ({
 vi.mock('@/features/auth/ChangePasswordPage', () => ({
   default: () => <div>Password route</div>,
 }));
+vi.mock('@/features/auth/SetupPasswordPage', () => ({
+  default: () => <div>Setup password route</div>,
+}));
+vi.mock('@/features/auth/SecurityPage', () => ({
+  default: () => <div>Security route</div>,
+}));
 vi.mock('@/features/fleet/FleetPage', () => ({
   default: () => <div>Fleet route</div>,
 }));
@@ -50,11 +56,13 @@ const routes = [
   ['/admin/tanks/42', 'Tank detail route'],
   ['/admin/fish', 'Fish route'],
   ['/admin/customers', 'Customers route'],
+  ['/admin/security', 'Security route'],
   ['/admin/analytics', 'Analytics route'],
   ['/admin/staff', 'Staff route'],
   ['/admin/settings/thresholds', 'Thresholds route'],
   ['/admin/login', 'Login route'],
   ['/admin/change-password', 'Password route'],
+  ['/admin/setup-password', 'Setup password route'],
   ['/tank/public-id', 'Public tank route'],
 ] as const;
 
@@ -67,6 +75,7 @@ describe('application router', () => {
       'tanks/:tankId',
       'fish',
       'customers',
+      'security',
       'analytics',
       'staff',
       'settings/thresholds',

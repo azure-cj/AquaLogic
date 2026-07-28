@@ -102,10 +102,11 @@ describe('admin shell guards and navigation', () => {
       'Tanks',
       'Fish species',
       'Customers',
+      'Security',
       'Staff & roles',
       'Thresholds',
     ]);
-    expect(adminNavigationItemCount).toBe(NAVIGATION_FLAT_ITEM_LIMIT);
+    expect(adminNavigationItemCount).toBeGreaterThan(NAVIGATION_FLAT_ITEM_LIMIT);
   });
 
   it('prefetches a destination when navigation intent is shown', async () => {

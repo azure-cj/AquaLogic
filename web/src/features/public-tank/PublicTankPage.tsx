@@ -24,6 +24,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import '@fontsource-variable/dm-sans/wght.css';
+import '@fontsource-variable/source-sans-3/wght.css';
+import '@fontsource/libre-baskerville/400-italic.css';
 import { businessProfile, publicFaqs, VisitorRule, visitorRules } from './content';
 import './styles.css';
 
@@ -59,9 +62,8 @@ type PublicFish = {
 type PublicTankResponse = {
   public_id: string;
   name: string;
-  location: string;
+  display_location?: string | null;
   description?: string | null;
-  tank_code?: string | null;
   habitat_label?: string | null;
   water_type?: WaterType | null;
   volume_liters?: number | null;
@@ -71,7 +73,6 @@ type PublicTankResponse = {
   latest_reading?: PublicReading | null;
   status: PublicStatus;
   parameter_statuses?: Record<string, MetricStatus>;
-  feeding_schedule?: string | null;
   public_care_notes?: string | null;
 };
 
@@ -236,7 +237,7 @@ export function PublicTank() {
 
   if (query.isLoading) {
     return (
-      <main className="visitor-state-page" aria-live="polite">
+      <main className="visitor-shell visitor-state-page" aria-live="polite">
         <span className="visitor-loader" aria-hidden="true" />
         <h1>Getting this tank ready</h1>
         <p>Loading its inhabitants and latest water conditions…</p>
@@ -246,7 +247,7 @@ export function PublicTank() {
 
   if (query.isError || !tank) {
     return (
-      <main className="visitor-state-page">
+      <main className="visitor-shell visitor-state-page">
         <span className="visitor-state-icon">
           <Info size={28} />
         </span>
@@ -327,8 +328,8 @@ export function PublicTank() {
         <section className="visitor-summary" aria-label="Tank summary">
           <div className="visitor-summary-top">
             <span>
-              <small>{tank.tank_code ? 'Tank ID' : 'Location'}</small>
-              <strong>{tank.tank_code || tank.location}</strong>
+              <small>Location</small>
+              <strong>{tank.display_location || 'JRed Aquatics'}</strong>
             </span>
             <span className="visitor-overall-status" data-status={tank.status}>
               <small>Water status</small>
@@ -481,7 +482,7 @@ export function PublicTank() {
           )}
         </section>
 
-        {(tank.feeding_schedule || tank.public_care_notes) && (
+        {tank.public_care_notes && (
           <section className="visitor-section" aria-labelledby="care-title">
             <header className="visitor-section-heading compact">
               <div>
@@ -491,12 +492,6 @@ export function PublicTank() {
               <Info size={24} aria-hidden="true" />
             </header>
             <div className="visitor-care-card">
-              {tank.feeding_schedule && (
-                <p>
-                  <strong>Feeding schedule</strong>
-                  {tank.feeding_schedule}
-                </p>
-              )}
               {tank.public_care_notes && (
                 <p>
                   <strong>Care note</strong>

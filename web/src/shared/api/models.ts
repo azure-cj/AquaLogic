@@ -6,6 +6,7 @@ export type Tank = {
   public_id: string;
   name: string;
   location: string;
+  public_location?: string | null;
   description?: string | null;
   is_public: boolean;
   customer_id?: number | null;

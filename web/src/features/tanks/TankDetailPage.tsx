@@ -35,6 +35,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CareStatusChip, SpeciesCarePanel } from './SpeciesCarePanel';
 import { TankEditorDrawer } from './TankEditorDrawer';
 import { publicTankUrl } from './publicLink';
+import { useMe } from '@/shared/hooks/useMe';
 import './styles.css';
 
 const measurements = [
@@ -55,6 +56,8 @@ export function TankDetail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const client = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.role !== 'staff';
   const [assigning, setAssigning] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
   const [removing, setRemoving] = useState<Fish | null>(null);
@@ -66,7 +69,7 @@ export function TankDetail() {
   const [heroFailed, setHeroFailed] = useState(false);
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
-  const editing = params.get('edit') === '1';
+  const editing = canManage && params.get('edit') === '1';
   const validId = Number.isInteger(id) && id > 0;
 
   const tank = useQuery({
@@ -256,6 +259,7 @@ export function TankDetail() {
         description={`${value.location}${value.tank_code ? ` · ${value.tank_code}` : ''}${value.water_type ? ` · ${value.water_type}` : ''}${value.volume_liters ? ` · ${value.volume_liters} L` : ''}${value.customer ? ` · ${value.customer.name}` : ''}`}
         actions={
           <div className="tank-detail-actions">
+            {canManage && <>
             <button
               className="button button-primary"
               type="button"
@@ -271,6 +275,7 @@ export function TankDetail() {
             >
               <Trash2 size={16} /> Delete
             </button>
+            </>}
           </div>
         }
       />

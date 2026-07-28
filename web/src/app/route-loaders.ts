@@ -11,6 +11,8 @@ function once<T>(loader: ModuleLoader<T>): ModuleLoader<T> {
 export const pageLoaders = {
   login: once(() => import('@/features/auth/LoginPage')),
   changePassword: once(() => import('@/features/auth/ChangePasswordPage')),
+  setupPassword: once(() => import('@/features/auth/SetupPasswordPage')),
+  security: once(() => import('@/features/auth/SecurityPage')),
   fleet: once(() => import('@/features/fleet/FleetPage')),
   alerts: once(() => import('@/features/alerts/AlertsPage')),
   tanks: once(() => import('@/features/tanks/TanksPage')),
@@ -34,6 +36,7 @@ const adminLoaders = {
   '/admin/tanks/:tankId': pageLoaders.tankDetail,
   '/admin/fish': pageLoaders.fish,
   '/admin/customers': pageLoaders.customers,
+  '/admin/security': pageLoaders.security,
   '/admin/analytics': pageLoaders.analytics,
   '/admin/staff': pageLoaders.staff,
   '/admin/settings/thresholds': pageLoaders.thresholds,

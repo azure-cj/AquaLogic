@@ -29,6 +29,7 @@ import QRCode from 'qrcode';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { TankEditorDrawer } from './TankEditorDrawer';
+import { useMe } from '@/shared/hooks/useMe';
 import './styles.css';
 
 function ActionTooltip({
@@ -112,6 +113,8 @@ function QrModal({
 
 export function Tanks() {
   const client = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.role !== 'staff';
   const [searchParams] = useSearchParams();
   const nav = useNavigate();
   const [creating, setCreating] = useState(false);
@@ -143,7 +146,7 @@ export function Tanks() {
     queryFn: () => api<Customer[]>('/customers'),
   });
   const editTankId = Number(searchParams.get('edit'));
-  const chosen = tanks.data?.find((tank) => tank.id === editTankId);
+  const chosen = canManage ? tanks.data?.find((tank) => tank.id === editTankId) : undefined;
   const visible = (tanks.data ?? []).filter((tank) =>
     [tank.name, tank.location].some((value) =>
       value.toLowerCase().includes(search.toLowerCase()),
@@ -191,7 +194,7 @@ export function Tanks() {
         eyebrow="Fleet management"
         title="Tanks"
         description="Manage installations, customer access, configuration, and QR labels."
-        actions={
+        actions={canManage ? (
           <button
             className="button button-primary"
             type="button"
@@ -199,7 +202,7 @@ export function Tanks() {
           >
             <Plus size={17} /> Add tank
           </button>
-        }
+        ) : undefined}
       />
       {notice && (
         <div className="tanks-toast" role="status" aria-live="polite">
@@ -272,7 +275,7 @@ export function Tanks() {
                     <small>{tank.is_public ? 'Published' : 'Private'}</small>
                   </span>
                   <span className="row-actions">
-                    <ActionTooltip label="Edit tank">
+                    {canManage && <ActionTooltip label="Edit tank">
                       <Link
                         className="icon-button"
                         to={`/admin/tanks?edit=${tank.id}`}
@@ -280,7 +283,7 @@ export function Tanks() {
                       >
                         <Pencil size={16} />
                       </Link>
-                    </ActionTooltip>
+                    </ActionTooltip>}
                     <ActionTooltip label="Show QR code">
                       <button
                         className="icon-button"
@@ -312,7 +315,7 @@ export function Tanks() {
                         <ExternalLink size={16} />
                       </Link>
                     </ActionTooltip>
-                    <ActionTooltip label="Delete tank">
+                    {canManage && <ActionTooltip label="Delete tank">
                       <button
                         className="icon-button icon-danger"
                         type="button"
@@ -321,7 +324,7 @@ export function Tanks() {
                       >
                         <Trash2 size={16} />
                       </button>
-                    </ActionTooltip>
+                    </ActionTooltip>}
                   </span>
                 </div>
               );
@@ -334,7 +337,7 @@ export function Tanks() {
           />
         )}
       </Panel>
-      <TankEditorDrawer
+      {canManage && <TankEditorDrawer
         open={creating || Boolean(chosen)}
         tank={chosen}
         customers={customers.data ?? []}
@@ -343,9 +346,9 @@ export function Tanks() {
         onRetryCustomers={() => customers.refetch()}
         onClose={closeDrawer}
         onSaved={saved}
-      />
+      />}
       <QrModal value={qrPreview} onClose={() => setQrPreview(null)} />
-      <ConfirmDialog
+      {canManage && <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={`Delete ${deleteTarget?.name ?? 'tank'}?`}
         message="This permanently removes the tank and cannot be undone."
@@ -353,7 +356,7 @@ export function Tanks() {
         busy={busy}
         onConfirm={removeTank}
         onClose={() => setDeleteTarget(null)}
-      />
+      />}
     </section>
   );
 }

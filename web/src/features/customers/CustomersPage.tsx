@@ -7,10 +7,12 @@ import {
   initials
 } from '@/shared/utils/formatting';
 import { useQuery } from '@tanstack/react-query';
+import { useMe } from '@/shared/hooks/useMe';
 
 import { ResourceManager } from '@/shared/components/ResourceManager';
 
 export function Customers() {
+  const me = useMe();
   const tanks = useQuery({ queryKey: ['tanks'], queryFn: () => api<Tank[]>('/tanks') });
   return (
     <ResourceManager
@@ -53,6 +55,7 @@ export function Customers() {
           </>
         );
       }}
+      canManage={me.data?.role !== 'staff'}
     />
   );
 }

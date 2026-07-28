@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
+import { useMe } from '@/shared/hooks/useMe';
 
 import './compact.css';
 import './grouped.css';
@@ -135,14 +136,17 @@ function RowActions({
   compact = false,
   onEdit,
   onDelete,
+  canManage,
 }: {
   fish: FishRecord;
   compact?: boolean;
   onEdit: (fish: FishRecord) => void;
   onDelete: (fish: FishRecord) => void;
+  canManage: boolean;
 }) {
   const inUse = fish.tank_count > 0;
   const className = compact ? 'compact-fish__actions' : 'fdg-actions';
+  if (!canManage) return <span className={className} aria-label="Read-only species catalog" />;
   return (
     <div className={className}>
       <button
@@ -177,6 +181,8 @@ function RowActions({
 
 export function Fish() {
   const queryClient = useQueryClient();
+  const me = useMe();
+  const canManage = me.data?.role !== 'staff';
   const query = useQuery({
     queryKey: ['/fish'],
     queryFn: () => api<FishRecord[]>('/fish'),
@@ -325,7 +331,7 @@ export function Fish() {
               Compact
             </button>
           </div>
-          <button
+          {canManage && <button
             className="fdg-primary-button"
             type="button"
             onClick={() => {
@@ -335,7 +341,7 @@ export function Fish() {
           >
             <Plus size={17} />
             Add fish species
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -479,6 +485,7 @@ export function Fish() {
                             fish={item}
                             onEdit={startEdit}
                             onDelete={setDeleteTarget}
+                            canManage={canManage}
                           />
                         </div>
                       ))}
@@ -518,6 +525,7 @@ export function Fish() {
                 compact
                 onEdit={startEdit}
                 onDelete={setDeleteTarget}
+                canManage={canManage}
               />
             </article>
           ))}

@@ -30,7 +30,7 @@ export function Staff() {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ name: string; password: string; } | null>(null);
+  const [result, setResult] = useState<{ name: string; setupUrl: string; expiresAt: string; } | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
   const closeCreate = useCallback(() => setCreating(false), []);
   const create = async (event: FormEvent<HTMLFormElement>) => {
@@ -39,7 +39,7 @@ export function Staff() {
     setError('');
     const form = new FormData(event.currentTarget);
     try {
-      const response = await api<{ user: User; temporary_password: string; }>('/users', {
+      const response = await api<{ user: User; setup_url: string; expires_at: string; }>('/users', {
         method: 'POST',
         body: JSON.stringify({
           name: form.get('name'),
@@ -48,7 +48,7 @@ export function Staff() {
         }),
       });
       setCreating(false);
-      setResult({ name: response.user.name, password: response.temporary_password });
+      setResult({ name: response.user.name, setupUrl: response.setup_url, expiresAt: response.expires_at });
       client.invalidateQueries({ queryKey: ['users'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to create staff member');
@@ -68,11 +68,11 @@ export function Staff() {
   const reset = async (user: User) => {
     setBusy(true);
     try {
-      const response = await api<{ temporary_password: string; }>(
+      const response = await api<{ user: User; setup_url: string; expires_at: string; }>(
         `/users/${user.id}/reset-password`,
         { method: 'POST' },
       );
-      setResult({ name: user.name, password: response.temporary_password });
+      setResult({ name: user.name, setupUrl: response.setup_url, expiresAt: response.expires_at });
     } finally {
       setBusy(false);
     }
@@ -203,8 +203,8 @@ export function Staff() {
       />
       <Drawer
         open={Boolean(result)}
-        title="Temporary password"
-        description="This password is shown once. Copy it and share it through a secure channel."
+        title="One-time setup link"
+        description="This link is shown once. Copy it and share it through a secure channel; it expires in 30 minutes."
         onClose={() => setResult(null)}
       >
         {result && (
@@ -213,13 +213,13 @@ export function Staff() {
               <small>Staff member</small>
               <strong>{result.name}</strong>
             </span>
-            <code>{result.password}</code>
+            <code>{result.setupUrl}</code>
             <button
               className="button button-primary"
               type="button"
-              onClick={() => navigator.clipboard.writeText(result.password)}
+              onClick={() => navigator.clipboard.writeText(result.setupUrl)}
             >
-              <Clipboard size={17} /> Copy password
+              <Clipboard size={17} /> Copy setup link
             </button>
           </div>
         )}

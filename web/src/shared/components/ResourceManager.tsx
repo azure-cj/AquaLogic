@@ -40,6 +40,7 @@ export function ResourceManager({
   fields,
   searchValues,
   renderRecord,
+  canManage = true,
 }: {
   title: string;
   singular: string;
@@ -48,6 +49,7 @@ export function ResourceManager({
   fields: FieldSpec[];
   searchValues: (record: ManagedRecord) => string[];
   renderRecord: (record: ManagedRecord) => ReactNode;
+  canManage?: boolean;
 }) {
   const client = useQueryClient();
   const query = useQuery({
@@ -114,7 +116,7 @@ export function ResourceManager({
         eyebrow="Directory"
         title={title}
         description={description}
-        actions={
+        actions={canManage ? (
           <button
             className="button button-primary"
             type="button"
@@ -125,7 +127,7 @@ export function ResourceManager({
           >
             <Plus size={17} /> Add {singular.toLowerCase()}
           </button>
-        }
+        ) : undefined}
       />
       {notice && <Notice>{notice}</Notice>}
       {error && !editing && <Notice tone="error">{error}</Notice>}
@@ -149,7 +151,7 @@ export function ResourceManager({
             {visible.map((record) => (
               <article className="resource-row" key={record.id}>
                 {renderRecord(record)}
-                <div className="row-actions">
+                {canManage && <div className="row-actions">
                   <button
                     className="icon-button"
                     type="button"
@@ -169,7 +171,7 @@ export function ResourceManager({
                   >
                     <Trash2 size={16} />
                   </button>
-                </div>
+                </div>}
               </article>
             ))}
           </div>
