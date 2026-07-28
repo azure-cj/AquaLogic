@@ -1,8 +1,9 @@
-# AquaLogic Backend (Phase 1)
+# AquaLogic Backend
 
-FastAPI backend foundation for AquaLogic.
+FastAPI backend for AquaLogic. The backend is the shared source of operational
+data for the web application and future connected mobile and hardware clients.
 
-## Included in this phase
+## Current capabilities
 
 - FastAPI app scaffold
 - SQLAlchemy models for users, tanks, fish species, assignments, sensor readings, and alerts
@@ -10,11 +11,14 @@ FastAPI backend foundation for AquaLogic.
 - CRUD endpoints for tanks and fish species
 - Tank-fish assignment endpoints
 - Sensor reading persistence endpoints
-- Alert listing and resolve endpoints
+- Threshold-backed status evaluation and rule-based alert generation
+- Alert listing, filtering, history, and resolution
 - Public tank read-only endpoint for QR pages
-- Alembic migration setup with initial migration
+- Fleet dashboard, management, threshold, and analytics endpoints
+- Alembic migration history through the current migrations
 - Seed scripts for sample tanks and fish species
-- Pytest API tests
+- Optional demo sensor generator behind explicit environment flags
+- Pytest API and behavior tests
 
 ## Quick start
 
@@ -23,7 +27,7 @@ FastAPI backend foundation for AquaLogic.
    ```bash
    python -m venv .venv
    .venv\Scripts\activate
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 2. Create environment file:
@@ -64,5 +68,13 @@ pytest -q
 ## Notes
 
 - Login endpoint: `POST /auth/login`
-- Public tank endpoint: `GET /public/tanks/{id}`
-- This phase intentionally excludes decision engine logic, mock sensor generator runtime loop, and WebSocket streaming implementation.
+- Public tank endpoint: `GET /public/tanks/{public_id}`
+- Local development defaults to SQLite. Production requires explicit CORS
+  origins and deployment database configuration.
+- The mobile app is currently a local demo-data prototype and does not yet use
+  this API.
+- WebSocket streaming remains a future extension; the current module is a
+  placeholder.
+
+For broader repository context, read `../AGENTS.md`, `../docs/INDEX.md`, and
+`../docs/areas/BACKEND.md`.

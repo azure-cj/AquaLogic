@@ -1,4 +1,4 @@
-﻿import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class SoftCard extends StatelessWidget {
@@ -17,9 +17,9 @@ class SoftCard extends StatelessWidget {
         border: Border.all(color: AppColors.line),
         boxShadow: [
           BoxShadow(
-            color: AppColors.tealDark.withValues(alpha: 0.10),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            color: AppColors.tealDark.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),

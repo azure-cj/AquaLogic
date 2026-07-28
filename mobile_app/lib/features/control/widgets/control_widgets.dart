@@ -1,4 +1,4 @@
-﻿import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/control/models/control_device.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
@@ -33,9 +33,9 @@ class ControlOverviewCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.tealDark.withValues(alpha: 0.10),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
+                color: AppColors.tealDark.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
             ],
           ),

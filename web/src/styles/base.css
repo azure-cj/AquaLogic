@@ -1,0 +1,229 @@
+@import '@fontsource-variable/geist/wght.css';
+@import '@fontsource-variable/geist-mono/wght.css';
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-admin-sans: 'Geist Sans', Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-admin-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #132c3a;
+  background: #f3f8f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  max-width: 100%;
+  background: #f3f8f8;
+  scrollbar-gutter: stable;
+}
+
+body {
+  min-width: 320px;
+  max-width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: clip;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-shell {
+  font-family: var(--font-admin-sans);
+}
+
+.admin-shell .metric-cell,
+.admin-shell .analytics-stats strong,
+.admin-shell .uptime-value-row > strong {
+  font-family: var(--font-admin-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(14, 159, 151, 0.28);
+  outline-offset: 2px;
+}
+
+.muted {
+  color: #6f8590;
+}
+
+.center {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+/* Public customer tank page — intentionally kept separate from the admin system. */
+.public {
+  max-width: 850px;
+  min-height: 100vh;
+  margin: auto;
+  padding: 1rem 1.1rem 3rem;
+  background: #fbfdfd;
+}
+
+.publichead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  color: #063b5c;
+  font-size: 1.4rem;
+  font-weight: 900;
+}
+
+.brand span {
+  color: #008f91;
+}
+
+.public .hero {
+  margin: 1rem 0;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #063b5c, #007f82);
+  color: #fff;
+}
+
+.public .hero h1 {
+  margin: 0.2rem 0 1rem;
+  font-size: 2rem;
+}
+
+.public .hero small {
+  color: #def5f3;
+}
+
+.public .status {
+  display: inline-block;
+  width: max-content;
+  padding: 0.25rem 0.55rem;
+  border-radius: 20px;
+  background: #fff;
+  color: #123047;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.public section {
+  margin: 1.7rem 0;
+}
+
+.public section h2 {
+  margin: 0.3rem 0 0.7rem;
+  font-size: 1.1rem;
+}
+
+.readinggrid,
+.fishgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.reading,
+.fish {
+  padding: 1rem;
+  border: 1px solid #dce7e8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.reading strong {
+  display: block;
+  margin: 0.35rem 0;
+  color: #063b5c;
+  font-size: 1.55rem;
+}
+
+.reading strong small {
+  display: inline;
+  color: #60727b;
+  font-size: 0.75rem;
+}
+
+.reading p,
+.fish p {
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.empty {
+  padding: 1rem;
+  border-radius: 10px;
+  background: #edf3f4;
+  color: #4b626b;
+}
+
+.fish img {
+  width: 100%;
+  height: 130px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.fishfallback {
+  display: grid;
+  height: 110px;
+  place-content: center;
+  border-radius: 8px;
+  background: #d9eeee;
+  font-size: 3rem;
+}
+
+.fish h3 {
+  margin-bottom: 0.2rem;
+}
+
+.fish i {
+  color: #5c737a;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 800px) {
+  .readinggrid,
+  .fishgrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,9 @@
-from app.models import Alert, AlertSeverity
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from app.models import Alert, AlertSeverity, SensorReading
+from app.services.decision_engine import ensure_default_thresholds
 
 
 def _create_tank(client, headers, name="Tank Sensor"):
@@ -9,6 +14,12 @@ def _create_tank(client, headers, name="Tank Sensor"):
             "name": name,
             "location": "Rear Rack",
             "description": "Sensor validation tank",
+            "tank_code": f"PUBLIC-{name.replace(' ', '-').upper()}",
+            "habitat_label": "Tropical community",
+            "water_type": "freshwater",
+            "volume_liters": 180,
+            "established_on": "2026-03-01",
+                "hero_image_url": "https://images.unsplash.com/tank.webp",
         },
     )
     assert response.status_code == 201
@@ -35,7 +46,8 @@ def _create_fish(client, headers):
     return response.json()
 
 
-def test_sensor_endpoints_and_public_view(client, auth_headers):
+def test_sensor_endpoints_and_public_view(client, auth_headers, db_session):
+    ensure_default_thresholds(db_session)
     tank = _create_tank(client, auth_headers)
     fish = _create_fish(client, auth_headers)
 
@@ -69,12 +81,109 @@ def test_sensor_endpoints_and_public_view(client, auth_headers):
     assert history_sensor.status_code == 200
     assert len(history_sensor.json()) == 1
 
-    public_response = client.get(f"/public/tanks/{tank['id']}")
+    public_response = client.get(f"/public/tanks/{tank['public_id']}")
     assert public_response.status_code == 200
     public_payload = public_response.json()
-    assert public_payload["id"] == tank["id"]
+    assert "id" not in public_payload
+    assert "tank_code" not in public_payload
+    assert "feeding_schedule" not in public_payload
+    assert "location" not in public_payload
+    assert public_payload["water_type"] == "freshwater"
+    assert public_payload["volume_liters"] == 180
     assert len(public_payload["fish_species"]) == 1
     assert public_payload["latest_reading"]["temperature"] == 25.5
+    assert "id" not in public_payload["latest_reading"]
+    assert "tank_id" not in public_payload["latest_reading"]
+    assert "is_mock" not in public_payload["latest_reading"]
+    assert public_payload["status"] == "normal"
+    assert public_payload["parameter_statuses"]["temperature"] == "normal"
+    assert public_payload["parameter_statuses"]["ammonia"] == "normal"
+
+
+def test_public_view_reports_stale_readings_without_leaking_private_ids(
+    client, auth_headers, db_session
+):
+    ensure_default_thresholds(db_session)
+    tank = _create_tank(client, auth_headers, name="Stale Display")
+    db_session.add(
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=10),
+            temperature=25.0,
+            ph=7.1,
+            turbidity=2.0,
+            dissolved_oxygen=6.3,
+            tds=180.0,
+            ammonia=0.1,
+        )
+    )
+    db_session.commit()
+
+    response = client.get(f"/public/tanks/{tank['public_id']}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "offline"
+    assert set(response.json()["parameter_statuses"].values()) == {"offline"}
+    assert "tank_id" not in response.json()["latest_reading"]
+
+
+def test_public_view_without_readings_uses_unavailable_metric_states(client, auth_headers):
+    tank = _create_tank(client, auth_headers, name="New Display")
+
+    response = client.get(f"/public/tanks/{tank['public_id']}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "offline"
+    assert "latest_reading" not in response.json()
+    assert set(response.json()["parameter_statuses"].values()) == {"unavailable"}
+
+
+@pytest.mark.parametrize(
+    ("name", "temperature", "expected"),
+    [
+        ("Warning Display", 29.0, "warning"),
+        ("Critical Display", 31.0, "critical"),
+    ],
+)
+def test_public_view_exposes_threshold_backed_metric_statuses(
+    client, auth_headers, db_session, name, temperature, expected
+):
+    ensure_default_thresholds(db_session)
+    tank = _create_tank(client, auth_headers, name=name)
+    reading = client.post(
+        f"/tanks/{tank['id']}/sensors",
+        headers=auth_headers,
+        json={
+            "temperature": temperature,
+            "ph": 7.2,
+            "turbidity": 3.1,
+            "dissolved_oxygen": 6.2,
+            "tds": 180.0,
+            "ammonia": 0.1,
+            "is_mock": True,
+        },
+    )
+    assert reading.status_code == 201
+
+    response = client.get(f"/public/tanks/{tank['public_id']}")
+    assert response.status_code == 200
+    assert response.json()["status"] == expected
+    assert response.json()["parameter_statuses"]["temperature"] == expected
+    assert response.json()["parameter_statuses"]["ph"] == "normal"
+
+
+def test_private_and_unknown_tanks_use_the_same_public_response(client, auth_headers):
+    tank = _create_tank(client, auth_headers, name="Private Display")
+    update = client.put(
+        f"/tanks/{tank['id']}",
+        headers=auth_headers,
+        json={"is_public": False},
+    )
+    assert update.status_code == 200
+
+    private_response = client.get(f"/public/tanks/{tank['public_id']}")
+    unknown_response = client.get("/public/tanks/not-a-real-public-id")
+    assert private_response.status_code == 404
+    assert unknown_response.status_code == 404
+    assert private_response.json() == unknown_response.json() == {"detail": "Tank not found"}
 
 
 def test_alert_list_and_resolve(client, auth_headers, db_session):

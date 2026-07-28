@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 class AppPage extends StatelessWidget {
   const AppPage({super.key, required this.header, required this.children});
@@ -12,7 +12,7 @@ class AppPage extends StatelessWidget {
       slivers: [
         SliverToBoxAdapter(child: header),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 92),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 88),
           sliver: SliverList.separated(
             itemCount: children.length,
             itemBuilder: (context, index) => children[index],

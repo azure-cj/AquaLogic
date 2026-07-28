@@ -1,0 +1,25 @@
+.account-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+  color: var(--teal-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.account-back-link:hover,
+.account-back-link:focus-visible {
+  color: var(--navy-800);
+}
+
+.account-back-link:focus-visible {
+  outline: 3px solid rgba(14, 159, 151, 0.28);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.staff-table .data-head,
+.staff-table .data-row {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(140px, 0.65fr) minmax(100px, 0.55fr) minmax(230px, 1fr);
+}

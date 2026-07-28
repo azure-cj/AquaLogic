@@ -52,17 +52,37 @@ class ReadingGrid extends StatelessWidget {
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: readings.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.02,
-      ),
-      itemBuilder: (context, index) => ReadingCard(data: readings[index]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final itemWidth = (constraints.maxWidth - spacing) / 2;
+        final itemHeight = itemWidth / 1.02;
+
+        return Column(
+          children: [
+            for (var row = 0; row < readings.length; row += 2) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: itemHeight,
+                      child: ReadingCard(data: readings[row]),
+                    ),
+                  ),
+                  const SizedBox(width: spacing),
+                  Expanded(
+                    child: SizedBox(
+                      height: itemHeight,
+                      child: ReadingCard(data: readings[row + 1]),
+                    ),
+                  ),
+                ],
+              ),
+              if (row + 2 < readings.length) const SizedBox(height: spacing),
+            ],
+          ],
+        );
+      },
     );
   }
 }

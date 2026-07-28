@@ -1,4 +1,4 @@
-﻿import 'package:aqualogic/features/control/models/control_device.dart';
+import 'package:aqualogic/features/control/models/control_device.dart';
 import 'package:aqualogic/features/control/widgets/control_widgets.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
@@ -179,26 +179,60 @@ class _ControlScreenState extends State<ControlScreen> {
         ),
       ),
       children: [
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _devices.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.2,
-          ),
-          itemBuilder: (context, index) {
-            final device = _devices[index];
-            return ControlOverviewCard(
-              device: device,
-              onTap: () => _showControlDetails(index),
-            );
-          },
-        ),
+        _ControlDeviceGrid(devices: _devices, onDeviceTap: _showControlDetails),
         const DemoNotice(),
       ],
+    );
+  }
+}
+
+class _ControlDeviceGrid extends StatelessWidget {
+  const _ControlDeviceGrid({required this.devices, required this.onDeviceTap});
+
+  final List<ControlDevice> devices;
+  final ValueChanged<int> onDeviceTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        final itemWidth = (constraints.maxWidth - spacing) / 2;
+        final itemHeight = itemWidth / 1.2;
+
+        return Column(
+          children: [
+            for (var row = 0; row < devices.length; row += 2) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: itemHeight,
+                      child: ControlOverviewCard(
+                        device: devices[row],
+                        onTap: () => onDeviceTap(row),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: spacing),
+                  Expanded(
+                    child: SizedBox(
+                      height: itemHeight,
+                      child: row + 1 < devices.length
+                          ? ControlOverviewCard(
+                              device: devices[row + 1],
+                              onTap: () => onDeviceTap(row + 1),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              ),
+              if (row + 2 < devices.length) const SizedBox(height: spacing),
+            ],
+          ],
+        );
+      },
     );
   }
 }

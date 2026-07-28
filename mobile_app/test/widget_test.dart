@@ -25,6 +25,39 @@ void main() {
       for (final label in ['Home', 'Tanks', 'Control', 'Alerts', 'More']) {
         expect(find.text(label), findsWidgets);
       }
+      final bottomNavOpacity = find.byKey(const ValueKey('bottom-nav-opacity'));
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 1);
+
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, -420),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 0);
+
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, 420),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 1);
+
+      await tester.fling(find.byType(PageView), const Offset(520, 0), 1200);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Today'), findsOneWidget);
+      expect(find.textContaining('Good morning, JRed.'), findsOneWidget);
+      expect(find.text('Owner brief'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+
+      await tester.tap(find.byTooltip('Back to Home'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('JRed Aquatics'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
 
       await tester.tap(find.text('SYSTEM NORMAL'));
       await tester.pumpAndSettle();

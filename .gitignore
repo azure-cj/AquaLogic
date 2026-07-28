@@ -7,6 +7,8 @@
 # Python
 __pycache__/
 *.py[cod]
+backend/.env
+backend/*.db
 
 # Flutter/Dart
 mobile_app/.dart_tool/
@@ -25,3 +27,10 @@ mobile_app/aqualogic_phone_home.png
 mobile_app/aqualogic_device_screen.png
 mobile_app/aqualogic_cold_start.png
 mobile_app/aqualogic_after_start.png
+
+# Web dependencies, builds, and compiler cache
+web/node_modules/
+web/dist/
+web/.vite/
+web/tsconfig.tsbuildinfo
+web/.env
