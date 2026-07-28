@@ -85,6 +85,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
         <div className="data-head">
           <span>Tank</span>
           <span>Status</span>
+          <span>Species Care</span>
           <span>Temperature</span>
           <span>pH</span>
           <span>Ammonia</span>
@@ -105,6 +106,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               </span>
             </span>
             <StatusBadge value={tank.status} />
+            <span><StatusBadge value={tank.species_care_status ?? 'unavailable'} /><small>{tank.assigned_species_count ?? 0} assigned</small></span>
             <span className="metric-cell">
               {reading(tank.latest_reading?.temperature, '°C')}
             </span>
@@ -154,6 +156,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               </div>
             </dl>
             <small>Last report {relativeTime(tank.last_reading_at)}</small>
+            <small>Species Care: {tank.species_care_status ?? 'unavailable'} · {tank.assigned_species_count ?? 0} assigned</small>
           </Link>
         ))}
       </div>

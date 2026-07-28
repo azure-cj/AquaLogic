@@ -21,6 +21,9 @@ vi.mock('@/features/alerts/AlertsPage', () => ({
 vi.mock('@/features/tanks/TanksPage', () => ({
   default: () => <div>Tanks route</div>,
 }));
+vi.mock('@/features/tanks/TankDetailPage', () => ({
+  default: () => <div>Tank detail route</div>,
+}));
 vi.mock('@/features/fish/FishPage', () => ({
   default: () => <div>Fish route</div>,
 }));
@@ -44,7 +47,7 @@ const routes = [
   ['/admin/fleet', 'Fleet route'],
   ['/admin/alerts', 'Alerts route'],
   ['/admin/tanks', 'Tanks route'],
-  ['/admin/tanks/42', 'Tanks route'],
+  ['/admin/tanks/42', 'Tank detail route'],
   ['/admin/fish', 'Fish route'],
   ['/admin/customers', 'Customers route'],
   ['/admin/analytics', 'Analytics route'],

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.dependencies import require_password_change_complete
 from app.models import FishSpecies, User
-from app.schemas.fish import FishSpeciesCreate, FishSpeciesRead, FishSpeciesUpdate
+from app.schemas.fish import FishSpeciesCreate, FishSpeciesRead, FishSpeciesUpdate, validate_preferred_range_order
 
 router = APIRouter(prefix="/fish", tags=["fish"])
 
@@ -75,6 +75,18 @@ def update_fish_species(
     updates = payload.dict(exclude_unset=True)
     if not updates:
         return fish
+
+    effective_ranges = {
+        key: updates.get(key, getattr(fish, key))
+        for key in (
+            "ideal_temp_min", "ideal_temp_max", "ideal_ph_min", "ideal_ph_max",
+            "ideal_tds_min", "ideal_tds_max",
+        )
+    }
+    try:
+        validate_preferred_range_order(effective_ranges)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error))
 
     for key, value in updates.items():
         setattr(fish, key, value)

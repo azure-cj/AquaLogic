@@ -31,5 +31,6 @@ mobile_app/aqualogic_after_start.png
 # Web dependencies, builds, and compiler cache
 web/node_modules/
 web/dist/
+web/.vite/
 web/tsconfig.tsbuildinfo
 web/.env

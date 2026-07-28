@@ -1,7 +1,7 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
@@ -88,6 +88,36 @@ missing reports from zero values without creating misleading dual-axis charts.
 threshold updates create revision records, and existing thresholds are
 backfilled from the earliest known reading because earlier configuration
 history cannot be reconstructed.
+
+## 2026-07-28 â€” Keep species-care suitability derived and separate from alerts
+
+**Decision:** Evaluate assigned species against a tank's latest fresh reading
+on an authenticated read endpoint, with `suitable`, `attention`, and
+`unavailable` results. Do not persist a species-care status or create Alert
+records in this phase.
+
+**Reason:** Species preferences are ideal ranges, not operational critical
+boundaries. Dynamic evaluation reflects new readings, assignments, and range
+edits immediately without derived-state synchronization or collisions with the
+existing unresolved `tank_id + parameter` alert deduplication.
+
+**Consequences:** The staff drawer owns a separate care presentation and polls
+the endpoint while open. Future persistent care alerts require a category or
+source, fish-species identity, a stable unresolved key, and resolution rules.
+
+## 2026-07-28 — Dedicated staff tank workspace
+
+**Decision:** Keep `/admin/tanks` as the configuration directory and make
+`/admin/tanks/:tankId` the authenticated workspace for live operations,
+Species Care, assignments, and operational alert resolution. Reuse one
+configuration-only drawer from either route.
+
+**Reason:** Operators need a bookmarkable context for one installation without
+duplicating live concerns in a scanning-oriented directory.
+
+**Consequences:** Species Care remains dynamic and distinct from operational
+alerts. The detail route independently polls operations and suitability, so
+their timestamps can briefly differ while sensor ingestion is in flight.
 
 ## Adding a decision
 

@@ -12,7 +12,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // Keep this aligned with start-dev.bat: the FastAPI server binds IPv4 only.
+        // `localhost` can resolve to IPv6 (::1), where an unrelated local service
+        // may be listening instead.
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },

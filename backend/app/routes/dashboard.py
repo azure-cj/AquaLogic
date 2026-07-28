@@ -6,15 +6,17 @@ from app.database import get_db
 from app.dependencies import require_admin, require_password_change_complete
 from app.models import Alert, SensorReading, Tank, ThresholdConfig, ThresholdRevision, User
 from app.schemas.analytics import AnalyticsResponse
+from app.schemas.dashboard import FleetTankRead
 from app.schemas.threshold import ThresholdRead, ThresholdUpdate
 from app.services.analytics import build_fleet_analytics
 from app.services.decision_engine import status_for_reading
+from app.services.species_suitability import evaluate_tank_species_suitability
 
 router = APIRouter(tags=["dashboard"])
 
-@router.get("/fleet")
+@router.get("/fleet", response_model=list[FleetTankRead])
 def fleet(db: Session = Depends(get_db), _: User = Depends(require_password_change_complete)):
-    tanks = db.scalars(select(Tank).options(selectinload(Tank.customer)).order_by(Tank.name)).all()
+    tanks = db.scalars(select(Tank).options(selectinload(Tank.customer), selectinload(Tank.fish_species)).order_by(Tank.name)).all()
     result = []
     now = datetime.now(timezone.utc)
     for tank in tanks:
@@ -22,7 +24,8 @@ def fleet(db: Session = Depends(get_db), _: User = Depends(require_password_chan
         stamp = reading.timestamp if reading else None
         if stamp and stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
         unresolved = list(db.scalars(select(Alert).where(Alert.tank_id == tank.id, Alert.is_resolved.is_(False))).all())
-        result.append({"id": tank.id, "public_id": tank.public_id, "name": tank.name, "location": tank.location, "customer": {"id": tank.customer.id, "name": tank.customer.name} if tank.customer else None, "latest_reading": reading, "status": status_for_reading(db, reading), "last_reading_at": reading.timestamp if reading else None, "reporting_age_seconds": round((now-stamp).total_seconds()) if stamp else None, "active_warning_count": sum(a.severity.value == "warning" for a in unresolved), "active_critical_count": sum(a.severity.value == "critical" for a in unresolved)})
+        care = evaluate_tank_species_suitability(tank, reading, evaluated_at=now)
+        result.append({"id": tank.id, "public_id": tank.public_id, "name": tank.name, "location": tank.location, "customer": {"id": tank.customer.id, "name": tank.customer.name} if tank.customer else None, "latest_reading": reading, "status": status_for_reading(db, reading, evaluated_at=now), "last_reading_at": reading.timestamp if reading else None, "reporting_age_seconds": round((now-stamp).total_seconds()) if stamp else None, "active_warning_count": sum(a.severity.value == "warning" for a in unresolved), "active_critical_count": sum(a.severity.value == "critical" for a in unresolved), "species_care_status": care["status"], "assigned_species_count": len(tank.fish_species)})
     return result
 
 @router.get("/thresholds", response_model=list[ThresholdRead])

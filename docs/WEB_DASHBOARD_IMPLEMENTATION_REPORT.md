@@ -159,6 +159,17 @@ Deployment configuration exists, but cloud resources have not been provisioned.
 6. Keep demo sensor ingestion disabled unless one designated API instance explicitly enables both required flags.
 7. Run production login, public QR, CORS, migration, and sensor-ingestion smoke tests after deployment.
 
+## 2026-07-28 staff tank workspace update
+
+- Added the lazy `/admin/tanks/:tankId` workspace with five operational
+  summary cards, live readings, persisted alert resolution, Species Care,
+  assignment management, and read-only tank information.
+- Reused a configuration-only editor drawer from directory and detail routes;
+  routes preserve history through explicit edit query parameters.
+- Fleet now shows lightweight care status and assigned-species count. API
+  failures remain isolated to their live section instead of hiding static tank
+  data.
+
 ## Known limitations and follow-up
 
 - List endpoints do not yet provide pagination for large fleets, alerts, customers, fish, or staff datasets.

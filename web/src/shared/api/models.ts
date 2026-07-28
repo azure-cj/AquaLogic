@@ -9,6 +9,7 @@ export type Tank = {
   description?: string | null;
   is_public: boolean;
   customer_id?: number | null;
+  customer?: { id: number; name: string; } | null;
   feeding_schedule?: string | null;
   public_care_notes?: string | null;
   fish_species?: Fish[];
@@ -66,6 +67,17 @@ export type FleetTank = {
   reporting_age_seconds: number | null;
   active_warning_count: number;
   active_critical_count: number;
+  species_care_status?: SpeciesSuitabilityStatus;
+  assigned_species_count?: number;
+};
+
+export type TankOperations = {
+  tank_id: number;
+  evaluated_at: string;
+  status: FleetStatus;
+  latest_reading: Reading | null;
+  parameter_statuses: Record<string, FleetStatus | 'unavailable'>;
+  active_alerts: Alert[];
 };
 
 export type Threshold = {
@@ -76,4 +88,46 @@ export type Threshold = {
   critical_min: number | null;
   critical_max: number | null;
   enabled: boolean;
+};
+
+export type SpeciesSuitabilityStatus = 'suitable' | 'attention' | 'unavailable';
+
+export type SpeciesSuitabilityReason =
+  | 'within_preferred_range'
+  | 'below_preferred_minimum'
+  | 'above_preferred_maximum'
+  | 'species_range_missing'
+  | 'no_current_reading'
+  | 'stale_reading'
+  | 'reading_value_missing'
+  | 'invalid_species_range';
+
+export type SpeciesSuitabilityCheck = {
+  parameter: 'temperature' | 'ph' | 'dissolved_oxygen' | 'tds';
+  status: SpeciesSuitabilityStatus;
+  configured: boolean;
+  reason: SpeciesSuitabilityReason;
+  current_value: number | null;
+  preferred_min: number | null;
+  preferred_max: number | null;
+  unit: string;
+  message: string;
+};
+
+export type SpeciesSuitabilitySpecies = {
+  fish_species_id: number;
+  common_name: string;
+  scientific_name: string;
+  status: SpeciesSuitabilityStatus;
+  checks: SpeciesSuitabilityCheck[];
+};
+
+export type SpeciesSuitabilityResponse = {
+  tank_id: number;
+  status: SpeciesSuitabilityStatus;
+  summary_reason: 'no_species_assigned' | null;
+  evaluated_at: string;
+  reading: { id: number; timestamp: string; freshness: 'current' | 'stale'; } | null;
+  species_counts: Record<SpeciesSuitabilityStatus, number>;
+  species: SpeciesSuitabilitySpecies[];
 };

@@ -42,6 +42,13 @@ export function apiErrorMessage(payload: unknown, status: number) {
   return `Request failed (${status})`;
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${base}${path}`, {
     ...init,
@@ -57,7 +64,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     const payload: unknown = await response.json().catch(() => ({}));
-    throw new Error(apiErrorMessage(payload, response.status));
+    throw new ApiError(apiErrorMessage(payload, response.status), response.status);
   }
   return response.status === 204 ? (undefined as T) : response.json();
 }

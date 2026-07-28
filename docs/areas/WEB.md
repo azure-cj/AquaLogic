@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 ## Read first
 
@@ -29,6 +29,12 @@ Last reviewed: 2026-07-27
 
 Backend authorization remains authoritative. Do not rely on route visibility as a
 security boundary.
+
+`/admin/tanks/:tankId` is the staff tank workspace. It independently polls
+operations and Species Care, owns assignment management, and uses the shared
+configuration drawer via `?edit=1`. The directory uses `?edit=:tankId` for
+configuration only. Do not reuse or alter operational-health badges for
+species preference results.
 
 ## Common checks
 

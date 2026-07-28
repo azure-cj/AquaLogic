@@ -14,6 +14,7 @@ export const pageLoaders = {
   fleet: once(() => import('@/features/fleet/FleetPage')),
   alerts: once(() => import('@/features/alerts/AlertsPage')),
   tanks: once(() => import('@/features/tanks/TanksPage')),
+  tankDetail: once(() => import('@/features/tanks/TankDetailPage')),
   fish: once(() => import('@/features/fish/FishPage')),
   customers: once(() => import('@/features/customers/CustomersPage')),
   analytics: once(() => import('@/features/analytics/AnalyticsPage')),
@@ -30,6 +31,7 @@ const adminLoaders = {
   '/admin/fleet': pageLoaders.fleet,
   '/admin/alerts': pageLoaders.alerts,
   '/admin/tanks': pageLoaders.tanks,
+  '/admin/tanks/:tankId': pageLoaders.tankDetail,
   '/admin/fish': pageLoaders.fish,
   '/admin/customers': pageLoaders.customers,
   '/admin/analytics': pageLoaders.analytics,
@@ -39,7 +41,7 @@ const adminLoaders = {
 
 export function prefetchAdminRoute(path: string) {
   const normalized = path.startsWith('/admin/tanks/')
-    ? '/admin/tanks'
+    ? '/admin/tanks/:tankId'
     : path;
   const loader = adminLoaders[normalized as keyof typeof adminLoaders];
   return loader?.();

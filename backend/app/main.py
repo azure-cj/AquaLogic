@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
-from .routes import alerts, auth, dashboard, fish, management, public, sensors, tanks
+from .routes import alerts, auth, dashboard, fish, management, public, sensors, species_suitability, tanks
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
 
@@ -40,6 +40,7 @@ def health() -> dict[str, str]:
 
 app.include_router(auth.router)
 app.include_router(tanks.router)
+app.include_router(species_suitability.router)
 app.include_router(fish.router)
 app.include_router(sensors.router)
 app.include_router(alerts.router)

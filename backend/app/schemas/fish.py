@@ -1,7 +1,19 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
+
+
+def validate_preferred_range_order(values: dict) -> dict:
+    for minimum_key, maximum_key, label in (
+        ("ideal_temp_min", "ideal_temp_max", "temperature"),
+        ("ideal_ph_min", "ideal_ph_max", "pH"),
+        ("ideal_tds_min", "ideal_tds_max", "TDS"),
+    ):
+        minimum, maximum = values.get(minimum_key), values.get(maximum_key)
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError(f"Preferred {label} minimum must not exceed maximum")
+    return values
 
 
 class FishSpeciesBase(BaseModel):
@@ -24,7 +36,9 @@ class FishSpeciesBase(BaseModel):
 
 
 class FishSpeciesCreate(FishSpeciesBase):
-    pass
+    @root_validator
+    def _validate_preferred_range_order(cls, values: dict) -> dict:
+        return validate_preferred_range_order(values)
 
 
 class FishSpeciesUpdate(BaseModel):

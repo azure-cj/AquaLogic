@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from .fish import FishSpeciesRead
 from .sensor import SensorReadingPublic
+from .dashboard import CustomerSummary
 
 
 class TankBase(BaseModel):
@@ -54,6 +55,7 @@ class TankRead(TankBase):
 
 class TankDetail(TankRead):
     fish_species: list[FishSpeciesRead] = Field(default_factory=list)
+    customer: CustomerSummary | None = None
 
 
 class TankPublicRead(BaseModel):

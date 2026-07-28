@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 ## System overview
 
@@ -30,6 +30,8 @@ and includes the route modules. The main implementation areas are:
   dashboard endpoints.
 - `app/services/decision_engine.py`: threshold checks, status calculation, and
   alert creation.
+- `app/services/species_suitability.py`: pure, staff-only derived species-care
+  evaluation using the latest sensor reading and species preference fields.
 - `app/services/demo_sensor.py`: opt-in local reading generation.
 - `alembic/versions/`: database schema history.
 - `tests/`: API and behavior tests using an isolated test database.
@@ -71,6 +73,18 @@ from current web and backend work.
    while unresolved alert duplication is controlled by the service logic.
 5. Authenticated web clients read fleet, history, alerts, and analytics data.
 6. Public web clients read a restricted tank view by public ID.
+
+Species-care evaluation is a parallel read path: an authenticated tank drawer
+loads the tank's assignments and one latest reading, then returns a dynamic
+care result. It shares only the 90-second reading-freshness helper with the
+decision engine; operational thresholds and persisted Alert records remain
+separate.
+
+The staff web surface separates the tank directory (`/admin/tanks`), the
+bookmarkable operations workspace (`/admin/tanks/:tankId`), and the shared
+configuration drawer (`?edit=`). The detail route owns live operations and
+care polling, assignments, and alert resolution; the directory only scans and
+opens configuration.
 
 ## Deployment direction
 

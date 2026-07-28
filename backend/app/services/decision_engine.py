@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, ThresholdRevision
+from app.services.reading_freshness import is_reading_current
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
 DEFAULT_THRESHOLDS = {
@@ -74,13 +75,15 @@ def ingest_reading(db: Session, tank_id: int, values: dict) -> SensorReading:
     return reading
 
 
-def status_for_reading(db: Session, reading: SensorReading | None) -> str:
+def status_for_reading(
+    db: Session,
+    reading: SensorReading | None,
+    *,
+    evaluated_at: datetime | None = None,
+) -> str:
     if reading is None:
         return "offline"
-    stamp = reading.timestamp
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    if (datetime.now(timezone.utc) - stamp).total_seconds() > 90:
+    if not is_reading_current(reading.timestamp, evaluated_at=evaluated_at):
         return "offline"
     severities = [severity for _, severity in reading_violations(db, reading)]
     if AlertSeverity.critical in severities:
@@ -90,15 +93,17 @@ def status_for_reading(db: Session, reading: SensorReading | None) -> str:
     return "normal"
 
 
-def parameter_statuses(db: Session, reading: SensorReading | None) -> dict[str, str]:
+def parameter_statuses(
+    db: Session,
+    reading: SensorReading | None,
+    *,
+    evaluated_at: datetime | None = None,
+) -> dict[str, str]:
     """Return visitor-safe status labels for every supported reading."""
     if reading is None:
         return {parameter: "unavailable" for parameter in PARAMETERS}
 
-    stamp = reading.timestamp
-    if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
-    if (datetime.now(timezone.utc) - stamp).total_seconds() > 90:
+    if not is_reading_current(reading.timestamp, evaluated_at=evaluated_at):
         return {parameter: "offline" for parameter in PARAMETERS}
 
     thresholds = {

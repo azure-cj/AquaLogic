@@ -260,6 +260,9 @@ export function Fish() {
       setNotice(`${body.common_name} ${editing?.id ? 'updated' : 'created'} successfully.`);
       setEditing(null);
       await queryClient.invalidateQueries({ queryKey: ['/fish'] });
+      await queryClient.invalidateQueries({ queryKey: ['fish'] });
+      await queryClient.invalidateQueries({ queryKey: ['species-suitability'] });
+      await queryClient.invalidateQueries({ queryKey: ['fleet'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save fish species');
     } finally {
@@ -276,6 +279,9 @@ export function Fish() {
       setNotice(`${deleteTarget.common_name} deleted successfully.`);
       setDeleteTarget(null);
       await queryClient.invalidateQueries({ queryKey: ['/fish'] });
+      await queryClient.invalidateQueries({ queryKey: ['fish'] });
+      await queryClient.invalidateQueries({ queryKey: ['species-suitability'] });
+      await queryClient.invalidateQueries({ queryKey: ['fleet'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to delete fish species');
       setDeleteTarget(null);

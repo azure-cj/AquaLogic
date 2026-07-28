@@ -1,7 +1,7 @@
 # AquaLogic Domain Model
 
 Status: Current backend model summary
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 ## Entities
 
@@ -16,6 +16,12 @@ Last reviewed: 2026-07-27
 | ThresholdConfig | Configurable bounds and units per parameter | Used by the decision engine |
 | ThresholdRevision | Append-only snapshot of a threshold configuration and its effective timestamp | Supplies historically correct analytics bands |
 | Alert | Persisted warning or critical condition | Belongs to a tank and optionally a reading; can be resolved by a user |
+
+Species-care suitability is intentionally derived rather than persisted. For
+each tank assignment, the service compares the latest fresh reading with the
+species' configured ideal temperature, pH, dissolved-oxygen minimum, and TDS
+ranges. Its statuses are `suitable`, `attention`, and `unavailable`; they are
+not Alert severities and have no acknowledgement or history lifecycle.
 
 ## Sensor parameters
 
@@ -71,3 +77,5 @@ deduplication or severity semantics must update the decision-engine tests and
   revisions are never edited in place.
 - Schema changes are represented by migrations, not only by local SQLite table
   creation.
+- Fish temperature, pH, and TDS preferred minimums must not exceed their
+  preferred maximums. Legacy invalid ranges safely evaluate as unavailable.

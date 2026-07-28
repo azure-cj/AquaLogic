@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 ## Completed and working locally
 
@@ -24,6 +24,9 @@ Last reviewed: 2026-07-27
 - Backend behavior covered by pytest tests.
 - Fish species expose care groups, categorical diets, and tank usage counts;
   assigned species are protected from deletion.
+- Staff tank drawers show dynamic species-care suitability against the latest
+  fresh reading. Results are not persisted alerts, and preferred range changes
+  and assignment changes take effect immediately.
 
 ### Web
 
@@ -49,6 +52,10 @@ Last reviewed: 2026-07-27
 - Local mock readings and demo control interactions.
 
 ## Active follow-up work
+
+- Staff tank workspace is implemented locally: `/admin/tanks/:tankId` adds
+  live operations, dynamic Species Care, assignment management, and a shared
+  configuration drawer; browser regression remains to be completed.
 
 - Run a complete browser regression pass after the latest web refactor.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser

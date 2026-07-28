@@ -5,9 +5,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import require_password_change_complete
-from app.models import Customer, FishSpecies, Tank, TankFish, User
+from app.models import Alert, Customer, FishSpecies, SensorReading, Tank, TankFish, User
 from app.schemas.fish import FishAssignmentRequest
+from app.schemas.operations import TankOperationsResponse
 from app.schemas.tank import TankCreate, TankDetail, TankRead, TankUpdate
+from app.services.decision_engine import parameter_statuses, status_for_reading
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/tanks", tags=["tanks"])
 
@@ -15,7 +18,7 @@ router = APIRouter(prefix="/tanks", tags=["tanks"])
 def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
     tank = db.scalar(
         select(Tank)
-        .options(selectinload(Tank.fish_species))
+        .options(selectinload(Tank.fish_species), selectinload(Tank.customer))
         .where(Tank.id == tank_id)
     )
     if tank is None:
@@ -41,6 +44,38 @@ def get_tank(
 ) -> Tank:
     _ = current_user
     return _get_tank_or_404(db, tank_id)
+
+
+@router.get("/{tank_id}/operations", response_model=TankOperationsResponse)
+def get_tank_operations(
+    tank_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_password_change_complete),
+) -> dict:
+    _ = current_user
+    _get_tank_or_404(db, tank_id)
+    evaluated_at = datetime.now(timezone.utc)
+    reading = db.scalar(
+        select(SensorReading)
+        .where(SensorReading.tank_id == tank_id)
+        .order_by(SensorReading.timestamp.desc())
+        .limit(1)
+    )
+    active_alerts = list(
+        db.scalars(
+            select(Alert)
+            .where(Alert.tank_id == tank_id, Alert.is_resolved.is_(False))
+            .order_by(Alert.created_at.desc())
+        ).all()
+    )
+    return {
+        "tank_id": tank_id,
+        "evaluated_at": evaluated_at,
+        "status": status_for_reading(db, reading, evaluated_at=evaluated_at),
+        "latest_reading": reading,
+        "parameter_statuses": parameter_statuses(db, reading, evaluated_at=evaluated_at),
+        "active_alerts": active_alerts,
+    }
 
 
 @router.post("", response_model=TankRead, status_code=status.HTTP_201_CREATED)

@@ -117,6 +117,7 @@ export function AdminShell() {
 
   const admin = me.data!.role === 'admin';
   const segment = location.pathname.split('/')[2] || 'fleet';
+  const isTankDetail = /^\/admin\/tanks\/\d+$/.test(location.pathname);
   const visibleNavigation = adminNavigation
     .map((group) => ({
       ...group,
@@ -193,11 +194,6 @@ export function AdminShell() {
           </nav>
 
           <div className="island-actions">
-            <div className="island-status">
-              <span className="live-dot" aria-hidden="true" />
-              <span className="live-text">Live data</span>
-              <small className="refresh-rate">30s refresh</small>
-            </div>
             <div className="island-user-menu">
               <span className="avatar" aria-hidden="true">
                 {initials(me.data!.name)}
@@ -269,12 +265,14 @@ export function AdminShell() {
       </aside>
 
       <main className="admin-main" ref={adminMainRef}>
-        <div className="admin-context-header">
-          <div>
-            <p className="eyebrow">Live operations</p>
-            <h1 className="page-title">{pageTitles[segment] ?? 'AquaLogic admin'}</h1>
+        {!isTankDetail && (
+          <div className="admin-context-header">
+            <div>
+              <p className="eyebrow">Live operations</p>
+              <h1 className="page-title">{pageTitles[segment] ?? 'AquaLogic admin'}</h1>
+            </div>
           </div>
-        </div>
+        )}
         <div className="admin-content">
           <Suspense
             fallback={

@@ -9,6 +9,7 @@ const ChangePasswordPage = lazy(pageLoaders.changePassword);
 const FleetPage = lazy(pageLoaders.fleet);
 const AlertsPage = lazy(pageLoaders.alerts);
 const TanksPage = lazy(pageLoaders.tanks);
+const TankDetailPage = lazy(pageLoaders.tankDetail);
 const FishPage = lazy(pageLoaders.fish);
 const CustomersPage = lazy(pageLoaders.customers);
 const AnalyticsPage = lazy(pageLoaders.analytics);
@@ -60,7 +61,7 @@ export function AppRouter() {
         <Route path="fleet" element={<FleetPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="tanks" element={<TanksPage />} />
-        <Route path="tanks/:tankId" element={<TanksPage />} />
+        <Route path="tanks/:tankId" element={<TankDetailPage />} />
         <Route path="fish" element={<FishPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />

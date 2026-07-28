@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -27,6 +27,7 @@ flow before accessing dashboard operations.
 | --- | --- | --- |
 | GET/POST | `/tanks` | List or create tanks |
 | GET/PUT/DELETE | `/tanks/{tank_id}` | Read, update, or delete a tank |
+| GET | `/tanks/{tank_id}/species-suitability` | Derive staff-only species-care suitability from the latest reading |
 | POST/DELETE | `/tanks/{tank_id}/fish` and `/tanks/{tank_id}/fish/{fish_id}` | Manage tank/species assignments |
 | GET/POST | `/fish` | List or create fish species |
 | GET/PUT/DELETE | `/fish/{fish_id}` | Read, update, or delete a species |
@@ -73,6 +74,23 @@ The web route consuming it is `/tank/:publicId`.
 - Fish species responses include `category`, categorical `diet_type`, and the
   derived `tank_count`. Deleting a species with active tank assignments returns
   `409 Conflict`; assignments must be removed first.
+- `GET /tanks/{tank_id}/species-suitability` returns derived `suitable`,
+  `attention`, or `unavailable` results for assigned species. It evaluates
+  temperature, pH, dissolved oxygen, and TDS against fish preferred ranges and
+  the latest reading only; it does not create alerts or use operational
+  thresholds. The response includes per-parameter reasons, range values, a
+  reading freshness reference, and `no_species_assigned` for empty tanks.
+  Preferred temperature, pH, and TDS minimums cannot exceed their maximums on
+  fish create or update requests.
+- `GET /tanks/{tank_id}/operations` returns one internally consistent, UTC
+  evaluated operational snapshot: latest reading (or `null`), six
+  threshold-backed parameter statuses, and unresolved persisted alerts newest
+  first. A missing reading is `offline` with `unavailable` parameters; a stale
+  reading is `offline` with `offline` parameters.
+- `GET /tanks/{tank_id}` adds the optional minimal `customer` summary while
+  retaining `customer_id` and assigned `fish_species`. `GET /fleet` adds the
+  lightweight derived `species_care_status` and `assigned_species_count`; it
+  does not expose per-species checks.
 - `GET /analytics/fleet` accepts `range=24h|7d|30d|custom`,
   `bucket=auto|15m|1h|6h|1d`, and up to three repeated `tank_id` values.
   Custom requests require ISO `start` and `end` values, are limited to 30 days,
