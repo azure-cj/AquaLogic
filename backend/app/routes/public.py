@@ -30,9 +30,8 @@ def get_public_tank_view(
     return TankPublicRead(
         public_id=tank.public_id,
         name=tank.name,
-        location=tank.location,
+        display_location=tank.public_location,
         description=tank.description,
-        tank_code=tank.tank_code,
         habitat_label=tank.habitat_label,
         water_type=tank.water_type,
         volume_liters=tank.volume_liters,
@@ -42,6 +41,5 @@ def get_public_tank_view(
         latest_reading=latest_reading,
         status=status_for_reading(db, latest_reading),
         parameter_statuses=parameter_statuses(db, latest_reading),
-        feeding_schedule=tank.feeding_schedule,
         public_care_notes=tank.public_care_notes,
     )

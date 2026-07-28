@@ -13,6 +13,7 @@ class Tank(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     location: Mapped[str] = mapped_column(String(150), nullable=False)
+    public_location: Mapped[str | None] = mapped_column(String(150), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

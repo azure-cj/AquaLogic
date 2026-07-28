@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_password_change_complete
+from app.dependencies import require_staff
 from app.models import Alert, User
 from app.schemas.alert import AlertRead
+from app.services.auth_security import audit_event
 
 router = APIRouter(tags=["alerts"])
 
@@ -22,7 +23,7 @@ def _get_alert_or_404(db: Session, alert_id: int) -> Alert:
 def list_alerts(
     include_resolved: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_password_change_complete),
+    current_user: User = Depends(require_staff),
 ) -> list[Alert]:
     _ = current_user
     stmt = select(Alert)
@@ -37,7 +38,7 @@ def list_tank_alerts(
     tank_id: int,
     include_resolved: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_password_change_complete),
+    current_user: User = Depends(require_staff),
 ) -> list[Alert]:
     _ = current_user
     stmt = select(Alert).where(Alert.tank_id == tank_id)
@@ -50,14 +51,16 @@ def list_tank_alerts(
 @router.put("/alerts/{alert_id}/resolve", response_model=AlertRead)
 def resolve_alert(
     alert_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_password_change_complete),
+    current_user: User = Depends(require_staff),
 ) -> Alert:
     alert = _get_alert_or_404(db, alert_id)
     if not alert.is_resolved:
         alert.is_resolved = True
         alert.resolved_at = datetime.now(timezone.utc)
         alert.resolved_by_user_id = current_user.id
+        audit_event(db, request, "alert.resolve", "success", actor_user_id=current_user.id, target_type="alert", target_id=alert.id)
         db.commit()
         db.refresh(alert)
     return alert
@@ -72,7 +75,7 @@ def alert_history(
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_password_change_complete),
+    current_user: User = Depends(require_staff),
 ) -> list[Alert]:
     _ = current_user
     stmt = select(Alert)

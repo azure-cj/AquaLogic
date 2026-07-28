@@ -27,7 +27,7 @@ data for the web application and future connected mobile and hardware clients.
    ```bash
    python -m venv .venv
    .venv\Scripts\activate
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 2. Create environment file:

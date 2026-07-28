@@ -1,12 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models import AlertSeverity
 from .sensor import make_timestamp_explicit_utc
 
 
 class AlertRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     tank_id: int
     reading_id: int | None
@@ -18,12 +19,7 @@ class AlertRead(BaseModel):
     resolved_by_user_id: int | None = None
     created_at: datetime
 
-    _make_created_explicit_utc = validator("created_at", allow_reuse=True)(
-        make_timestamp_explicit_utc
-    )
-    _make_resolved_explicit_utc = validator("resolved_at", allow_reuse=True)(
-        make_timestamp_explicit_utc
-    )
-
-    class Config:
-        orm_mode = True
+    @field_validator("created_at", "resolved_at", mode="after")
+    @classmethod
+    def normalize_timestamps(cls, value: datetime | None) -> datetime | None:
+        return make_timestamp_explicit_utc(value)

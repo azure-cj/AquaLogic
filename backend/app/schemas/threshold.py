@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, root_validator
+
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class ThresholdBase(BaseModel):
@@ -10,13 +11,16 @@ class ThresholdBase(BaseModel):
     critical_max: float | None = None
     enabled: bool = True
 
-    @root_validator
-    def ordered_bounds(cls, values):
-        cl, wl, wh, ch = (values.get(k) for k in ("critical_min", "warning_min", "warning_max", "critical_max"))
-        pairs = ((cl, wl), (wl, wh), (wh, ch))
+    @model_validator(mode="after")
+    def ordered_bounds(self):
+        pairs = (
+            (self.critical_min, self.warning_min),
+            (self.warning_min, self.warning_max),
+            (self.warning_max, self.critical_max),
+        )
         if any(left is not None and right is not None and left > right for left, right in pairs):
-            raise ValueError("Bounds must follow critical low ≤ warning low ≤ warning high ≤ critical high")
-        return values
+            raise ValueError("Bounds must follow critical low â‰¤ warning low â‰¤ warning high â‰¤ critical high")
+        return self
 
 
 class ThresholdUpdate(ThresholdBase):
@@ -24,7 +28,6 @@ class ThresholdUpdate(ThresholdBase):
 
 
 class ThresholdRead(ThresholdBase):
+    model_config = ConfigDict(from_attributes=True)
     parameter: str
     updated_at: datetime
-    class Config:
-        orm_mode = True

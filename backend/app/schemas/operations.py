@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from .alert import AlertRead
 from .sensor import SensorReadingRead, make_timestamp_explicit_utc
@@ -15,6 +15,7 @@ class TankOperationsResponse(BaseModel):
     parameter_statuses: dict[str, str]
     active_alerts: list[AlertRead]
 
-    _make_evaluated_explicit_utc = validator("evaluated_at", allow_reuse=True)(
-        make_timestamp_explicit_utc
-    )
+    @field_validator("evaluated_at", mode="after")
+    @classmethod
+    def normalize_evaluated_at(cls, value: datetime) -> datetime:
+        return make_timestamp_explicit_utc(value)  # type: ignore[return-value]

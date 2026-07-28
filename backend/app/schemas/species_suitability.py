@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from .sensor import make_timestamp_explicit_utc
 
@@ -50,7 +50,8 @@ class SpeciesSuitabilityReadingReference(BaseModel):
     timestamp: datetime
     freshness: Literal["current", "stale"]
 
-    @validator("timestamp")
+    @field_validator("timestamp", mode="after")
+    @classmethod
     def normalize_timestamp(cls, value: datetime) -> datetime:
         return make_timestamp_explicit_utc(value)
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 def validate_preferred_range_order(values: dict) -> dict:
@@ -36,9 +36,10 @@ class FishSpeciesBase(BaseModel):
 
 
 class FishSpeciesCreate(FishSpeciesBase):
-    @root_validator
-    def _validate_preferred_range_order(cls, values: dict) -> dict:
-        return validate_preferred_range_order(values)
+    @model_validator(mode="after")
+    def _validate_preferred_range_order(self):
+        validate_preferred_range_order(self.model_dump())
+        return self
 
 
 class FishSpeciesUpdate(BaseModel):
@@ -65,8 +66,7 @@ class FishSpeciesRead(FishSpeciesBase):
     created_at: datetime
     tank_count: int = 0
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FishAssignmentRequest(BaseModel):

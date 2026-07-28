@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.dependencies import require_password_change_complete
+from app.dependencies import require_staff
 from app.models import SensorReading, Tank, User
 from app.schemas.species_suitability import SpeciesSuitabilityResponse
 from app.services.species_suitability import evaluate_tank_species_suitability
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/tanks", tags=["species suitability"])
 def get_species_suitability(
     tank_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_password_change_complete),
+    current_user: User = Depends(require_staff),
 ) -> dict:
     _ = current_user
     tank = db.scalar(select(Tank).options(selectinload(Tank.fish_species)).where(Tank.id == tank_id))

@@ -1,17 +1,15 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .sensor import SensorReadingRead, make_timestamp_explicit_utc
 
 
 class CustomerSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-
-    class Config:
-        orm_mode = True
 
 
 class FleetTankRead(BaseModel):
@@ -29,6 +27,7 @@ class FleetTankRead(BaseModel):
     species_care_status: Literal["suitable", "attention", "unavailable"]
     assigned_species_count: int
 
-    _make_last_reading_explicit_utc = validator("last_reading_at", allow_reuse=True)(
-        make_timestamp_explicit_utc
-    )
+    @field_validator("last_reading_at", mode="after")
+    @classmethod
+    def normalize_last_reading(cls, value: datetime | None) -> datetime | None:
+        return make_timestamp_explicit_utc(value)

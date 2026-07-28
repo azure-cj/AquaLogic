@@ -5,6 +5,7 @@ from .tank import Tank
 from .user import User
 from .customer import Customer
 from .threshold import ThresholdConfig, ThresholdRevision
+from .security import AccountSetupToken, AuthSession, AuthThrottle, RefreshToken, SecurityAuditEvent
 
 __all__ = [
     "Alert",
@@ -17,4 +18,9 @@ __all__ = [
     "Customer",
     "ThresholdConfig",
     "ThresholdRevision",
+    "AccountSetupToken",
+    "AuthSession",
+    "AuthThrottle",
+    "RefreshToken",
+    "SecurityAuditEvent",
 ]

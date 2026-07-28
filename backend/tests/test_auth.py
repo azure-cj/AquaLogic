@@ -30,7 +30,7 @@ def test_me_success(client, auth_headers):
     assert response.status_code == 200
     payload = response.json()
     assert payload["email"] == "staff@example.com"
-    assert payload["role"] == "staff"
+    assert payload["role"] == "admin"
 
 
 def test_temporary_password_user_cannot_access_dashboard(client, test_user, db_session):

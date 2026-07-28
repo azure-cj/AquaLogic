@@ -39,8 +39,8 @@ def test_operations_returns_consistent_states_and_unresolved_alerts(client, auth
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "normal"
-    assert payload["latest_reading"]["timestamp"].endswith("+00:00")
-    assert payload["evaluated_at"].endswith("+00:00")
+    assert payload["latest_reading"]["timestamp"].endswith(("+00:00", "Z"))
+    assert payload["evaluated_at"].endswith(("+00:00", "Z"))
     assert set(payload["parameter_statuses"]) == {"temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia"}
     assert [item["message"] for item in payload["active_alerts"]] == ["Active"]
 

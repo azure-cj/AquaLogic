@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 def make_timestamp_explicit_utc(value: datetime | None) -> datetime | None:
@@ -25,19 +25,21 @@ class SensorReadingCreate(SensorReadingBase):
 
 
 class SensorReadingRead(SensorReadingBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     tank_id: int
     timestamp: datetime
 
-    _make_timestamp_explicit_utc = validator("timestamp", allow_reuse=True)(
-        make_timestamp_explicit_utc
-    )
-
-    class Config:
-        orm_mode = True
+    @field_validator("timestamp", mode="after")
+    @classmethod
+    def _make_timestamp_explicit_utc(cls, value: datetime) -> datetime:
+        return make_timestamp_explicit_utc(value)  # type: ignore[return-value]
 
 
 class SensorReadingPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     timestamp: datetime
     temperature: float
     ph: float
@@ -46,12 +48,23 @@ class SensorReadingPublic(BaseModel):
     tds: float
     ammonia: float
 
-    @validator("timestamp")
-    def make_timestamp_explicit_utc(cls, value: datetime) -> datetime:
-        # SQLite returns naive datetimes even for timezone-aware columns.
-        # Public clients need an offset so relative time is not shifted by the
-        # visitor's local timezone.
-        return make_timestamp_explicit_utc(value)
+    @field_validator("timestamp", mode="after")
+    @classmethod
+    def round_timestamp_to_minute(cls, value: datetime) -> datetime:
+        value = make_timestamp_explicit_utc(value)
+        return value.replace(second=0, microsecond=0)  # type: ignore[union-attr]
 
-    class Config:
-        orm_mode = True
+    @field_validator("temperature", "ph", "turbidity", "dissolved_oxygen", mode="after")
+    @classmethod
+    def round_one_decimal(cls, value: float) -> float:
+        return round(value, 1)
+
+    @field_validator("tds", mode="after")
+    @classmethod
+    def round_tds(cls, value: float) -> float:
+        return round(value)
+
+    @field_validator("ammonia", mode="after")
+    @classmethod
+    def round_ammonia(cls, value: float) -> float:
+        return round(value, 2)

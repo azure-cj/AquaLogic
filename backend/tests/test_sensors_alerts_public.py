@@ -19,7 +19,7 @@ def _create_tank(client, headers, name="Tank Sensor"):
             "water_type": "freshwater",
             "volume_liters": 180,
             "established_on": "2026-03-01",
-            "hero_image_url": "https://images.example.test/tank.webp",
+                "hero_image_url": "https://images.unsplash.com/tank.webp",
         },
     )
     assert response.status_code == 201
@@ -85,7 +85,9 @@ def test_sensor_endpoints_and_public_view(client, auth_headers, db_session):
     assert public_response.status_code == 200
     public_payload = public_response.json()
     assert "id" not in public_payload
-    assert public_payload["tank_code"].startswith("PUBLIC-")
+    assert "tank_code" not in public_payload
+    assert "feeding_schedule" not in public_payload
+    assert "location" not in public_payload
     assert public_payload["water_type"] == "freshwater"
     assert public_payload["volume_liters"] == 180
     assert len(public_payload["fish_species"]) == 1
