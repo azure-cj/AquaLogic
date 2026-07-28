@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 ## Read first
 
@@ -24,6 +24,8 @@ Last reviewed: 2026-07-28
 - `backend/app/routes/tanks.py`: tank detail, configuration, assignments, and
   the compact `/operations` snapshot contract.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
+- `backend/app/services/auth_security.py`: refresh rotation, login throttling,
+  setup links, and security audit recording.
 - `backend/alembic/versions/`: schema migrations.
 - `backend/tests/`: endpoint and behavior coverage.
 
@@ -35,6 +37,8 @@ Last reviewed: 2026-07-28
 - Use migrations for schema changes.
 - Add regression tests for auth, visibility, threshold, alert, and data-integrity
   behavior.
+- Runtime packages belong in `requirements.txt`; pytest, HTTP clients, and
+  audit tooling belong in `requirements-dev.txt`.
 
 ## Common checks
 
@@ -42,6 +46,7 @@ Last reviewed: 2026-07-28
 cd backend
 pytest -q
 alembic upgrade head
+pip-audit
 ```
 
 The current database defaults to `backend/aqualogic.db` when the backend is run

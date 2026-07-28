@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 ## System overview
 
@@ -50,6 +50,12 @@ The web application has two trust boundaries:
 - `/admin/*` requires authenticated staff access, with admin-only operations
   enforced by the backend as well as reflected in navigation.
 
+Authentication uses a short-lived HS256 access JWT held only in browser memory
+and a rotating opaque refresh token held in a Strict, HttpOnly cookie. Every
+authenticated request checks the JWT claims, user token version, and active
+database session. Hash-only refresh/setup tokens, database throttles, and
+append-only audit events support revocation and incident review.
+
 ### Mobile
 
 `mobile_app/` is a Flutter prototype. Its current readings, alerts, fish data,
@@ -92,4 +98,6 @@ Local development uses the backend and Vite development server. `render.yaml`
 contains the current Render API configuration, and `web/vercel.json` contains
 the web proxy configuration, but cloud resources have not been provisioned or
 fully validated. The intended production path is an explicit PostgreSQL
-database, controlled CORS, a unique JWT secret, and a deployed web client.
+database, controlled CORS and trusted hosts, a unique JWT secret, disabled demo
+generation, and a deployed web client. Production startup rejects unsafe
+configuration rather than falling back to development defaults.

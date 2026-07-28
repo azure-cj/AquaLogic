@@ -1,7 +1,7 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
@@ -118,6 +118,22 @@ duplicating live concerns in a scanning-oriented directory.
 **Consequences:** Species Care remains dynamic and distinct from operational
 alerts. The detail route independently polls operations and suitability, so
 their timestamps can briefly differ while sensor ingestion is in flight.
+
+## 2026-07-29 â€” Use database-backed rotating refresh sessions
+
+**Decision:** Issue 15-minute HS256 access JWTs only to browser memory and use
+one seven-day opaque refresh token in a Strict, HttpOnly cookie. Persist only
+SHA-256 refresh/setup-token hashes, active session state, user token versions,
+and audit metadata.
+
+**Reason:** A leaked access token has a short lifetime, while rotation and
+session checks make sign-out, password reset, replay detection, and account
+disablement immediately enforceable without browser token storage.
+
+**Consequences:** Deployment intentionally invalidates all legacy JWTs. The
+web client must bootstrap with refresh, coordinate sign-out across tabs, and
+never persist authorization material. Setup links are administrator-mediated
+30-minute fragments rather than temporary passwords.
 
 ## Adding a decision
 

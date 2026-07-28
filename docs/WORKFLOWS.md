@@ -11,7 +11,7 @@ Last reviewed: 2026-07-27
 cd backend
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 copy .env.example .env
 alembic upgrade head
 python -m seed.seed_data
@@ -66,6 +66,7 @@ affected application.
 cd backend
 pytest -q
 alembic upgrade head
+pip-audit
 ```
 
 ```powershell
@@ -73,6 +74,7 @@ cd web
 npm run typecheck
 npm test
 npm run build
+npm audit --omit=dev
 ```
 
 ```powershell
@@ -117,6 +119,7 @@ At the end of a meaningful task:
 
 Deployment configuration is present in `render.yaml` and `web/vercel.json`, but
 deployment is not complete. Before a production release, configure a real
-PostgreSQL database, unique JWT secret, explicit CORS origins, public base URL,
-controlled initial-admin settings, and run login, public QR, migration, CORS,
-and sensor-ingestion smoke tests.
+PostgreSQL database, a unique 32-byte JWT secret, explicit CORS origins and
+trusted hosts, a public base URL, controlled image hosts, and disabled
+debug/demo flags. Verify login, refresh rotation, public QR privacy, migration,
+headers, CORS, RBAC, and sensor-ingestion smoke tests before release.

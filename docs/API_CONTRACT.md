@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -9,31 +9,39 @@ the final authority for exact fields and validation.
 
 ## Authentication
 
-Authenticated routes use the bearer token returned by `POST /auth/login`.
+Authenticated routes use the 15-minute bearer token returned by `POST /auth/login`
+or `POST /auth/refresh`. The browser keeps this token in memory; the seven-day
+opaque refresh token is an HttpOnly, SameSite=Strict cookie. All access tokens
+carry session and token-version claims, so legacy tokens intentionally fail.
 
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
 | POST | `/auth/login` | Public | Authenticate an active user |
 | POST | `/auth/logout` | Authenticated | Client-side JWT logout acknowledgement |
+| POST | `/auth/refresh` | Refresh cookie | Rotate the refresh token and return a new access token |
+| POST | `/auth/logout-all` | Authenticated | Verify current password and revoke every session |
 | GET | `/auth/me` | Authenticated | Read current user |
 | POST | `/auth/change-password` | Authenticated | Complete or change password |
+| POST | `/auth/setup-password` | Setup link | Atomically activate or reset an account from a one-time token |
+| GET/DELETE | `/auth/sessions` and `/auth/sessions/{session_id}` | Authenticated | List/revoke the caller's sessions |
 
-Temporary-password users are authenticated but must complete the password-change
-flow before accessing dashboard operations.
+User creation and reset responses return one-time `setup_url` values rather
+than plaintext passwords. Setup links are fragment tokens and expire after 30
+minutes. Password changes and resets revoke existing sessions.
 
 ## Core staff resources
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET/POST | `/tanks` | List or create tanks |
-| GET/PUT/DELETE | `/tanks/{tank_id}` | Read, update, or delete a tank |
+| GET/POST | `/tanks` | Staff list; admin creates |
+| GET/PUT/DELETE | `/tanks/{tank_id}` | Staff reads; admin updates or deletes |
 | GET | `/tanks/{tank_id}/species-suitability` | Derive staff-only species-care suitability from the latest reading |
 | POST/DELETE | `/tanks/{tank_id}/fish` and `/tanks/{tank_id}/fish/{fish_id}` | Manage tank/species assignments |
-| GET/POST | `/fish` | List or create fish species |
-| GET/PUT/DELETE | `/fish/{fish_id}` | Read, update, or delete a species |
+| GET/POST | `/fish` | Staff lists; admin creates |
+| GET/PUT/DELETE | `/fish/{fish_id}` | Staff reads; admin updates or deletes |
 | GET | `/tanks/{tank_id}/sensors` | Read latest sensor data |
 | GET | `/tanks/{tank_id}/sensors/history` | Read bounded sensor history |
-| POST | `/tanks/{tank_id}/sensors` | Ingest a sensor reading |
+| POST | `/tanks/{tank_id}/sensors` | Admin-only manual sensor submission |
 | GET | `/alerts` | List active or all alerts |
 | GET | `/alerts/history` | Filter alert history |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
@@ -47,12 +55,13 @@ flow before accessing dashboard operations.
 | GET | `/analytics/fleet` | Staff | Fleet/tank trends, historical threshold context, alert events, comparisons, and uptime |
 | GET | `/thresholds` | Staff | Read threshold configuration |
 | PUT | `/thresholds/{parameter}` | Admin | Update one parameter threshold |
-| GET/POST | `/customers` | Staff | List or create customers |
-| PUT/DELETE | `/customers/{customer_id}` | Staff | Update or delete customers |
+| GET/POST | `/customers` | Staff reads; admin creates |
+| PUT/DELETE | `/customers/{customer_id}` | Admin | Update or delete customers |
 | GET | `/users` | Admin | List staff users |
-| POST | `/users` | Admin | Create a temporary-password user |
 | PUT | `/users/{user_id}` | Admin | Update role or active state |
-| POST | `/users/{user_id}/reset-password` | Admin | Issue a temporary password |
+| POST | `/users` | Admin | Create a user and return a one-time setup URL |
+| POST | `/users/{user_id}/reset-password` | Admin | Disable the password/sessions and issue a setup URL |
+| GET | `/security/audit-events` | Admin | Read up to 100 newest security audit events before an optional ID |
 
 ## Public route
 
@@ -62,6 +71,10 @@ flow before accessing dashboard operations.
 
 The public route only returns tanks marked public and uses the public identifier.
 The web route consuming it is `/tank/:publicId`.
+
+It exposes only `display_location`, not the internal location; excludes tank
+code and feeding schedule; rounds readings; and rounds observation timestamps to
+the minute. Public image URLs require HTTPS and a configured host allowlist.
 
 ## Operational endpoints and notes
 

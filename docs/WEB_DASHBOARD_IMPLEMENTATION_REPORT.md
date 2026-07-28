@@ -1,6 +1,6 @@
 # AquaLogic web dashboard implementation report
 
-Last updated: July 27, 2026
+Last updated: July 29, 2026
 
 ## Current checkpoint
 
@@ -18,6 +18,9 @@ This checkpoint covers local implementation and validation only. No Vercel, Rend
 - Offline, no-reading, private/not-found, no-fish, and missing-image states.
 - Fish species cards, feeding information, visitor guidance, care notes, FAQ content, and accessible in-page navigation.
 - UUID-based public URLs suitable for tank QR labels.
+- Public-only, locally bundled Fontsource typography: DM Sans for display and
+  navigation, Source Sans 3 for visitor guidance, and Libre Baskerville italic
+  for scientific fish names. The staff dashboard remains on Geist.
 
 ### Admin web
 

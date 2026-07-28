@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 ## Completed and working locally
 
@@ -27,6 +27,12 @@ Last reviewed: 2026-07-28
 - Staff tank drawers show dynamic species-care suitability against the latest
   fresh reading. Results are not persisted alerts, and preferred range changes
   and assignment changes take effect immediately.
+- Authentication now uses Argon2id passwords, a claim-complete 15-minute JWT,
+  revocable rotating refresh sessions, one-time setup links, database-backed
+  login throttling, audit events, strict production configuration, and
+  role-enforced write permissions.
+- The public tank contract now exposes a privacy-safe display location only,
+  omits tank codes and feeding schedules, and rounds public readings.
 
 ### Web
 
@@ -71,7 +77,6 @@ Last reviewed: 2026-07-28
 - Raspberry Pi deployment and hardware safety controls.
 - Schedules for feeding, lighting, filtration, dosing, and water replacement.
 - Pagination and database-level analytics for larger datasets.
-- Stronger JWT revocation/rotation procedures.
 
 ## Known limitations
 
@@ -85,9 +90,23 @@ Last reviewed: 2026-07-28
   buckets.
 - The current public API exposes the latest configured sensor values; this needs
   a final privacy and threat review before production.
-- Staff management does not yet prevent removing the final active administrator.
 - The mobile application is not a backend-connected client.
 - WebSocket streaming is not implemented.
+- `npm audit --omit=dev` reports GHSA-qwww-vcr4-c8h2 for the mandated
+  `react-router-dom@7.18.1`. AquaLogic is a Vite SPA and does not enable the
+  advisory's React Server Components mode, but the package has no patched 7.x
+  release; keep this deployment exception under review until upstream ships a
+  compatible fix.
+
+## Validation checkpoint — 2026-07-29
+
+- Backend: `pytest -q` passed with 33 tests; `alembic current` is
+  `0006_auth_security_hardening (head)` and `pip-audit -r requirements.txt`
+  found no known vulnerabilities.
+- Web: `npm run typecheck`, `npm test` (46 tests), and `npm run build` passed.
+- Runtime dependency audit: the React Router advisory above is the only
+  reported runtime finding; no compatible remediation exists for the requested
+  `react-router-dom@7.18.1` version.
 
 ## Validation checkpoint — 2026-07-27
 

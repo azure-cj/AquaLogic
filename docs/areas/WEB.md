@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 ## Read first
 
@@ -24,7 +24,8 @@ Last reviewed: 2026-07-28
 ## Route boundaries
 
 - `/tank/:publicId`: public, read-only customer experience.
-- `/admin/login` and `/admin/change-password`: auth flow.
+- `/admin/login`, `/admin/setup-password`, `/admin/change-password`, and
+  `/admin/security`: authentication, password, and session-management flows.
 - `/admin/*`: authenticated staff/admin experience.
 
 Backend authorization remains authoritative. Do not rely on route visibility as a
@@ -35,6 +36,15 @@ operations and Species Care, owns assignment management, and uses the shared
 configuration drawer via `?edit=1`. The directory uses `?edit=:tankId` for
 configuration only. Do not reuse or alter operational-health badges for
 species preference results.
+
+The public tank route bundles its DM Sans, Source Sans 3, and Libre Baskerville
+faces locally through Fontsource. Keep those font variables scoped beneath
+`.visitor-shell` so the staff dashboard retains its Geist typography.
+
+The API client keeps access tokens in module memory only. It performs one
+single-flight `/auth/refresh` request and one retry for an expired authenticated
+request; refresh failure clears React Query data and broadcasts sign-out to
+other tabs. Do not add browser storage for authentication state.
 
 ## Common checks
 
