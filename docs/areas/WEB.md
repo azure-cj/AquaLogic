@@ -25,7 +25,11 @@ Last reviewed: 2026-07-29
 
 - `/tank/:publicId`: public, read-only customer experience.
 - `/admin/login`, `/admin/setup-password`, `/admin/change-password`, and
-  `/admin/security`: authentication, password, and session-management flows.
+  `/admin/account`, `/admin/security`: authentication, password, and
+  session-management flows. Account center is the authenticated hub for
+  personal security and administrator-only staff access management.
+- `/admin/staff`: administrator-only staff and role management; it remains a
+  stable direct route from the Account center.
 - `/admin/*`: authenticated staff/admin experience.
 
 Backend authorization remains authoritative. Do not rely on route visibility as a
@@ -45,6 +49,13 @@ The API client keeps access tokens in module memory only. It performs one
 single-flight `/auth/refresh` request and one retry for an expired authenticated
 request; refresh failure clears React Query data and broadcasts sign-out to
 other tabs. Do not add browser storage for authentication state.
+
+`/admin/security` is a compact account-security center: it shows readable
+device summaries, keeps raw user-agent strings behind technical details,
+requires an explicit confirmation before revoking another session, and expands
+the password-confirmed sign-out-everywhere form only after intent. The
+administrator audit feed groups routine refresh events so account-changing
+events remain scannable.
 
 ## Common checks
 

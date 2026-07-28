@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 
 export type FleetStatus = 'normal' | 'warning' | 'critical' | 'offline';
@@ -163,8 +164,9 @@ function useModalFocus(open: boolean, onClose: () => void, ref: RefObject<HTMLEl
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const frame = window.requestAnimationFrame(() => {
-      const focusable = ref.current?.querySelectorAll<HTMLElement>(focusableSelector);
-      focusable?.[0]?.focus();
+      const initialFocus = ref.current?.querySelector<HTMLElement>('[data-drawer-close]')
+        ?? ref.current?.querySelector<HTMLElement>(focusableSelector);
+      initialFocus?.focus();
     });
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -199,6 +201,27 @@ function useModalFocus(open: boolean, onClose: () => void, ref: RefObject<HTMLEl
   }, [open, ref]);
 }
 
+function useDeferredDrawerContent(open: boolean) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setReady(false);
+      return;
+    }
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => setReady(true));
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [open]);
+
+  return ready;
+}
+
 export function Drawer({
   open,
   title,
@@ -216,6 +239,7 @@ export function Drawer({
 }) {
   const drawerRef = useRef<HTMLElement>(null);
   useModalFocus(open, onClose, drawerRef);
+  const contentReady = useDeferredDrawerContent(open);
   if (!open) return null;
 
   return (
@@ -240,11 +264,13 @@ export function Drawer({
             <h2 id="drawer-title">{title}</h2>
             {description && <p>{description}</p>}
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close" data-drawer-close>
             <X size={20} />
           </button>
         </header>
-        <div className="drawer-body">{children}</div>
+        <div className={`drawer-body${contentReady ? '' : ' drawer-body-deferred'}`} aria-busy={!contentReady}>
+          {contentReady ? children : <span className="drawer-loading-line" aria-hidden="true" />}
+        </div>
         {footer && <footer className="drawer-footer">{footer}</footer>}
       </aside>
     </div>

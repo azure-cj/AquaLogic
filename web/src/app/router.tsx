@@ -7,6 +7,7 @@ import { pageLoaders } from './route-loaders';
 const LoginPage = lazy(pageLoaders.login);
 const ChangePasswordPage = lazy(pageLoaders.changePassword);
 const SetupPasswordPage = lazy(pageLoaders.setupPassword);
+const AccountCenterPage = lazy(pageLoaders.account);
 const FleetPage = lazy(pageLoaders.fleet);
 const AlertsPage = lazy(pageLoaders.alerts);
 const TanksPage = lazy(pageLoaders.tanks);
@@ -26,6 +27,7 @@ export const adminRoutePaths = [
   'tanks/:tankId',
   'fish',
   'customers',
+  'account',
   'security',
   'analytics',
   'staff',
@@ -75,6 +77,7 @@ export function AppRouter() {
         <Route path="tanks/:tankId" element={<TankDetailPage />} />
         <Route path="fish" element={<FishPage />} />
         <Route path="customers" element={<CustomersPage />} />
+        <Route path="account" element={<AccountCenterPage />} />
         <Route path="security" element={<SecurityPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="staff" element={<StaffPage />} />

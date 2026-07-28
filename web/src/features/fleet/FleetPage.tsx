@@ -7,6 +7,7 @@ import {
   ErrorState,
   FleetStatus,
   LoadingState,
+  PageHeader,
   Panel,
   StatusBadge
 } from '@/shared/components/admin-ui';
@@ -246,6 +247,11 @@ export function Fleet() {
 
   return (
     <section>
+      <PageHeader
+        eyebrow="Live operations"
+        title="Fleet command center"
+        description="Monitor tank health, species care, alerts, and reporting across the fleet."
+      />
       <div className="stats-grid">
         <StatCard
           label="Total tanks"

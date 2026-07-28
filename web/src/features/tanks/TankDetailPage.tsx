@@ -93,7 +93,7 @@ export function TankDetail() {
   const customers = useQuery({
     queryKey: ['customers'],
     queryFn: () => api<Customer[]>('/customers'),
-    enabled: editing,
+    enabled: validId && canManage,
   });
   const fish = useQuery({
     queryKey: ['fish'],

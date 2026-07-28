@@ -34,7 +34,6 @@ import { RouteLoading } from '@/shared/components/RouteLoading';
 import { useMe } from '@/shared/hooks/useMe';
 import {
   adminNavigation,
-  adminNavigationItemCount,
   NAVIGATION_FLAT_ITEM_LIMIT,
   type AdminNavigationItem,
 } from './navigation';
@@ -46,6 +45,7 @@ const pageTitles: Record<string, string> = {
   tanks: 'Tank management',
   fish: 'Fish species',
   customers: 'Customer management',
+  account: 'Account center',
   security: 'Account security',
   analytics: 'Fleet analytics',
   staff: 'Staff & roles',
@@ -131,14 +131,17 @@ export function AdminShell() {
     return <Navigate to="/admin/fleet" replace />;
   }
   const segment = location.pathname.split('/')[2] || 'fleet';
-  const isTankDetail = /^\/admin\/tanks\/\d+$/.test(location.pathname);
   const visibleNavigation = adminNavigation
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => !item.adminOnly || admin),
     }))
     .filter((group) => group.items.length);
-  const clusteredByCount = adminNavigationItemCount > NAVIGATION_FLAT_ITEM_LIMIT;
+  const visibleNavigationItemCount = visibleNavigation.reduce(
+    (count, group) => count + group.items.length,
+    0,
+  );
+  const clusteredByCount = visibleNavigationItemCount > NAVIGATION_FLAT_ITEM_LIMIT;
   const renderNavigationLink = (item: AdminNavigationItem, className: string, iconSize: number) => {
     const Icon = item.icon;
     return (
@@ -273,14 +276,6 @@ export function AdminShell() {
       </aside>
 
       <main className="admin-main" ref={adminMainRef}>
-        {!isTankDetail && (
-          <div className="admin-context-header">
-            <div>
-              <p className="eyebrow">Live operations</p>
-              <h1 className="page-title">{pageTitles[segment] ?? 'AquaLogic admin'}</h1>
-            </div>
-          </div>
-        )}
         <div className="admin-content">
           <Suspense
             fallback={

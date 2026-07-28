@@ -12,6 +12,8 @@ from app.security import anonymized_value, create_access_token, hash_opaque_toke
 
 
 REFRESH_COOKIE = "aqualogic_refresh"
+REFRESH_COOKIE_PATH = "/"
+LEGACY_REFRESH_COOKIE_PATH = "/auth"
 REFRESH_GRACE_SECONDS = 5
 THROTTLE_WINDOW = timedelta(minutes=15)
 
@@ -70,12 +72,19 @@ def set_refresh_cookie(response: Response, raw_token: str) -> None:
         httponly=True,
         secure=settings.refresh_cookie_secure,
         samesite="strict",
-        path="/auth",
+        path=REFRESH_COOKIE_PATH,
     )
 
 
 def clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(REFRESH_COOKIE, path="/auth", httponly=True, secure=settings.refresh_cookie_secure, samesite="strict")
+    for path in (REFRESH_COOKIE_PATH, LEGACY_REFRESH_COOKIE_PATH):
+        response.delete_cookie(
+            REFRESH_COOKIE,
+            path=path,
+            httponly=True,
+            secure=settings.refresh_cookie_secure,
+            samesite="strict",
+        )
 
 
 def create_session(db: Session, user: User, request: Request, *, amr: str = "pwd") -> tuple[str, str, object]:

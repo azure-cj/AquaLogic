@@ -17,6 +17,7 @@ def test_login_issues_claim_complete_access_token_and_http_only_refresh_cookie(c
     assert {"sub", "sid", "ver", "iss", "aud", "iat", "exp", "jti", "amr"} <= claims.keys()
     assert "HttpOnly" in response.headers["set-cookie"]
     assert "SameSite=strict" in response.headers["set-cookie"]
+    assert "Path=/" in response.headers["set-cookie"]
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert "object-src 'none'" in response.headers["content-security-policy"]
@@ -40,6 +41,9 @@ def test_refresh_rotates_once_then_revokes_a_replayed_session(client, test_user,
     replay = client.post("/auth/refresh", headers=original_cookie)
     assert replay.status_code == 401
     assert "aqualogic_refresh=\"\"" in replay.headers["set-cookie"]
+    cleared_cookies = replay.headers.get_list("set-cookie")
+    assert any("Path=/;" in cookie for cookie in cleared_cookies)
+    assert any("Path=/auth;" in cookie for cookie in cleared_cookies)
     session = db_session.get(AuthSession, decode_access_token(login.json()["access_token"])["sid"])
     assert session.revoked_at is not None
     assert client.get("/auth/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"}).status_code == 401

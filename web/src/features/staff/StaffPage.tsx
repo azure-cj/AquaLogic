@@ -14,6 +14,7 @@ import {
 } from '@/shared/utils/formatting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   Clipboard,
   UserPlus
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import {
   useCallback,
   useState
 } from 'react';
+import { Link } from 'react-router-dom';
 import './styles.css';
 
 export function Staff() {
@@ -80,6 +82,9 @@ export function Staff() {
 
   return (
     <section>
+      <Link className="account-back-link" to="/admin/account">
+        <ArrowLeft size={16} aria-hidden="true" /> Back to Account center
+      </Link>
       <PageHeader
         eyebrow="Administration"
         title="Staff & roles"

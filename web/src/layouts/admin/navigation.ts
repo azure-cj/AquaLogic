@@ -6,7 +6,6 @@ import {
   FishSymbol,
   LayoutDashboard,
   SlidersHorizontal,
-  ShieldCheck,
   UserRoundCog,
   UsersRound,
 } from 'lucide-react';
@@ -25,7 +24,7 @@ export type AdminNavigationGroup = {
   items: AdminNavigationItem[];
 };
 
-export const NAVIGATION_FLAT_ITEM_LIMIT = 8;
+export const NAVIGATION_FLAT_ITEM_LIMIT = 9;
 
 export const adminNavigation: AdminNavigationGroup[] = [
   {
@@ -44,8 +43,7 @@ export const adminNavigation: AdminNavigationGroup[] = [
       { to: '/admin/tanks', label: 'Tanks', icon: Droplets },
       { to: '/admin/fish', label: 'Fish species', icon: FishSymbol },
       { to: '/admin/customers', label: 'Customers', icon: UsersRound },
-      { to: '/admin/security', label: 'Security', icon: ShieldCheck },
-      { to: '/admin/staff', label: 'Staff & roles', icon: UserRoundCog, adminOnly: true },
+      { to: '/admin/account', label: 'Account center', icon: UserRoundCog },
     ],
   },
   {

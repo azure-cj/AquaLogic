@@ -88,9 +88,12 @@ describe('admin shell guards and navigation', () => {
     };
     renderShell();
     expect(await screen.findByText('Fleet content')).toBeInTheDocument();
+    expect(screen.getAllByText('Account center')).not.toHaveLength(0);
+    expect(screen.queryByText('Security')).not.toBeInTheDocument();
     expect(screen.queryByText('Staff & roles')).not.toBeInTheDocument();
     expect(screen.queryByText('Thresholds')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Configure' })).not.toBeInTheDocument();
+    expect(document.querySelector('.island-nav')).not.toHaveClass('island-nav-count-clustered');
   });
 
   it('keeps all flat navigation entries in the grouped config order', () => {
@@ -102,11 +105,25 @@ describe('admin shell guards and navigation', () => {
       'Tanks',
       'Fish species',
       'Customers',
-      'Security',
-      'Staff & roles',
+      'Account center',
       'Thresholds',
     ]);
-    expect(adminNavigationItemCount).toBeGreaterThan(NAVIGATION_FLAT_ITEM_LIMIT);
+    expect(adminNavigationItemCount).toBeLessThanOrEqual(NAVIGATION_FLAT_ITEM_LIMIT);
+  });
+
+  it('removes the duplicate context header from account subpages', async () => {
+    mocked.me.isError = false;
+    mocked.me.data = {
+      name: 'Demo Admin',
+      role: 'admin',
+      must_change_password: false,
+    };
+
+    renderShell('/admin/security');
+
+    expect(await screen.findByText('Admin content')).toBeInTheDocument();
+    const contextHeader = document.querySelector('.admin-context-header');
+    expect(contextHeader).not.toBeInTheDocument();
   });
 
   it('prefetches a destination when navigation intent is shown', async () => {
@@ -131,16 +148,18 @@ describe('admin shell guards and navigation', () => {
     };
     renderShell();
 
-    const monitorToggle = screen.getByRole('button', { name: 'Monitor' });
-    fireEvent.click(monitorToggle);
-    expect(monitorToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.island-nav')).not.toHaveClass('island-nav-count-clustered');
+    const monitorToggle = document.querySelector<HTMLButtonElement>('.cluster-toggle');
+    expect(monitorToggle).not.toBeNull();
+    fireEvent.click(monitorToggle!);
+    expect(monitorToggle!).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(monitorToggle!).toHaveAttribute('aria-expanded', 'false'));
 
-    fireEvent.click(monitorToggle);
+    fireEvent.click(monitorToggle!);
     fireEvent.pointerDown(document.body);
-    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(monitorToggle!).toHaveAttribute('aria-expanded', 'false'));
   });
 
   it('closes an open cluster after navigating to one of its pages', async () => {
@@ -152,11 +171,12 @@ describe('admin shell guards and navigation', () => {
     };
     renderShell();
 
-    const monitorToggle = screen.getByRole('button', { name: 'Monitor' });
-    fireEvent.click(monitorToggle);
+    const monitorToggle = document.querySelector<HTMLButtonElement>('.cluster-toggle');
+    expect(monitorToggle).not.toBeNull();
+    fireEvent.click(monitorToggle!);
     fireEvent.click(screen.getAllByRole('link', { name: 'Alerts' })[0]);
 
-    await waitFor(() => expect(monitorToggle).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(monitorToggle!).toHaveAttribute('aria-expanded', 'false'));
   });
 
   it('clears stale horizontal scroll before painting a client-side route', async () => {

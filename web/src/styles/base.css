@@ -28,6 +28,7 @@ html {
   min-width: 320px;
   max-width: 100%;
   background: #f3f8f8;
+  scrollbar-gutter: stable;
 }
 
 body {

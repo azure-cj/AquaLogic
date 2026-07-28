@@ -1,0 +1,346 @@
+.security-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.account-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+  color: var(--teal-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.account-back-link:hover,
+.account-back-link:focus-visible {
+  color: var(--navy-800);
+}
+
+.account-back-link:focus-visible {
+  outline: 3px solid rgba(14, 159, 151, 0.28);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.security-page > .notice {
+  margin-bottom: 1rem;
+}
+
+.security-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.security-sessions-panel,
+.security-audit-panel {
+  overflow: hidden;
+}
+
+.security-count,
+.security-current-badge,
+.security-event-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.security-count {
+  padding: 0.42rem 0.62rem;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.security-session-list,
+.security-audit-list {
+  display: grid;
+}
+
+.security-session {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.security-session:last-child {
+  border-bottom: 0;
+}
+
+.security-device-icon,
+.security-event-icon,
+.security-danger-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.security-device-icon {
+  width: 2.45rem;
+  height: 2.45rem;
+  color: var(--teal-700);
+  background: var(--teal-100);
+}
+
+.security-session-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.security-session-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.security-session-heading strong,
+.security-event strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.security-session-heading span:not(.security-current-badge) {
+  display: block;
+  margin-top: 0.14rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.security-current-badge {
+  padding: 0.36rem 0.52rem;
+  color: var(--normal);
+  background: #e7f7f0;
+}
+
+.security-session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.85rem;
+  margin-top: 0.65rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.security-session-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.security-technical-details {
+  margin-top: 0.7rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.security-technical-details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  cursor: pointer;
+  color: var(--teal-700);
+  font-weight: 700;
+}
+
+.security-technical-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.security-technical-details[open] svg {
+  transform: rotate(90deg);
+}
+
+.security-technical-details > span {
+  display: block;
+  margin-top: 0.45rem;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.security-session > .button {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.security-side-column {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.security-danger-panel {
+  border-color: #f1d5d8;
+  box-shadow: 0 10px 30px rgba(117, 43, 55, 0.06);
+}
+
+.security-danger-content {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.security-danger-icon {
+  width: 2.3rem;
+  height: 2.3rem;
+  color: var(--critical);
+  background: #fff0f1;
+}
+
+.security-danger-content p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.security-danger-content > .button {
+  justify-self: start;
+}
+
+.security-signout-form {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.1rem;
+  border-top: 1px solid #f2e0e2;
+}
+
+.security-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.security-danger-actions .button {
+  flex: 1 1 7.5rem;
+}
+
+.security-reassurance {
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #cce9e3;
+  border-radius: 12px;
+  color: var(--teal-700);
+  background: rgba(223, 244, 241, 0.62);
+}
+
+.security-reassurance p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.security-audit-panel {
+  margin-top: 1rem;
+}
+
+.security-event {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.security-event-icon {
+  width: 2.1rem;
+  height: 2.1rem;
+  color: var(--teal-700);
+  background: var(--surface-soft);
+}
+
+.security-event time {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.security-event-outcome {
+  padding: 0.35rem 0.52rem;
+  text-transform: capitalize;
+}
+
+.security-event-outcome-success {
+  color: var(--normal);
+  background: #e7f7f0;
+}
+
+.security-event-outcome-failure,
+.security-event-outcome-blocked {
+  color: var(--critical);
+  background: #fff0f1;
+}
+
+.security-routine-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin: 0.9rem 1rem 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.security-load-more {
+  margin: 0.9rem 1rem 1rem;
+}
+
+@media (max-width: 860px) {
+  .security-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .security-side-column {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.75fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .security-page .page-header {
+    margin-bottom: 1rem;
+  }
+
+  .security-session {
+    flex-wrap: wrap;
+  }
+
+  .security-session-content {
+    min-width: calc(100% - 3.35rem);
+  }
+
+  .security-session > .button {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .security-side-column {
+    grid-template-columns: 1fr;
+  }
+
+  .security-event {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .security-event-outcome {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
