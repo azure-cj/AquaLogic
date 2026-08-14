@@ -46,6 +46,8 @@ minutes. Password changes and resets revoke existing sessions.
 | GET | `/alerts/history` | Filter alert history |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
 | PUT | `/alerts/{alert_id}/resolve` | Resolve an alert |
+| POST | `/devices` | Admin-only one-time device provisioning; returns a key once and fixes the device to one tank |
+| POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
 
 ## Operations and administration
 
@@ -77,6 +79,12 @@ code and feeding schedule; rounds readings; and rounds observation timestamps to
 the minute. Public image URLs require HTTPS and a configured host allowlist.
 
 ## Operational endpoints and notes
+
+- Bridge ingestion uses `X-Device-Key`, never a browser JWT, staff password, or
+  client-supplied tank ID. Keys are stored as hashes and successful/denied
+  ingestion is audit logged. The v1 payload accepts only `temperature`, `ph`,
+  `turbidity`, `tds`, and optional `observed_at`; dissolved oxygen and ammonia
+  persist as unavailable nulls and cannot create normal statuses or alerts.
 
 - `GET /health` is the deployment health check.
 - CORS is configured from `CORS_ORIGINS`; production rejects wildcard CORS.

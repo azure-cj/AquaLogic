@@ -13,7 +13,8 @@ flowchart LR
     Rules --> Alerts["Persisted alerts"]
     Demo["Optional demo sensor service"] --> API
     Mobile["Flutter staff prototype\nlocal demo data"] -. future API client .-> API
-    ESP["ESP32 firmware\nsensors + actuators"] -. future ingestion/control .-> API
+    ESP["ESP32 /data on tester LAN"] --> Bridge["Temporary read-only bridge"]
+    Bridge -->|"HTTPS tunnel"| API
 ```
 
 ## Repository boundaries
@@ -26,7 +27,7 @@ and includes the route modules. The main implementation areas are:
 
 - `app/models/`: SQLAlchemy persistence models.
 - `app/schemas/`: Pydantic request and response models.
-- `app/routes/`: auth, tanks, fish, sensors, alerts, public, management, and
+- `app/routes/`: auth, tanks, fish, sensors, devices, alerts, public, management, and
   dashboard endpoints.
 - `app/services/decision_engine.py`: threshold checks, status calculation, and
   alert creation.
@@ -72,13 +73,20 @@ from current web and backend work.
 
 ## Runtime data flow
 
-1. Staff or a future device submits a sensor reading for a tank.
+1. Staff submits a manual reading for a tank, or a registered bridge device
+   authenticates with a device key. Device keys resolve to one server-side tank;
+   bridge requests cannot choose a tank.
 2. The backend persists the reading.
 3. The decision engine evaluates enabled threshold configurations.
 4. Warning or critical alerts are created when values violate configured bounds,
    while unresolved alert duplication is controlled by the service logic.
 5. Authenticated web clients read fleet, history, alerts, and analytics data.
 6. Public web clients read a restricted tank view by public ID.
+
+The ESP32 bridge is temporary test infrastructure. It polls only the local
+firmware `/data` endpoint and forwards four installed sensors. Dissolved oxygen
+and ammonia remain nullable/unavailable, are skipped by threshold evaluation,
+and have no actuator or command path.
 
 Species-care evaluation is a parallel read path: an authenticated tank drawer
 loads the tank's assignments and one latest reading, then returns a dynamic

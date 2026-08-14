@@ -10,6 +10,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Temporary hardware-test tunnel; this permits generated ngrok subdomains
+    // while preserving Vite's host check for unrelated hosts.
+    allowedHosts: ['.ngrok-free.dev'],
     proxy: {
       '/api': {
         // Keep this aligned with start-dev.bat: the FastAPI server binds IPv4 only.

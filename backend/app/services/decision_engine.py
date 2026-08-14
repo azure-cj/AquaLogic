@@ -44,7 +44,9 @@ def ensure_default_thresholds(db: Session) -> None:
     db.commit()
 
 
-def _severity(value: float, threshold: ThresholdConfig) -> AlertSeverity | None:
+def _severity(value: float | None, threshold: ThresholdConfig) -> AlertSeverity | None:
+    if value is None:
+        return None
     if not threshold.enabled:
         return None
     if ((threshold.critical_min is not None and value < threshold.critical_min) or (threshold.critical_max is not None and value > threshold.critical_max)):
@@ -113,6 +115,9 @@ def parameter_statuses(
     result: dict[str, str] = {}
     for parameter in PARAMETERS:
         threshold = thresholds.get(parameter)
+        if getattr(reading, parameter) is None:
+            result[parameter] = "unavailable"
+            continue
         if threshold is None:
             result[parameter] = "normal"
             continue

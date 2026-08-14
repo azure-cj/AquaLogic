@@ -41,6 +41,10 @@ configuration drawer via `?edit=1`. The directory uses `?edit=:tankId` for
 configuration only. Do not reuse or alter operational-health badges for
 species preference results.
 
+The tank workspace labels missing dissolved oxygen and ammonia values as **Not
+installed** and uses the operations response freshness state for stale/offline
+bridge readings.
+
 The public tank route bundles its DM Sans, Source Sans 3, and Libre Baskerville
 faces locally through Fontsource. Keep those font variables scoped beneath
 `.visitor-shell` so the staff dashboard retains its Geist typography.

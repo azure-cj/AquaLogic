@@ -5,9 +5,9 @@ export type Reading = {
   temperature: number;
   ph: number;
   turbidity: number;
-  dissolved_oxygen: number;
+  dissolved_oxygen: number | null;
   tds: number;
-  ammonia: number;
+  ammonia: number | null;
 };
 
 export type User = {

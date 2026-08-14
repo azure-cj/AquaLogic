@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def make_timestamp_explicit_utc(value: datetime | None) -> datetime | None:
@@ -14,9 +14,9 @@ class SensorReadingBase(BaseModel):
     temperature: float
     ph: float
     turbidity: float
-    dissolved_oxygen: float
+    dissolved_oxygen: float | None = None
     tds: float
-    ammonia: float
+    ammonia: float | None = None
     is_mock: bool = False
 
 
@@ -56,8 +56,8 @@ class SensorReadingPublic(BaseModel):
 
     @field_validator("temperature", "ph", "turbidity", "dissolved_oxygen", mode="after")
     @classmethod
-    def round_one_decimal(cls, value: float) -> float:
-        return round(value, 1)
+    def round_one_decimal(cls, value: float | None) -> float | None:
+        return round(value, 1) if value is not None else None
 
     @field_validator("tds", mode="after")
     @classmethod
@@ -66,5 +66,15 @@ class SensorReadingPublic(BaseModel):
 
     @field_validator("ammonia", mode="after")
     @classmethod
-    def round_ammonia(cls, value: float) -> float:
-        return round(value, 2)
+    def round_ammonia(cls, value: float | None) -> float | None:
+        return round(value, 2) if value is not None else None
+
+
+class DeviceReadingCreate(BaseModel):
+    """The v1 bridge payload deliberately contains only installed sensors."""
+
+    observed_at: datetime | None = None
+    temperature: float = Field(ge=-10, le=60)
+    ph: float = Field(ge=0, le=14)
+    turbidity: float = Field(ge=0, le=3000)
+    tds: float = Field(ge=0, le=5000)

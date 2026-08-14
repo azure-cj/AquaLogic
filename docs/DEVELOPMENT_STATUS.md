@@ -33,6 +33,10 @@ Last reviewed: 2026-07-29
   role-enforced write permissions.
 - The public tank contract now exposes a privacy-safe display location only,
   omits tank codes and feeding schedules, and rounds public readings.
+- Temporary ESP32 bridge testing is implemented: registered device keys map to
+  fixed tanks, ingest only four supported `/data` measurements, audit requests,
+  and represent dissolved oxygen/ammonia as unavailable. See
+  `ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 
 ### Web
 
@@ -73,7 +77,7 @@ Last reviewed: 2026-07-29
 ## Planned
 
 - Backend client integration for the Flutter app.
-- ESP32 sensor ingestion and actuator control.
+- ESP32 direct ingestion, actuator control, and additional sensor hardware.
 - Raspberry Pi deployment and hardware safety controls.
 - Schedules for feeding, lighting, filtration, dosing, and water replacement.
 - Pagination and database-level analytics for larger datasets.

@@ -39,9 +39,9 @@ type PublicReading = {
   temperature: number;
   ph: number;
   turbidity: number;
-  dissolved_oxygen: number;
+  dissolved_oxygen: number | null;
   tds: number;
-  ammonia: number;
+  ammonia: number | null;
 };
 
 type PublicFish = {

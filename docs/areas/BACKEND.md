@@ -23,6 +23,8 @@ Last reviewed: 2026-07-29
   checks; keep this policy separate from threshold and alert behavior.
 - `backend/app/routes/tanks.py`: tank detail, configuration, assignments, and
   the compact `/operations` snapshot contract.
+- `backend/app/routes/devices.py`: one-time admin provisioning and device-key
+  bridge ingestion, with server-side tank mapping.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.
