@@ -135,6 +135,22 @@ web client must bootstrap with refresh, coordinate sign-out across tabs, and
 never persist authorization material. Setup links are administrator-mediated
 30-minute fragments rather than temporary passwords.
 
+## 2026-08-14 — Use a laptop bridge with fixed server-side tank mapping
+
+**Decision:** Keep the received ESP32 firmware unchanged and use a temporary
+local-laptop bridge that polls only `/data`. Authenticate the bridge with a
+hash-stored device key that resolves to one registered tank; accept only the
+four installed measurements.
+
+**Reason:** The ESP32 is on the tester's LAN and must not be public or receive
+staff credentials. Fixed mapping prevents a compromised bridge from selecting
+another tank. Missing dissolved oxygen and ammonia are unknown, not safe zeroes.
+
+**Consequences:** The device-provisioning response shows the raw key once,
+bridge retries must tolerate tunnel outages, and dashboard statuses mark the
+two deferred metrics unavailable. Direct ESP32 posting and all commands remain
+deferred.
+
 ## Adding a decision
 
 Use this format:

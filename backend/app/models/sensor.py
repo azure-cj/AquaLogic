@@ -23,9 +23,9 @@ class SensorReading(Base):
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
     ph: Mapped[float] = mapped_column(Float, nullable=False)
     turbidity: Mapped[float] = mapped_column(Float, nullable=False)
-    dissolved_oxygen: Mapped[float] = mapped_column(Float, nullable=False)
+    dissolved_oxygen: Mapped[float | None] = mapped_column(Float, nullable=True)
     tds: Mapped[float] = mapped_column(Float, nullable=False)
-    ammonia: Mapped[float] = mapped_column(Float, nullable=False)
+    ammonia: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_mock: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     tank: Mapped["Tank"] = relationship("Tank", back_populates="sensor_readings")

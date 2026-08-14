@@ -6,3 +6,4 @@ PyJWT==2.13.0
 pwdlib[argon2]==0.3.0
 email-validator>=2.2,<3.0
 pydantic==2.13.4
+swagger-ui-bundle==1.1.0

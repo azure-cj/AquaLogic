@@ -2,14 +2,18 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from swagger_ui_bundle import swagger_ui_path
 
 from .config import settings
 from .database import Base, engine
-from .routes import alerts, auth, dashboard, fish, management, public, security, sensors, species_suitability, tanks
+from .routes import alerts, auth, dashboard, devices, fish, management, public, security, sensors, species_suitability, tanks
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
 
@@ -33,7 +37,44 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    debug=settings.debug,
+    lifespan=lifespan,
+    docs_url=None,
+)
+# swagger-ui-bundle ships a Swagger UI release that supports OpenAPI 3.0.x.
+# FastAPI 0.140 sets this as an app attribute rather than constructor option.
+app.openapi_version = "3.0.3"
+
+
+def _openapi_schema() -> dict:
+    """Describe the existing Authorization header as bearer auth in Swagger.
+
+    Runtime authentication still uses the project's OAuth2PasswordBearer
+    extractor. The login endpoint intentionally accepts JSON, so advertising an
+    OAuth password flow made Swagger send an incompatible form request.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        routes=app.routes,
+    )
+    schemes = schema.setdefault("components", {}).setdefault("securitySchemes", {})
+    schemes["OAuth2PasswordBearer"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _openapi_schema
+app.mount("/static/swagger-ui", StaticFiles(directory=swagger_ui_path), name="swagger-ui")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
@@ -67,7 +108,15 @@ def _apply_security_headers(request: Request, response: Response) -> Response:
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-    response.headers["Content-Security-Policy"] = _content_security_policy()
+    # FastAPI's Swagger HTML contains one small inline initializer. Keep the
+    # application policy strict and relax this only for the local API docs page.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; "
+        "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'"
+        if request.url.path == "/docs"
+        else _content_security_policy()
+    )
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
     if request.url.path.startswith("/auth/") or request.headers.get("authorization"):
@@ -98,11 +147,23 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/docs", include_in_schema=False)
+def swagger_docs():
+    """Serve API documentation without relying on a browser-accessible CDN."""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{settings.app_name} - Swagger UI",
+        swagger_js_url="/static/swagger-ui/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger-ui/swagger-ui.css",
+    )
+
+
 app.include_router(auth.router)
 app.include_router(tanks.router)
 app.include_router(species_suitability.router)
 app.include_router(fish.router)
 app.include_router(sensors.router)
+app.include_router(devices.router)
 app.include_router(alerts.router)
 app.include_router(public.router)
 app.include_router(management.router)

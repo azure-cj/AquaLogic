@@ -342,7 +342,7 @@ export function TankDetail() {
             title="Current readings"
             description={
               reading
-                ? `Reported ${formatDate(reading.timestamp)}`
+                ? `Observed ${formatDate(reading.timestamp)} · ${operations.data?.status === 'offline' ? 'Device offline or stale' : 'Device data current'}`
                 : 'No sensor reading is available'
             }
             className="tank-readings-panel"
@@ -364,7 +364,7 @@ export function TankDetail() {
                 {measurements.map(([key, label, unit, decimals]) => (
                   <div className="reading-item" key={key}>
                     <small>{label}</small>
-                    <strong>{formatReading(reading[key], unit, decimals)}</strong>
+                    <strong>{reading[key] === null ? 'Not installed' : formatReading(reading[key], unit, decimals)}</strong>
                     <StatusBadge value={operations.data!.parameter_statuses[key]} />
                   </div>
                 ))}

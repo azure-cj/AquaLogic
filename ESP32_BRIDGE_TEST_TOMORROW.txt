@@ -1,0 +1,109 @@
+AquaLogic ESP32 Bridge Test - Quick Launcher Guide
+===================================================
+
+Important safety rules
+----------------------
+- This test only reads GET http://<ESP32_LOCAL_IP>/data.
+- Do not change the ESP32 firmware, pins, Wi-Fi settings, or wiring.
+- Do not call ESP32 feeder, LED, pump, syringe, dosing, or actuator endpoints.
+- Do not make a public tunnel to the ESP32.
+- Keep the device key and bridge-config.json private; never commit or share them.
+
+OWNER COMPUTER: start AquaLogic
+-------------------------------
+1. Double-click start-esp32-bridge-owner.bat.
+   - First run may install Python packages.
+   - Leave the AquaLogic backend and dashboard windows open.
+
+2. Check these local pages open:
+   - http://127.0.0.1:8000/docs
+   - http://127.0.0.1:5173
+
+OWNER COMPUTER: make one temporary tunnel
+-----------------------------------------
+3. Double-click start-esp32-bridge-tunnels.bat.
+   - It opens ONE ngrok window for the dashboard on port 5173.
+   - Copy its HTTPS forwarding URL, for example:
+     https://YOUR-NGROK-URL.ngrok-free.dev
+
+4. Test the tunnel in a browser:
+   https://YOUR-NGROK-URL.ngrok-free.dev/api/health
+
+   It must show:
+   {"status":"ok"}
+
+5. Share the dashboard URL with the tester:
+   https://YOUR-NGROK-URL.ngrok-free.dev
+
+OWNER COMPUTER: provision the device once
+-----------------------------------------
+6. Open http://127.0.0.1:8000/docs.
+
+7. Use POST /auth/login with the admin email and password. Click Execute.
+   Copy the long value after "access_token" from the successful 200 response.
+
+8. Click Authorize at the top of Swagger. Paste the access token into the
+   bearer-token field exactly as copied. Do NOT add "Bearer ". Click Authorize.
+
+9. Use GET /tanks to find the numeric ID of the tank for this ESP32.
+
+10. Use POST /devices with this body (example uses tank ID 1):
+
+    {
+      "device_id": "esp32-test-01",
+      "tank_id": 1
+    }
+
+11. Click Execute. Copy the returned device_key immediately. Securely give the
+    device_key and this backend URL to the tester:
+
+    https://YOUR-NGROK-URL.ngrok-free.dev/api
+
+HARDWARE TESTER LAPTOP: verify ESP32 and run bridge
+---------------------------------------------------
+12. Connect the laptop to the SAME Wi-Fi as the ESP32.
+
+13. In a browser, verify this local page opens:
+    http://<ESP32_LOCAL_IP>/data
+
+    It should return JSON containing temp_c, ph_value, turbidity_ntu, and
+    tds_ppm. Do not open any other ESP32 control endpoint.
+
+14. On the tester laptop, double-click start-esp32-bridge-tester.bat.
+    - On first run, it creates and opens bridge\bridge-config.json.
+    - Fill it in like this, using the real temporary values:
+
+    {
+      "esp32_data_url": "http://<ESP32_LOCAL_IP>/data",
+      "aqualogic_backend_url": "https://YOUR-NGROK-URL.ngrok-free.dev/api",
+      "device_key": "PASTE_THE_RETURNED_DEVICE_KEY_HERE",
+      "poll_interval_seconds": 15,
+      "timeout_seconds": 5
+    }
+
+15. Save and close bridge-config.json. Double-click
+    start-esp32-bridge-tester.bat again to start the bridge.
+
+16. Look for a successful message like:
+    Forwarded temperature=... pH=... turbidity=... TDS=...
+
+BOTH: check the dashboard
+-------------------------
+17. Open the shared dashboard tunnel URL. Sign in and open the tank mapped in
+    POST /devices.
+
+18. Confirm Temperature, pH, Turbidity, TDS, and observation time update.
+    Dissolved oxygen and ammonia must say Not installed / unavailable.
+
+19. Stop the tester bridge with Ctrl+C. Wait at least 90 seconds and refresh
+    the tank page. It must show stale/offline, not invented readings.
+
+20. Restart start-esp32-bridge-tester.bat. The tank should return to current
+    after the next successful poll.
+
+After testing
+-------------
+- Stop the tester bridge, ngrok tunnel, backend, and dashboard windows.
+- Keep bridge\bridge-config.json private and uncommitted.
+- Record calibration observations separately. Do not edit firmware during this
+  read-only bridge test.

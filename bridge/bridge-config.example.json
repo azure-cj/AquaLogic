@@ -1,0 +1,7 @@
+{
+  "esp32_data_url": "http://192.168.1.50/data",
+  "aqualogic_backend_url": "https://YOUR-BACKEND-TUNNEL.example",
+  "device_key": "PASTE-THE-ONE-TIME-PROVISIONED-DEVICE-KEY-HERE",
+  "poll_interval_seconds": 15,
+  "timeout_seconds": 5
+}

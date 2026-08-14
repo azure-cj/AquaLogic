@@ -9,6 +9,7 @@ __pycache__/
 *.py[cod]
 backend/.env
 backend/*.db
+bridge/bridge-config.json
 
 # Flutter/Dart
 mobile_app/.dart_tool/

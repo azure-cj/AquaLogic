@@ -15,6 +15,8 @@ choose only the context relevant to the task.
 | [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) | Domain entities, relationships, statuses, and invariants |
 | [`API_CONTRACT.md`](API_CONTRACT.md) | Current backend routes, authentication, public access, and client expectations |
 | [`HARDWARE_INTEGRATION_CONTRACT.md`](HARDWARE_INTEGRATION_CONTRACT.md) | Draft device payload, units, failure behavior, and actuator boundary |
+| [`ESP32_BRIDGE_INTEGRATION_PLAN.md`](ESP32_BRIDGE_INTEGRATION_PLAN.md) | Implemented no-firmware-change bridge test for the received ESP32 code |
+| [`ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`](ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md) | Temporary owner/tester procedure for the implemented bridge test |
 | [`GIT_WORKFLOW.md`](GIT_WORKFLOW.md) | Branching, commits, pull requests, and hardware/software collaboration |
 | [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md) | What is complete, active, planned, deferred, and known to be limited |
 | [`DECISIONS.md`](DECISIONS.md) | Important decisions and their reasons |

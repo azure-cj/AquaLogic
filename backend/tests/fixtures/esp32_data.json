@@ -1,0 +1,13 @@
+{
+  "temp_c": 26.75,
+  "temp_status": "NORMAL",
+  "ph_value": 7.21,
+  "ph_status": "NORMAL",
+  "turbidity_raw": 1800,
+  "turbidity_ntu": 3.4,
+  "turbidity_status": "CLEAR",
+  "tds_raw": 900,
+  "tds_ppm": 221,
+  "tds_status": "NORMAL",
+  "overall_status": "GOOD"
+}
