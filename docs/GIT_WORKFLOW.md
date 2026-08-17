@@ -1,7 +1,7 @@
 # AquaLogic Git Workflow
 
 Status: Team workflow
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-15
 
 This repository uses `main` as the shared stable branch. Groupmates should work
 on short-lived branches and open pull requests for review. Do not push directly
@@ -102,7 +102,8 @@ Keep hardware and software changes independently reviewable:
    before implementing a live connection.
 2. The software side adds a simulator, validation, and backend contract tests.
 3. The hardware side adds firmware sensor reads and sends the agreed payload.
-4. Run both sides against one test tank/device before adding actuators.
+4. Run both sides against one test tank/device before any physical actuator
+   test; the current v1 bridge does not require firmware changes.
 5. Use a dedicated integration branch or pull request only when both sides are
    ready to connect.
 

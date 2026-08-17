@@ -6,7 +6,7 @@ from .user import User
 from .customer import Customer
 from .threshold import ThresholdConfig, ThresholdRevision
 from .security import AccountSetupToken, AuthSession, AuthThrottle, RefreshToken, SecurityAuditEvent
-from .device import RegisteredDevice
+from .device import ActuatorCommand, ActuatorState, ActuatorStateHistory, RegisteredDevice
 
 __all__ = [
     "Alert",
@@ -25,4 +25,7 @@ __all__ = [
     "RefreshToken",
     "SecurityAuditEvent",
     "RegisteredDevice",
+    "ActuatorCommand",
+    "ActuatorState",
+    "ActuatorStateHistory",
 ]

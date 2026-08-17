@@ -29,7 +29,8 @@ if not exist "%CONFIG%" (
   exit /b 0
 )
 
-echo Starting read-only ESP32 bridge...
+echo Starting local-only ESP32 sensor and actuator bridge...
+echo The ESP32 is never exposed publicly; actuator calls are allowlisted and one-shot.
 python "%ROOT%bridge\esp32_bridge.py" --config "%CONFIG%"
 echo.
 echo The bridge stopped. Review the messages above before closing this window.

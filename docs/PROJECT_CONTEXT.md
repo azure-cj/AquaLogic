@@ -1,7 +1,7 @@
 # AquaLogic Project Context
 
 Status: Current product context
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-15
 
 ## Purpose
 
@@ -29,8 +29,10 @@ can validate operations before the ESP32 hardware deployment is complete.
   dashboard.
 - A Flutter Android-first app provides a polished staff dashboard prototype with
   local demo readings and demo controls.
-- ESP32 firmware and bundled sensor/display libraries are present, but live
-  hardware integration is not yet the active software path.
+- The temporary ESP32 laptop bridge ingests four sensor values and supports
+  admin-only UV, normal LED, fish-feeder, and guarded Pump A/B manual-test
+  commands without exposing the ESP32 to the internet. Pump tests are limited
+  to empty syringes or water; schedules and pH auto-dose remain deferred.
 
 ## Current scope
 
@@ -46,7 +48,8 @@ can validate operations before the ESP32 hardware deployment is complete.
 ### Planned or deferred
 
 - Connecting the Flutter app to the backend API.
-- ESP32 sensor ingestion and actuator commands.
+- Additional hardware, production actuator safety interlocks, and richer
+  automation workflows beyond the v1 bridge.
 - Raspberry Pi deployment and production PostgreSQL validation.
 - Scheduling, hardware safety interlocks, and richer automation workflows.
 - Pagination and database-level analytics for larger fleets.
@@ -69,6 +72,9 @@ can validate operations before the ESP32 hardware deployment is complete.
   or controls.
 - Sensor readings are the input to status and alert decisions. Thresholds are
   configurable through the backend and admin web flow.
+- Actuator commands are admin-only, expire while queued, use a fixed
+  server-side device-to-tank mapping, and travel through the local-only bridge;
+  public pages and staff users never control hardware.
 - Keep secrets and deployment credentials outside the repository.
 
 ## Terminology

@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-07-29
+Last reviewed: 2026-08-15
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -48,6 +48,19 @@ minutes. Password changes and resets revoke existing sessions.
 | PUT | `/alerts/{alert_id}/resolve` | Resolve an alert |
 | POST | `/devices` | Admin-only one-time device provisioning; returns a key once and fixes the device to one tank |
 | POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
+| POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, or feeder command for the tank's registered bridge device |
+| GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, and feeder state |
+| GET | `/tanks/{tank_id}/actuators/history` | Admin-only; read paginated command audit history with actor, timestamps, status, result, and error |
+
+The device-key bridge routes are not browser routes:
+
+| Method | Route | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/device-ingestion/actuators/pending` | Registered device key | Fetch unexpired commands for that exact device |
+| POST | `/device-ingestion/actuators/{command_id}/executing` | Registered device key | Claim one command before any ESP32 call |
+| POST | `/device-ingestion/actuators/{command_id}/succeeded` | Registered device key | Idempotently report a completed local call |
+| POST | `/device-ingestion/actuators/{command_id}/failed` | Registered device key | Report a local validation, timeout, or response failure |
+| POST | `/device-ingestion/actuator-state` | Registered device key | Store refreshed local actuator state |
 
 ## Operations and administration
 
@@ -85,6 +98,55 @@ the minute. Public image URLs require HTTPS and a configured host allowlist.
   ingestion is audit logged. The v1 payload accepts only `temperature`, `ph`,
   `turbidity`, `tds`, and optional `observed_at`; dissolved oxygen and ammonia
   persist as unavailable nulls and cannot create normal statuses or alerts.
+
+- Actuator command APIs are admin-only. Staff actuator command, state, and
+  history requests receive `403`; the web UI does not fetch those endpoints for
+  staff accounts. Commands use a server-generated ID, a server-selected fixed
+  device/tank mapping, a validated payload, and a short expiry. Lifecycle
+  status is `queued`, `executing`, `succeeded`, `failed`, or `expired`.
+
+- `GET /tanks/{tank_id}/actuators/history` accepts `page` (default `1`),
+  `page_size` (default `10`, maximum `50`), and optional exact-match
+  `actuator` (`uv`, `led`, `feeder`, `pump_a`, or `pump_b`) and `status` (`queued`, `executing`,
+  `succeeded`, `failed`, or `expired`) filters. It returns
+  `{items, page, page_size, total, total_pages, has_previous, has_next,
+  summary}` ordered newest first. `summary` contains fixed-device totals for
+  `total`, `queued`, `executing`, `succeeded`, `failed`, and `expired`, so the
+  dashboard can preserve useful lifecycle context while filters are active. The
+  web dashboard uses the pagination metadata for previous/next controls instead
+  of loading an unbounded audit list.
+
+- The device-key actuator boundary is `GET
+  /device-ingestion/actuators/pending`, `POST
+  /device-ingestion/actuators/{command_id}/executing`, `POST
+  /device-ingestion/actuators/{command_id}/succeeded`, `POST
+  /device-ingestion/actuators/{command_id}/failed`, and `POST
+  /device-ingestion/actuator-state`. It verifies that every command belongs to
+  the authenticated device's fixed tank. Duplicate claims/final reports are
+  idempotent and cannot requeue a finalized command.
+
+- v1 accepts UV (`on`, `off`, `timer`, `schedule`), normal LED (`on`,
+  `off`, `timer`, `schedule`), and feeder (`feed_now`, `config`, `schedule`)
+  actions. Light timers are bounded to 1–86,400,000 ms; schedule values use
+  `HH:MM`; feeder configuration is angle 0–180 and duration 500–60,000 ms with
+  exactly three schedule slots. Pump `pump_a` and `pump_b` manual-test actions
+  are limited to `dispense`, `stop`, and `retract`; dispense accepts only a
+  bridge safety cutoff of 100–2,000 ms. The cutoff is stored in the audit
+  payload but is not sent as a firmware query parameter. Pump commands default
+  to a 20-second expiry and may not exceed 30 seconds. Pump queue requests are
+  rejected with `409` while the fixed bridge is offline, so they are never
+  silently left in the queue. Pump schedules, pH auto-dose, and sensor-driven
+  dosing remain out of scope.
+
+- The received firmware's private pump routes are `/syringeA/status`,
+  `/syringeA/dispense`, `/syringeA/stop`, `/syringeA/retract`, and the matching
+  `/syringeB/*` routes. Only the bridge calls them, with no pump query
+  parameters; the browser and backend never connect to the ESP32.
+
+- The bridge is the only component that calls local ESP32 routes. The browser
+  and backend never connect to the ESP32. Tunnel infrastructure is temporary
+  dashboard/API test infrastructure only; the ESP32 stays on the tester's
+  private local Wi-Fi and is never publicly exposed.
 
 - `GET /health` is the deployment health check.
 - CORS is configured from `CORS_ORIGINS`; production rejects wildcard CORS.

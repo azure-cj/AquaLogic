@@ -1,7 +1,9 @@
 {
-  "esp32_data_url": "http://192.168.1.50/data",
+  "esp32_data_url": "http://ESP32_LOCAL_IP/data",
   "aqualogic_backend_url": "https://YOUR-BACKEND-TUNNEL.example",
   "device_key": "PASTE-THE-ONE-TIME-PROVISIONED-DEVICE-KEY-HERE",
   "poll_interval_seconds": 15,
-  "timeout_seconds": 5
+  "timeout_seconds": 5,
+  "actuator_enabled": true,
+  "pump_manual_test_enabled": false
 }

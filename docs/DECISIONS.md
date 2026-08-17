@@ -151,6 +151,46 @@ bridge retries must tolerate tunnel outages, and dashboard statuses mark the
 two deferred metrics unavailable. Direct ESP32 posting and all commands remain
 deferred.
 
+## 2026-08-15 — Route v1 actuator control through a claiming laptop bridge
+
+**Decision:** Keep the received ESP32 firmware unchanged and route admin-only UV,
+normal LED, and feeder commands from the backend to the existing tester-laptop
+bridge. The bridge claims each expiring server command before making one exact
+local firmware request, then reports the result and validated local state with
+the registered device key.
+
+**Reason:** The ESP32 remains private on the tester's Wi-Fi, while the backend
+retains authentication, fixed device-to-tank ownership, payload validation,
+auditability, expiry, and duplicate-delivery protection. A one-shot hardware
+request avoids repeating a physical action after a timeout whose execution is
+unknown.
+
+**Consequences:** Actuator state is last-known and becomes stale when the
+bridge is offline; command status and state history require new migration
+`0008_actuator_controls`; staff has no actuator API access; syringe pumps and
+pH auto-dose remain out of scope. Dashboard/API tunnels are temporary test
+infrastructure and must never include an ESP32 tunnel.
+
+## 2026-08-15 — Add a guarded Pump A/B manual-test bridge phase
+
+**Decision:** Extend the generic actuator command ledger for `pump_a` and
+`pump_b`, but expose only admin-confirmed `dispense`, `stop`, and `retract`
+manual tests. The bridge keeps `pump_manual_test_enabled` false by default,
+requires a fresh fixed-device heartbeat before pump commands are queued, and
+uses a 100–2,000 ms local dispense cutoff. Because the received firmware's
+dispense route has no duration parameter, the bridge sends the exact dispense
+route once and then one intentional matching stop request after the cutoff.
+
+**Reason:** This permits controlled empty-syringe/water mechanical checks
+without changing firmware, pins, wiring, or Wi-Fi behavior and without creating
+an automatic dosing path. The existing JSON command/state tables already store
+the validated pump payload and audit lifecycle, so no new migration is needed.
+
+**Consequences:** Pump schedules, pH auto-dose, sensor-driven dosing, and
+public ESP32 access remain excluded. A physical timeout or ambiguous response
+is reported as failed and never retried automatically; the tester must use the
+visible Stop control or inspect the hardware locally.
+
 ## Adding a decision
 
 Use this format:

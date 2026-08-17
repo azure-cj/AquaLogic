@@ -1,155 +1,199 @@
 # ESP32 Bridge Integration Plan
 
-Status: Implemented for temporary hardware testing
-Last reviewed: 2026-08-14
+Status: v1 UV/LED/feeder controls plus Pump A/B manual-test bridge implemented
+for temporary hardware testing
+Last reviewed: 2026-08-15
 
-Implementation status: Completed for temporary hardware testing.
+## Goal and boundary
 
-## Goal
-
-Show live ESP32 water readings in AquaLogic without modifying the received
-ESP32 firmware during the first hardware test.
-
-The initial integration is read-only. AquaLogic will ingest and display:
-
-- water temperature in °C;
-- pH;
-- turbidity in NTU; and
-- total dissolved solids (TDS) in ppm.
-
-Dissolved oxygen and ammonia are deferred. They must be shown as unavailable,
-not submitted as zero and not interpreted as safe readings.
-
-## Approach: temporary bridge
-
-The received ESP32 firmware already provides a local HTTP endpoint:
-
-```text
-GET http://<esp32-local-ip>/data
-```
-
-It returns the following calibrated fields:
-
-| ESP32 field | AquaLogic field | Unit |
-| --- | --- | --- |
-| `temp_c` | `temperature` | °C |
-| `ph_value` | `ph` | pH scale |
-| `turbidity_ntu` | `turbidity` | NTU |
-| `tds_ppm` | `tds` | ppm |
-
-The bridge is a small program run on a laptop connected to the same Wi-Fi as
-the ESP32. It polls `/data`, validates/translates those fields, then submits
-them to an authenticated AquaLogic device-ingestion endpoint.
+AquaLogic now supports a first, admin-only control phase without changing the
+received ESP32 firmware, pins, wiring, or Wi-Fi behavior. Sensor ingestion stays
+read-only and continues to poll the firmware `GET /data` endpoint. Actuator
+commands travel through the existing laptop bridge:
 
 ```mermaid
 flowchart LR
-    ESP["ESP32 on friend's Wi-Fi\nGET /data"] --> Bridge["Bridge on friend's laptop\npolls and translates"]
-    Bridge -->|"HTTPS through tunnel"| API["AquaLogic backend on owner's PC"]
-    API --> DB["Local database"]
-    DB --> API
-    API --> Web["AquaLogic web dashboard\nthrough tunnel"]
+    Admin["Admin dashboard"] --> API["AquaLogic backend"]
+    API -->|"device-key HTTPS request"| Bridge["Bridge on tester laptop"]
+    Bridge -->|"private local Wi-Fi HTTP"| ESP["ESP32 local endpoints"]
+    Bridge -->|"sensor / actuator state"| API
+    API --> DB[("Local database")]
 ```
 
-The bridge does not control any actuator and does not expose the ESP32 to the
-internet.
+The browser and backend never call the ESP32 directly. The bridge is the only
+component allowed to call local actuator routes. A tunnel may expose the
+dashboard/API during a test, but the ESP32 is never tunneled or published.
 
-## Test environment
+## Firmware endpoint map used by v1
 
-### Owner's computer
+The current ESP32 reference registers these supported routes. The bridge
+translation is intentionally exact:
 
-- Run the FastAPI backend and local database.
-- Run the Vite web dashboard.
-- Expose the Vite dashboard through one public HTTPS tunnel.
-- Provide the bridge with that tunnel URL plus `/api`; Vite forwards it to the
-  local backend.
-- Share the dashboard tunnel URL with testers.
+| AquaLogic action | ESP32 route | Query parameters | Expected response |
+| --- | --- | --- | --- |
+| UV status | `GET /uv/status` | none | `led_on`, `remaining_ms`, `total_on_ms`, `schedule_enabled`, `sched_on`, `sched_off` |
+| UV on/off | `GET /uv/on`, `GET /uv/off` | none | `{"led":"on"}` / `{"led":"off"}` |
+| UV timer | `GET /uv/timer` | `duration` milliseconds | `{"led":"timer"}` |
+| UV schedule | `GET /uv/schedule` | `enabled`, `onH`, `onM`, `offH`, `offM` | `{"schedule":"saved"}` |
+| LED status | `GET /led/status` | none | same light status shape |
+| LED on/off | `GET /led/on`, `GET /led/off` | none | `{"led":"on"}` / `{"led":"off"}` |
+| LED timer | `GET /led/timer` | `duration` milliseconds | `{"led":"timer"}` |
+| LED schedule | `GET /led/schedule` | `enabled`, `onH`, `onM`, `offH`, `offM` | `{"schedule":"saved"}` |
+| Feeder status | `GET /feeder/status` | none | `feeding`, `feed_count`, `last_fed`, `open_angle`, `duration_ms`, three schedule slots |
+| Feed now | `GET /feeder/feed` | none | `{"fed":true}` |
+| Feeder configuration | `GET /feeder/config` | `angle`, `duration` milliseconds | `{"config":"saved"}` |
+| Feeder schedule | `GET /feeder/schedule` | `h0/m0/e0` through `h2/m2/e2` | `{"schedule":"saved"}` |
+| Pump A status | `GET /syringeA/status` | none | `active`, `dose_count`, `last_dispensed`, `volume_ml`, three schedule slots |
+| Pump A dispense test | `GET /syringeA/dispense` | none; bridge applies cutoff locally | `{"dispensed":true}` |
+| Pump A stop | `GET /syringeA/stop` | none | `{"stopped":true}` |
+| Pump A retract | `GET /syringeA/retract` | none | `{"retracted":true}` |
+| Pump B status | `GET /syringeB/status` | none | same pump status shape |
+| Pump B dispense test | `GET /syringeB/dispense` | none; bridge applies cutoff locally | `{"dispensed":true}` |
+| Pump B stop | `GET /syringeB/stop` | none | `{"stopped":true}` |
+| Pump B retract | `GET /syringeB/retract` | none | `{"retracted":true}` |
 
-### Hardware tester's computer
+The bridge never calls `/feeder/test`, pump schedule/config/jog routes, or any
+`/ph/auto/*` route. Pump schedules, pH auto-dose, and sensor-driven dosing
+remain out of scope.
 
-- Connect to the same Wi-Fi network as the ESP32.
-- Identify the ESP32's local IP address from the serial monitor or LCD.
-- Run the bridge with the ESP32 URL, AquaLogic backend tunnel URL, and a
-  device-specific key.
-- Use the shared dashboard URL to verify received readings.
+## Backend command contract
 
-## Planned implementation order
+An administrator provisions one device key once and the server fixes that
+device to one tank. The device key is shown only at provisioning and is stored
+as a hash. Staff passwords, browser JWTs, and browser sessions are never used
+by the bridge.
 
-1. Capture a fixture containing a representative ESP32 `/data` response.
-2. Add backend support for partial hardware readings and explicit unavailable
-   parameters.
-3. Add a registered-device model, one device key per device, and a read-only
-   ingestion endpoint that maps the device to a single tank.
-4. Build the bridge with configurable polling interval, timeouts, validation,
-   retry/backoff, and clear console logs.
-5. Add automated tests using the saved ESP32 response fixture; cover invalid,
-   stale, and unreachable-device cases.
-6. Update web dashboard freshness and unavailable-parameter presentation.
-7. Perform one-device/one-tank hardware test using the tunnel setup.
-8. Compare readings with manual or calibration-reference measurements and log
-   only confirmed issues for follow-up.
+The migration `0008_actuator_controls` adds:
 
-## Current hardware baseline
+- `actuator_commands`: command ID, fixed device/tank, admin actor, validated
+  action/payload, expiry, lifecycle status, execution timestamps, result, and
+  error;
+- `actuator_states`: latest validated state for UV, LED, feeder, and Pump A/B; and
+- `actuator_state_history`: append-only state reports for diagnostics.
 
-The firmware and pin assignments are not changed in this phase. The firmware
-source remains the technical source of truth until the physical board can be
-verified. The handwritten pin diagram conflicts with the firmware's TDS and
-turbidity assignments; record this for physical verification, but do not
-rewire or alter firmware based solely on the diagram.
+Admin routes:
 
-The existing ESP32-hosted dashboard remains an on-network fallback during
-testing.
+```text
+POST /tanks/{tank_id}/actuators/commands
+GET  /tanks/{tank_id}/actuators/status
+GET  /tanks/{tank_id}/actuators/history?page=1&page_size=10
+```
 
-## Explicitly out of scope
+Device-key bridge routes:
 
-- ESP32 firmware changes, including direct posting to AquaLogic.
-- Pin changes or hardware rewiring.
-- Dissolved oxygen and ammonia sensor support.
-- Feeder, LED, syringe pump, and automatic dosing control from AquaLogic.
-- Public exposure of ESP32 control endpoints.
-- Production deployment; tunnels are temporary testing infrastructure only.
+```text
+GET  /device-ingestion/actuators/pending
+POST /device-ingestion/actuators/{command_id}/executing
+POST /device-ingestion/actuators/{command_id}/succeeded
+POST /device-ingestion/actuators/{command_id}/failed
+POST /device-ingestion/actuator-state
+```
 
-## Success criteria
+Commands are `queued`, `executing`, `succeeded`, `failed`, or `expired`.
+Queued light/feeder commands expire after 120 seconds by default; pump commands
+expire after 20 seconds by default and never exceed 30 seconds. No command
+appears in a pending response after expiry. The backend only allows the device mapped to the
+target tank to claim a command. Claim and final reporting are idempotent;
+already-final commands cannot be physically reissued.
 
-- A valid ESP32 `/data` response creates a reading for the mapped test tank.
-- The AquaLogic dashboard shows temperature, pH, turbidity, TDS, observation
-  time, and device freshness.
-- Dissolved oxygen and ammonia display as unavailable.
-- An unreachable ESP32 produces a visible stale/offline state rather than a
-  fabricated sensor reading.
-- No AquaLogic action can trigger an ESP32 actuator.
+History is newest-first and paginated. `page_size` defaults to 10 and is capped
+at 50; optional exact-match `actuator` and lifecycle `status` filters narrow the
+audit view. The response includes `items`, `total`, `total_pages`, previous/next
+flags, and a fixed-device lifecycle `summary` with queued, executing, succeeded,
+failed, and expired counts. The admin dashboard never loads an unbounded audit
+list; each row uses human-readable actuator/action labels, and details such as
+the command ID, validated request, timestamps, and reported result/error remain
+available through an expandable detail view.
 
-## Implemented v1 protocol and commands
+Validation limits are deliberately narrower than an unconstrained query
+string: light timers are 1–86,400,000 ms, schedule times are `HH:MM`, feeder
+angles are 0–180, feeder durations are 500–60,000 ms, and the feeder has exactly
+three schedule slots. Pump dispense cutoffs are 100–2,000 ms, pump commands
+expire within 30 seconds, and pump queue requests require a fresh bridge
+heartbeat.
 
-The bridge implementation is [`../bridge/esp32_bridge.py`](../bridge/esp32_bridge.py).
-It only calls the ESP32's local `GET /data`, forwards `temp_c`, `ph_value`,
-`turbidity_ntu`, and `tds_ppm`, and never calls an actuator endpoint.
+## Bridge implementation
 
-An administrator provisions the fixed server-side device-to-tank mapping once:
+The implementation is [`../bridge/esp32_bridge.py`](../bridge/esp32_bridge.py).
+Each cycle:
+
+1. polls `/data`, validates the four installed readings, and posts them through
+   `/device-ingestion/readings` using the device key;
+2. polls `/device-ingestion/actuators/pending`;
+3. validates the command, expiry, and pump safety flag locally;
+4. claims it as `executing`;
+5. makes the matching allowlisted ESP32 actuator request; a successful pump
+   dispense then waits for its bounded cutoff and makes one intentional matching
+   stop request; and
+6. reports success/failure and refreshes the corresponding local state.
+
+Hardware calls are never retried automatically after a timeout or ambiguous
+response because the actuator may already have run. Backend polling and state
+reporting can use normal connection/backoff handling without reissuing a
+physical command. Pump actions are rejected and reported as failed when
+`pump_manual_test_enabled` is false (the default). Logs contain no device key,
+Wi-Fi information, or sensitive configuration.
+
+## Owner/tester commands
+
+From the nested repository root, the owner starts the local services:
 
 ```powershell
-curl.exe -X POST http://127.0.0.1:8000/devices -H "Authorization: Bearer <ADMIN_JWT>" -H "Content-Type: application/json" -d '{"device_id":"esp32-test-01","tank_id":<TANK_ID>}'
+.\start-esp32-bridge-owner.bat
 ```
 
-Record the returned `device_key` in the tester's local bridge configuration;
-the bridge does not use a staff credential. Copy
-`bridge/bridge-config.example.json` to an untracked local `bridge-config.json`,
-fill in placeholder values, then run:
+Or manually:
 
 ```powershell
-python bridge/esp32_bridge.py --config bridge-config.json
+cd backend
+.\.venv\Scripts\activate
+alembic upgrade head
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Use `--once` for a single diagnostic poll. The backend accepts bridge reads at
-`POST /device-ingestion/readings` with `X-Device-Key`; the request cannot carry
-or override a tank ID. It persists null only for the not-installed dissolved
-oxygen and ammonia sensors and reports those metrics as unavailable.
+```powershell
+cd web
+npm run dev -- --host 127.0.0.1 --port 5173
+```
 
-## Before the hardware test
+Create one temporary HTTPS tunnel to the dashboard port only. Use its `/api`
+path as the bridge backend URL. Provision the device with an admin session:
 
-- Rotate the Wi-Fi password embedded in shared firmware and move it to a local,
-  untracked firmware secrets file.
-- Confirm the test tank and the hardware tester's laptop have the bridge
-  runtime installed.
-- Generate a device key; do not use a staff password or browser session token.
-- Keep the owner computer awake and its backend/dashboard/tunnel processes
-  running for the entire session.
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/devices `
+  -H "Authorization: Bearer <ADMIN_JWT>" `
+  -H "Content-Type: application/json" `
+  -d '{"device_id":"esp32-test-01","tank_id":<TANK_ID>}'
+```
+
+Copy the returned one-time key into an untracked local
+`bridge/bridge-config.json`. Start the tester bridge with:
+
+```powershell
+Copy-Item bridge/bridge-config.example.json bridge/bridge-config.json
+# Fill only local test values; do not commit this file.
+python bridge/esp32_bridge.py --config bridge/bridge-config.json --once
+python bridge/esp32_bridge.py --config bridge/bridge-config.json
+```
+
+The tester laptop must be on the same private Wi-Fi as the ESP32. Its config
+must use the local `/data` URL, the owner tunnel's `/api` URL, the one-time
+device key, and the safe polling values from the example file. Keep
+`pump_manual_test_enabled` false except during a controlled empty-syringe or
+water-only motor test; set it to true only for that test window. Do not create a
+tunnel to the ESP32.
+
+## Explicit exclusions and success criteria
+
+Excluded: pump schedules, pH auto-dose, automatic dosing from sensor data,
+direct ESP32-to-backend posting, firmware changes, pin/wiring changes, Wi-Fi
+credential changes, and production deployment. Pump manual tests are limited
+to empty syringes or water and require `pump_manual_test_enabled: true` only
+during controlled testing.
+
+The phase is successful when a valid sensor poll still ingests readings, an
+admin can queue and audit the allowed UV/LED/feeder controls and controlled Pump
+A/B manual tests, the bridge reports local state and failure results, staff
+receives 403 from actuator APIs, expired commands are not executed, and the
+ESP32 remains private local-only. Stop all tunnels and bridge processes after
+the hardware test.

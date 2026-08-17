@@ -3,11 +3,21 @@ AquaLogic ESP32 Bridge Test - Quick Launcher Guide
 
 Important safety rules
 ----------------------
-- This test only reads GET http://<ESP32_LOCAL_IP>/data.
-- Do not change the ESP32 firmware, pins, Wi-Fi settings, or wiring.
-- Do not call ESP32 feeder, LED, pump, syringe, dosing, or actuator endpoints.
-- Do not make a public tunnel to the ESP32.
-- Keep the device key and bridge-config.json private; never commit or share them.
+- Keep the ESP32 and tester laptop on the same private Wi-Fi.
+- The bridge is the only component allowed to call ESP32 endpoints.
+- Do not create a public tunnel to the ESP32. One temporary tunnel may expose
+  the owner dashboard/API only.
+- Do not change firmware, pins, wiring, or Wi-Fi behavior.
+- v1 controls UV, normal LED, fish feeder, and controlled Pump A/B manual tests.
+  Do not add pump schedules, pH auto-dose, automatic dosing, or feeder-test
+  controls.
+- Pump tests are for empty syringes or water only. Confirm the physical setup,
+  keep Stop ready, and use the dashboard confirmation before Dispense/Test or
+  Retract.
+- A hardware timeout may mean the command already ran. The bridge never retries
+  that physical command automatically.
+- Keep the device key and bridge-config.json private; never commit, print, or
+  share them.
 
 OWNER COMPUTER: start AquaLogic
 -------------------------------
@@ -25,6 +35,7 @@ OWNER COMPUTER: make one temporary tunnel
    - It opens ONE ngrok window for the dashboard on port 5173.
    - Copy its HTTPS forwarding URL, for example:
      https://YOUR-NGROK-URL.ngrok-free.dev
+   - Never create a tunnel to the ESP32.
 
 4. Test the tunnel in a browser:
    https://YOUR-NGROK-URL.ngrok-free.dev/api/health
@@ -37,73 +48,78 @@ OWNER COMPUTER: make one temporary tunnel
 
 OWNER COMPUTER: provision the device once
 -----------------------------------------
-6. Open http://127.0.0.1:8000/docs.
+6. Open http://127.0.0.1:8000/docs and sign in with the administrator session.
 
-7. Use POST /auth/login with the admin email and password. Click Execute.
-   Copy the long value after "access_token" from the successful 200 response.
+7. Use GET /tanks to find the numeric ID of the intended test tank.
 
-8. Click Authorize at the top of Swagger. Paste the access token into the
-   bearer-token field exactly as copied. Do NOT add "Bearer ". Click Authorize.
+8. Use POST /devices with a new device ID and that tank ID:
+    {"device_id":"esp32-test-01","tank_id":<TANK_ID>}
 
-9. Use GET /tanks to find the numeric ID of the tank for this ESP32.
-
-10. Use POST /devices with this body (example uses tank ID 1):
-
-    {
-      "device_id": "esp32-test-01",
-      "tank_id": 1
-    }
-
-11. Click Execute. Copy the returned device_key immediately. Securely give the
-    device_key and this backend URL to the tester:
-
-    https://YOUR-NGROK-URL.ngrok-free.dev/api
+9. Copy the returned device_key immediately and securely give the tester:
+   - the temporary dashboard/API URL ending in /api; and
+   - the one-time device key.
 
 HARDWARE TESTER LAPTOP: verify ESP32 and run bridge
 ---------------------------------------------------
-12. Connect the laptop to the SAME Wi-Fi as the ESP32.
+10. Connect the laptop to the SAME private Wi-Fi as the ESP32.
 
-13. In a browser, verify this local page opens:
+11. In a browser, verify only this local page opens:
     http://<ESP32_LOCAL_IP>/data
 
     It should return JSON containing temp_c, ph_value, turbidity_ntu, and
-    tds_ppm. Do not open any other ESP32 control endpoint.
+    tds_ppm. Do not open any ESP32 actuator, pump, syringe, or dosing route
+    manually.
 
-14. On the tester laptop, double-click start-esp32-bridge-tester.bat.
-    - On first run, it creates and opens bridge\bridge-config.json.
-    - Fill it in like this, using the real temporary values:
+12. Double-click start-esp32-bridge-tester.bat.
+    - On first run it creates and opens bridge\bridge-config.json.
+    - Fill the local /data URL, owner's HTTPS dashboard tunnel /api URL, the
+      one-time device key, and the example polling values. Leave
+      pump_manual_test_enabled false unless a controlled pump test is starting.
+    - Save and close the file; the key/config must remain untracked.
 
-    {
-      "esp32_data_url": "http://<ESP32_LOCAL_IP>/data",
-      "aqualogic_backend_url": "https://YOUR-NGROK-URL.ngrok-free.dev/api",
-      "device_key": "PASTE_THE_RETURNED_DEVICE_KEY_HERE",
-      "poll_interval_seconds": 15,
-      "timeout_seconds": 5
-    }
+13. Double-click start-esp32-bridge-tester.bat again to start the bridge.
+    It preserves sensor polling, fetches pending admin commands, calls only the
+    allowed local routes, and reports state/results without exposing the ESP32.
 
-15. Save and close bridge-config.json. Double-click
-    start-esp32-bridge-tester.bat again to start the bridge.
+CONTROLLED PUMP TEST WINDOW
+---------------------------
+14. After the owner confirms the tank/device and the tester confirms empty
+    syringes or water, set `pump_manual_test_enabled` to true in the untracked
+    bridge config and restart the bridge.
 
-16. Look for a successful message like:
-    Forwarded temperature=... pH=... turbidity=... TDS=...
+15. In the admin tank dashboard, use only the Pump A/B Dispense/Test, Stop, and
+    Retract controls. Dispense/Test cutoffs are limited to 100, 250, 500,
+    1,000, 1,500, or 2,000 ms. Confirm the dialog before Dispense/Test or
+    Retract; the bridge sends the exact firmware dispense route once and then
+    the matching stop route after the cutoff.
+
+16. Return `pump_manual_test_enabled` to false after the mechanical test and
+    keep the config untracked. Do not enable schedules or pH auto-dose.
 
 BOTH: check the dashboard
 -------------------------
-17. Open the shared dashboard tunnel URL. Sign in and open the tank mapped in
-    POST /devices.
+17. Open the shared dashboard tunnel URL, sign in as admin, and open the mapped
+    tank.
 
-18. Confirm Temperature, pH, Turbidity, TDS, and observation time update.
-    Dissolved oxygen and ammonia must say Not installed / unavailable.
+18. Confirm sensor readings and the Actuator controls panel show current bridge
+    freshness plus last-known UV, LED, feeder, and pump state.
 
-19. Stop the tester bridge with Ctrl+C. Wait at least 90 seconds and refresh
-    the tank page. It must show stale/offline, not invented readings.
+19. Test one UV or LED command at a time. Test schedules and feeder config
+    within the displayed limits. For Feed now, confirm the dialog only after
+    checking the intended tank.
 
-20. Restart start-esp32-bridge-tester.bat. The tank should return to current
-    after the next successful poll.
+20. Check command history for actor, timestamp, status, and result/error.
+
+21. Sign in as staff separately. Staff must not see usable controls, and direct
+    actuator command/status/history calls must return 403.
+
+22. Stop the tester bridge with Ctrl+C. After the freshness window, the tank
+    should show stale/offline; it must not invent readings or claim hardware is
+    off. Restart the bridge only when ready for another test.
 
 After testing
 -------------
-- Stop the tester bridge, ngrok tunnel, backend, and dashboard windows.
+- Stop the bridge, ngrok tunnel, backend, and dashboard windows.
 - Keep bridge\bridge-config.json private and uncommitted.
 - Record calibration observations separately. Do not edit firmware during this
-  read-only bridge test.
+  bridge test.

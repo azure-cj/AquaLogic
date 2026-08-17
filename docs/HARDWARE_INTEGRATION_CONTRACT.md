@@ -1,14 +1,14 @@
 # AquaLogic Hardware Integration Contract
 
-Status: Draft integration contract
-Last reviewed: 2026-07-27
+Status: Current v1 bridge contract for temporary hardware testing
+Last reviewed: 2026-08-15
 
 This document is the shared boundary between the ESP32 firmware and the
-software system. It is intentionally a draft until the hardware teammate and
-software teammate agree on calibration, wiring, device identity, and failure
-behavior.
+software system. The v1 bridge uses the received firmware as a read-only
+reference: no firmware, pin, wiring, or Wi-Fi behavior changes are part of this
+phase. Physical safety review and production deployment remain future work.
 
-## Current boundary
+## Current sensor and bridge boundary
 
 The current backend sensor route is:
 
@@ -16,14 +16,20 @@ The current backend sensor route is:
 POST /tanks/{tank_id}/sensors
 ```
 
-It is authenticated for staff/demo use and is not yet a production device
-ingestion endpoint. The future device route should not trust a device to choose
-an arbitrary tank ID. A device identity should be registered and mapped to a
-tank server-side.
+The temporary bridge instead authenticates at:
+
+```text
+POST /device-ingestion/readings
+```
+
+The bridge device route does not trust a device to choose an arbitrary tank ID.
+A registered device identity is mapped to exactly one tank server-side. The
+bridge uses the registered device key, never a staff password or browser token.
+The browser and backend do not call the local ESP32 directly.
 
 ## Reading contract
 
-The software domain currently uses these canonical fields and units:
+The software domain uses these canonical fields and units:
 
 | Field | Unit | Required meaning |
 | --- | --- | --- |
@@ -34,35 +40,14 @@ The software domain currently uses these canonical fields and units:
 | `tds` | ppm | Total dissolved solids |
 | `ammonia` | ppm | Ammonia concentration |
 
-Device payloads should also carry:
-
-- `device_id`: stable server-registered device identity.
-- `observed_at`: UTC timestamp from the device or gateway.
-- `firmware_version`: useful for diagnosing calibration and protocol changes.
-- `reading_id`: optional unique sample ID for retry/idempotency.
-- connection or sensor health metadata when a sensor is disconnected or invalid.
-
-Example future payload:
-
-```json
-{
-  "device_id": "esp32-tank-01",
-  "observed_at": "2026-07-27T10:00:00Z",
-  "firmware_version": "0.1.0",
-  "reading_id": "esp32-tank-01-20260727T100000Z-0001",
-  "temperature": 27.4,
-  "ph": 7.2,
-  "turbidity": 3.1,
-  "dissolved_oxygen": 6.4,
-  "tds": 220,
-  "ammonia": 0.03
-}
-```
+The received ESP32 `/data` payload maps `temp_c`, `ph_value`,
+`turbidity_ntu`, and `tds_ppm` to the four installed fields. Dissolved oxygen
+and ammonia remain nullable/unavailable; they are not submitted as zero.
 
 The backend remains responsible for tank mapping, validation, timestamp
-normalization, persistence, threshold evaluation, alert creation, and public
-status calculation. The firmware should not duplicate business rules that need
-to remain consistent across web, mobile, and hardware clients.
+normalization, persistence, threshold evaluation, alert creation, public status
+calculation, and freshness. The firmware should not duplicate business rules
+that need to remain consistent across web, mobile, and hardware clients.
 
 ## Failure behavior
 
@@ -74,38 +59,95 @@ The integration must define and test:
 - device clock drift and missing timestamps;
 - Wi-Fi/API unavailability;
 - stale readings and device heartbeat loss;
-- partial payloads when one sensor is unavailable.
+- partial payloads when one sensor is unavailable;
+- actuator timeouts, invalid responses, duplicate delivery, and stale commands.
 
-The software should distinguish a safe reading from a missing or stale reading.
-The firmware should fail safe and avoid activating pumps, dosing, feeders, or
-other actuators when command validity or connection state is uncertain.
+The software distinguishes a safe reading from a missing or stale reading. The
+bridge never fabricates a sensor record. It does not automatically retry an
+actuator request after a timeout or ambiguous response because the physical
+action may already have happened.
 
-## Future command contract
+## v1 actuator command contract
 
-Actuator commands should eventually include:
+The backend creates one command row with:
 
-- a server-generated `command_id`;
-- registered `device_id` and target actuator;
-- command type and bounded parameters;
-- creation, expiry, and acknowledgement timestamps;
-- device result and failure reason;
-- an audit record and manual override path.
+- server-generated `command_id`;
+- registered `device_id` and fixed `tank_id`;
+- admin `actor_user_id`;
+- one allowlisted actuator/action and validated payload;
+- requested, expiry, executing, and execution timestamps;
+- `queued`, `executing`, `succeeded`, `failed`, or `expired` status;
+- result/error and audit metadata.
+
+The browser command payload is:
+
+```json
+{
+  "device_id": "esp32-test-01",
+  "actuator": "uv",
+  "action": "timer",
+  "payload": {"duration_ms": 600000}
+}
+```
+
+Allowed action payloads are:
+
+- UV and normal LED: `on`, `off`, `timer` with 1–86,400,000 ms, and `schedule`
+  with `enabled`, `on_time`, and `off_time` in `HH:MM`;
+- feeder: `feed_now`, `config` with `open_angle` 0–180 and `duration_ms`
+  500–60,000, and `schedule` with exactly three `{enabled,time}` slots.
+
+Pump A/B manual tests add `dispense` with a 100–2,000 ms bridge safety
+cutoff, plus payload-free `stop` and `retract`; the cutoff is not sent to
+firmware.
+
+The device-key bridge contract claims pending commands at
+`/device-ingestion/actuators/pending`, marks them executing before a local
+request, then reports success/failure and posts refreshed state to
+`/device-ingestion/actuator-state`. Claim and final reports are idempotent.
+The bridge makes one physical request per command, except for a successful pump
+dispense's intentional matching stop cutoff, and never retries a request whose
+execution may already have happened.
+
+## Firmware actuator boundary used by v1
+
+The current ESP32 reference registers these local routes used by the bridge:
+
+```text
+/uv/status /uv/on /uv/off /uv/timer /uv/schedule
+/led/status /led/on /led/off /led/timer /led/schedule
+/feeder/status /feeder/feed /feeder/config /feeder/schedule
+/syringeA/status /syringeA/dispense /syringeA/stop /syringeA/retract
+/syringeB/status /syringeB/dispense /syringeB/stop /syringeB/retract
+```
+
+The bridge may call only the manual-test pump routes `/syringeA/status`,
+`/syringeA/dispense`, `/syringeA/stop`, `/syringeA/retract`, and the matching
+`/syringeB/*` routes when the tester-only `pump_manual_test_enabled` flag is
+true. It never calls pump schedules, jog/config routes, or pH auto-dose routes,
+and never exposes the ESP32 to the internet. Pump tests are restricted to
+empty syringes or water; they are not dosing behavior.
 
 No actuator should be enabled in production until timeout, duplicate-command,
-manual-override, and emergency-stop behavior are tested.
+manual-override, emergency-stop, and physical fail-safe behavior are reviewed.
 
 ## Integration sequence
 
 1. Agree on sensor calibration, units, precision, and error representation.
-2. Add a backend simulator using this payload shape.
-3. Add backend contract tests for valid, invalid, stale, duplicate, and partial
+2. Add a backend simulator using the sensor payload shape.
+3. Keep contract tests for valid, invalid, stale, duplicate, and partial
    readings.
-4. Add device registration and authenticated ingestion before connecting a real
-   ESP32.
+4. Keep device registration and authenticated ingestion ahead of live hardware.
 5. Connect one test device to one tank and compare device values with manual
    measurements.
-6. Test Wi-Fi loss, server restart, sensor disconnect, retries, and stale data.
-7. Add actuator commands only after read-only sensor ingestion is reliable.
+6. Test Wi-Fi loss, server restart, sensor disconnects, and stale reports.
+7. Validate the temporary v1 actuator bridge on one device and one tank.
+8. Review physical safety controls before any production actuator deployment.
 
-Any change to this contract should be reviewed by both the hardware and
-software owners and recorded in `docs/DECISIONS.md`.
+Any change to this contract should be reviewed by both hardware and software
+owners and recorded in `docs/DECISIONS.md`.
+
+The owner may use one temporary HTTPS tunnel for the dashboard/API during a
+test. The ESP32 remains on the tester's private local Wi-Fi; no ESP32 endpoint
+is placed behind a tunnel or exposed to the internet. Keep all local bridge
+configuration and device keys out of source control.

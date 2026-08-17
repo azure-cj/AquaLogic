@@ -33,6 +33,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CareStatusChip, SpeciesCarePanel } from './SpeciesCarePanel';
+import { ActuatorControlPanel, StaffActuatorNotice } from './ActuatorControlPanel';
 import { TankEditorDrawer } from './TankEditorDrawer';
 import { publicTankUrl } from './publicLink';
 import { useMe } from '@/shared/hooks/useMe';
@@ -58,6 +59,7 @@ export function TankDetail() {
   const client = useQueryClient();
   const me = useMe();
   const canManage = me.data?.role !== 'staff';
+  const isAdmin = me.data?.role === 'admin';
   const [assigning, setAssigning] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
   const [removing, setRemoving] = useState<Fish | null>(null);
@@ -582,6 +584,8 @@ export function TankDetail() {
             ))}
         </Panel>
       </div>
+
+      {isAdmin ? <ActuatorControlPanel tankId={id} /> : <StaffActuatorNotice />}
 
       <TankEditorDrawer
         open={editing}
