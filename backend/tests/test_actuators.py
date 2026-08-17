@@ -200,7 +200,7 @@ def test_command_is_fixed_to_device_tank_and_payload_limits_are_enforced(client,
     ).status_code == 422
 
 
-def test_pump_commands_require_an_online_bridge_and_strict_test_payload(client, auth_headers, db_session):
+def test_pump_commands_require_an_online_bridge_and_empty_dispense_payload(client, auth_headers, db_session):
     tank = create_tank(client, auth_headers, "Pump test tank")
     device = register(client, auth_headers, tank["id"], "esp32-pump-test-01")
 
@@ -208,7 +208,7 @@ def test_pump_commands_require_an_online_bridge_and_strict_test_payload(client, 
         client,
         auth_headers,
         tank["id"],
-        {"actuator": "pump_a", "action": "dispense", "payload": {"duration_ms": 500}},
+        {"actuator": "pump_a", "action": "dispense", "payload": {}},
     )
     assert offline.status_code == 409
     assert "not queued" in offline.json()["detail"]
@@ -219,12 +219,12 @@ def test_pump_commands_require_an_online_bridge_and_strict_test_payload(client, 
         client,
         auth_headers,
         tank["id"],
-        {"actuator": "pump_a", "action": "dispense", "payload": {"duration_ms": 500}},
+        {"actuator": "pump_a", "action": "dispense", "payload": {}},
     )
     assert command.status_code == 201
     body = command.json()
     assert body["actuator"] == "pump_a"
-    assert body["payload"] == {"duration_ms": 500}
+    assert body["payload"] == {}
     expiry_seconds = (datetime.fromisoformat(body["expires_at"]) - datetime.fromisoformat(body["requested_at"])).total_seconds()
     assert 19 <= expiry_seconds <= 21
 
@@ -232,7 +232,7 @@ def test_pump_commands_require_an_online_bridge_and_strict_test_payload(client, 
         client,
         auth_headers,
         tank["id"],
-        {"actuator": "pump_b", "action": "dispense", "payload": {"duration_ms": 2_001}},
+        {"actuator": "pump_b", "action": "dispense", "payload": {"volume_ml": 1}},
     ).status_code == 422
     assert queue(
         client,

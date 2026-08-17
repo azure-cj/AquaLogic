@@ -49,7 +49,6 @@ const defaultFeederSchedule: FeederScheduleSlot[] = [
 
 const HISTORY_PAGE_SIZE = 10;
 const PUMP_COMMAND_EXPIRY_SECONDS = 20;
-const PUMP_DISPENSE_DURATIONS = [100, 250, 500, 1_000, 1_500, 2_000];
 
 type HistoryActuatorFilter = 'all' | ActuatorName;
 type HistoryStatusFilter = 'all' | ActuatorCommandStatus;
@@ -115,8 +114,7 @@ function formatPayloadSummary(command: ActuatorCommand) {
     return duration ? `Run for ${duration}` : 'Timer configuration';
   }
   if (command.action === 'dispense') {
-    const duration = formatDuration(command.payload.duration_ms);
-    return duration ? `Test run for ${duration}` : 'Short manual test run';
+    return 'Run the firmware-configured volume';
   }
   if (command.action === 'config') {
     const angle = typeof payload.open_angle === 'number' ? `${payload.open_angle} degrees` : 'configured angle';
@@ -338,8 +336,6 @@ function LightCard({
 function PumpCard({
   actuator,
   state,
-  durationMs,
-  onDurationChange,
   onDispense,
   onStop,
   onRetract,
@@ -348,8 +344,6 @@ function PumpCard({
 }: {
   actuator: 'pump_a' | 'pump_b';
   state: PumpActuatorState | null;
-  durationMs: string;
-  onDurationChange: (value: string) => void;
   onDispense: () => void;
   onStop: () => void;
   onRetract: () => void;
@@ -372,16 +366,14 @@ function PumpCard({
       </div>
       <div className="actuator-meta-grid">
         <span><small>Test dose count</small><strong>{state?.dose_count ?? '—'}</strong></span>
-        <span><small>Configured volume</small><strong>{state ? `${state.volume_ml} mL` : '—'}</strong></span>
+        <span><small>Firmware dose</small><strong>{state ? `${state.volume_ml.toFixed(2)} mL` : '—'}</strong></span>
         <span><small>Last dispense</small><strong>{state?.last_dispensed ?? '—'}</strong></span>
         <span><small>Bridge access</small><strong>{disabled ? 'Reconnect bridge' : 'Available'}</strong></span>
       </div>
-      <label className="field pump-duration-field">
-        <span>Dispense/test cutoff</span>
-        <select aria-label={`${label} test duration`} value={durationMs} onChange={(event) => onDurationChange(event.target.value)} disabled={disabled || Boolean(busy)}>
-          {PUMP_DISPENSE_DURATIONS.map((duration) => <option value={duration} key={duration}>{duration} ms</option>)}
-        </select>
-      </label>
+      <div className="pump-configured-dose">
+        <span><strong>Volume-controlled dispense</strong><small>The ESP32 controls the step count; no time cutoff is selected.</small></span>
+        <strong>{state ? `${state.volume_ml.toFixed(2)} mL` : 'Unknown'}</strong>
+      </div>
       <div className="pump-action-grid" aria-label={`${label} manual test controls`}>
         <button className="button button-primary" type="button" aria-label={`${label} dispense/test`} disabled={disabled || Boolean(busy)} onClick={onDispense}>
           <Play size={15} /> Dispense / test
@@ -550,8 +542,6 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
   const [ledTimer, setLedTimer] = useState('10');
   const [feederAngle, setFeederAngle] = useState('125');
   const [feederDuration, setFeederDuration] = useState('1000');
-  const [pumpADuration, setPumpADuration] = useState('500');
-  const [pumpBDuration, setPumpBDuration] = useState('500');
   const [scheduleInitialized, setScheduleInitialized] = useState(false);
 
   const status = useQuery({
@@ -640,7 +630,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
   const historyEnd = historyData ? Math.min(historyData.page * historyData.page_size, historyData.total) : 0;
   const pumpsDisabled = !status.data?.device_online;
   const confirmedPumpLabel = pumpConfirmation ? actuatorLabels[pumpConfirmation.actuator] : '';
-  const confirmedPumpDuration = pumpConfirmation?.actuator === 'pump_a' ? pumpADuration : pumpBDuration;
+  const confirmedPumpVolume = pumpConfirmation?.actuator === 'pump_a' ? pumpA?.volume_ml : pumpB?.volume_ml;
 
   return (
     <>
@@ -744,8 +734,6 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
               <PumpCard
                 actuator="pump_a"
                 state={pumpA}
-                durationMs={pumpADuration}
-                onDurationChange={setPumpADuration}
                 onDispense={() => setPumpConfirmation({ actuator: 'pump_a', action: 'dispense' })}
                 onStop={() => void queueCommand('pump_a', 'stop', {}, 'Syringe Pump A stop', PUMP_COMMAND_EXPIRY_SECONDS)}
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_a', action: 'retract' })}
@@ -755,8 +743,6 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
               <PumpCard
                 actuator="pump_b"
                 state={pumpB}
-                durationMs={pumpBDuration}
-                onDurationChange={setPumpBDuration}
                 onDispense={() => setPumpConfirmation({ actuator: 'pump_b', action: 'dispense' })}
                 onStop={() => void queueCommand('pump_b', 'stop', {}, 'Syringe Pump B stop', PUMP_COMMAND_EXPIRY_SECONDS)}
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_b', action: 'retract' })}
@@ -900,7 +886,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
         open={pumpConfirmation !== null}
         title={pumpConfirmation?.action === 'dispense' ? `Start ${confirmedPumpLabel} test?` : `Retract ${confirmedPumpLabel}?`}
         message={pumpConfirmation?.action === 'dispense'
-          ? `Manual test only. This will start the ${confirmedPumpLabel} firmware dispense route for a maximum ${confirmedPumpDuration} ms before the bridge sends a safety stop. Confirm the syringe is empty or contains water and keep your hand near Stop.`
+          ? `Manual test only. This will start the ${confirmedPumpLabel} firmware dispense route for its configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The bridge waits for completion and uses a bounded safety timeout. Confirm the syringe is empty or contains water and keep your hand near Stop.`
           : `This will call the ${confirmedPumpLabel} firmware retract route. Confirm the physical setup is safe and the pump is not handling chemicals.`}
         confirmLabel={pumpConfirmation?.action === 'dispense' ? 'Dispense / test' : 'Retract'}
         tone={pumpConfirmation?.action === 'dispense' ? 'primary' : 'danger'}
@@ -909,11 +895,10 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
           const confirmation = pumpConfirmation;
           if (!confirmation) return;
           setPumpConfirmation(null);
-          const duration = confirmation.actuator === 'pump_a' ? pumpADuration : pumpBDuration;
           void queueCommand(
             confirmation.actuator,
             confirmation.action,
-            confirmation.action === 'dispense' ? { duration_ms: Number(duration) } : {},
+            {},
             `${actuatorLabels[confirmation.actuator]} ${confirmation.action === 'dispense' ? 'dispense/test' : 'retract'}`,
             PUMP_COMMAND_EXPIRY_SECONDS,
           );

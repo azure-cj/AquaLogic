@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## Completed and working locally
 
@@ -39,11 +39,12 @@ Last reviewed: 2026-08-15
   `ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 - v1 admin-only actuator bridge controls are implemented for UV, normal LED, and
   fish feeder, plus a guarded Pump A/B manual-test phase. Pump commands use
-  expiring server records, fixed device/tank mapping, strict dispense cutoffs,
-  idempotent claim/report transitions, validated local state, and the existing
-  append-only command/state audit trail. The bridge preserves sensor polling,
-  uses only the registered device key, keeps pump testing default-off, and never
-  retries a potentially executed hardware call.
+  expiring server records, fixed device/tank mapping, firmware-configured mL
+  doses, bounded completion monitoring, idempotent claim/report transitions,
+  validated local state, and the existing append-only command/state audit trail.
+  The bridge preserves sensor polling, uses only the registered device key,
+  keeps pump testing default-off, and never retries a potentially executed
+  hardware call.
 
 ### Web
 
@@ -89,7 +90,8 @@ Last reviewed: 2026-08-15
 - Run a complete browser regression pass after the latest web refactor.
 - Perform the one-device/one-tank UV/LED/feeder and controlled Pump A/B hardware
   test using the temporary dashboard/API tunnel and confirm local-only ESP32
-  access. Pump testing must use empty syringes or water only.
+  access. Verify the configured firmware-reported mL dose completes before the
+  bridge timeout. Pump testing must use empty syringes or water only.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
 - Reconcile the Flutter app with the backend API contract before implementing
@@ -129,16 +131,17 @@ Last reviewed: 2026-08-15
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
 
-## Validation checkpoint — 2026-08-15
+## Validation checkpoint — 2026-08-17
 
 - Backend: `pytest -q` passed with 49 tests, including fixed device/tank
-  mapping, admin/staff authorization, pump offline rejection and payload
-  bounds, expiry, atomic claim and idempotent reporting, state history, and
-  preserved sensor ingestion.
-- Bridge: `pytest -q ..\bridge\tests` passed with 43 tests covering every
-  allowlisted UV, LED, feeder, and Pump A/B translation, pump safety cutoffs,
-  invalid firmware responses, unreachable endpoints, safe one-shot command
-  behavior, default-off pump configuration, and private-URL validation.
+  mapping, admin/staff authorization, pump offline rejection and empty
+  configured-volume payload validation, expiry, atomic claim and idempotent
+  reporting, state history, and preserved sensor ingestion.
+- Bridge: `pytest -q ..\bridge\tests` passed with 44 tests covering every
+  allowlisted UV, LED, feeder, and Pump A/B translation, configured-volume
+  completion monitoring, one-shot safety-stop behavior, invalid firmware
+  responses, unreachable endpoints, default-off pump configuration, bounded
+  completion timeout configuration, and private-URL validation.
 - Database: `DATABASE_URL=sqlite:///./.actuator-validation.db alembic upgrade
   head` reached `0008_actuator_controls`; the temporary validation database was
   removed afterward.

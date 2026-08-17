@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -130,18 +130,22 @@ the minute. Public image URLs require HTTPS and a configured host allowlist.
   actions. Light timers are bounded to 1–86,400,000 ms; schedule values use
   `HH:MM`; feeder configuration is angle 0–180 and duration 500–60,000 ms with
   exactly three schedule slots. Pump `pump_a` and `pump_b` manual-test actions
-  are limited to `dispense`, `stop`, and `retract`; dispense accepts only a
-  bridge safety cutoff of 100–2,000 ms. The cutoff is stored in the audit
-  payload but is not sent as a firmware query parameter. Pump commands default
-  to a 20-second expiry and may not exceed 30 seconds. Pump queue requests are
-  rejected with `409` while the fixed bridge is offline, so they are never
-  silently left in the queue. Pump schedules, pH auto-dose, and sensor-driven
-  dosing remain out of scope.
+  are limited to `dispense`, `stop`, and `retract`; dispense has an empty
+  payload because the received firmware owns the configured `volume_ml` and
+  exposes no volume-setting endpoint. The bridge waits for the configured
+  volume move to finish and applies a bounded local safety timeout. Pump
+  commands default to a 20-second queue expiry and may not exceed 30 seconds
+  before the bridge claims them. Pump queue requests are rejected with `409`
+  while the fixed bridge is offline, so they are never silently left in the
+  queue. Pump schedules, pH auto-dose, and sensor-driven dosing remain out of
+  scope.
 
 - The received firmware's private pump routes are `/syringeA/status`,
   `/syringeA/dispense`, `/syringeA/stop`, `/syringeA/retract`, and the matching
-  `/syringeB/*` routes. Only the bridge calls them, with no pump query
-  parameters; the browser and backend never connect to the ESP32.
+  `/syringeB/*` routes. Only the bridge calls them. Dispense has no query
+  parameters: the status `volume_ml` is informational, while the firmware's
+  internal step count determines the physical dose. The browser and backend
+  never connect to the ESP32.
 
 - The bridge is the only component that calls local ESP32 routes. The browser
   and backend never connect to the ESP32. Tunnel infrastructure is temporary

@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## Read first
 
@@ -94,11 +94,13 @@ restriction notice and the browser does not fetch actuator endpoints; backend
 authorization remains authoritative and returns 403 for staff actuator requests.
 
 Pump cards are explicitly labeled as manual dry-run tests, require an online
-bridge, offer only bounded dispense durations, show a visible Stop action, and
-require confirmation before Dispense/Test or Retract. The UI explains that the
-tester bridge must have `pump_manual_test_enabled: true` only during empty-
-syringe or water-only checks; pump schedules, pH auto-dose, and automatic dosing
-are not rendered.
+bridge, show the firmware-reported configured dispense volume in mL, show a
+visible Stop action, and require confirmation before Dispense/Test or Retract.
+The UI explains that the tester bridge must have `pump_manual_test_enabled:
+true` only during empty-syringe or water-only checks; pump schedules, pH
+auto-dose, and automatic dosing are not rendered. The current firmware does not
+expose an editable volume endpoint, so the UI does not accept a misleading
+seconds or milliseconds dose input.
 
 The web client never receives an ESP32 URL or device key. It queues commands at
 the AquaLogic backend, which hands them to the existing local-only bridge.

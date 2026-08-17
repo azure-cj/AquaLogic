@@ -25,8 +25,10 @@ FEEDER_ANGLE_MAX = 180
 FEEDER_DURATION_MIN_MS = 500
 FEEDER_DURATION_MAX_MS = 60_000
 FEEDER_SCHEDULE_SLOTS = 3
-PUMP_DISPENSE_MIN_MS = 100
-PUMP_DISPENSE_MAX_MS = 2_000
+PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS = 30
+PUMP_COMPLETION_TIMEOUT_MIN_SECONDS = 5
+PUMP_COMPLETION_TIMEOUT_MAX_SECONDS = 120
+PUMP_STATUS_POLL_INTERVAL_SECONDS = 0.25
 COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 PUMP_ACTUATORS = {"pump_a", "pump_b"}
@@ -106,11 +108,9 @@ def _validate_command_payload(actuator: str, action: str, payload: object) -> di
 
     if actuator in PUMP_ACTUATORS:
         if action == "dispense":
-            _require_keys(payload, {"duration_ms"}, f"{actuator} dispense payload")
-            duration = payload["duration_ms"]
-            if not _is_int(duration) or not PUMP_DISPENSE_MIN_MS <= duration <= PUMP_DISPENSE_MAX_MS:
-                raise BridgeError("Pump dispense duration is outside the conservative test range")
-            return {"duration_ms": duration}
+            if payload:
+                raise BridgeError(f"{actuator} dispense uses the firmware-configured volume and does not accept a payload")
+            return {}
         if action in {"stop", "retract"}:
             if payload:
                 raise BridgeError(f"{actuator}/{action} does not accept a payload")
@@ -248,7 +248,6 @@ def translate_actuator_command(command: object) -> dict[str, Any]:
         "path": path,
         "query": query,
         "expected": expected,
-        "duration_ms": payload.get("duration_ms") if actuator in PUMP_ACTUATORS and action == "dispense" else None,
     }
 
 
@@ -469,8 +468,82 @@ def refresh_actuator_states(config: dict, command_id: str | None = None) -> None
             LOG.warning("Actuator state refresh failed for %s (%s)", actuator, safe_error(error))
 
 
+def _pump_status_path(actuator: str) -> str:
+    if actuator not in PUMP_ACTUATORS:
+        raise BridgeError("Actuator is not a syringe pump")
+    return "/syringeA/status" if actuator == "pump_a" else "/syringeB/status"
+
+
+def _pump_stop_path(actuator: str) -> str:
+    if actuator not in PUMP_ACTUATORS:
+        raise BridgeError("Actuator is not a syringe pump")
+    return "/syringeA/stop" if actuator == "pump_a" else "/syringeB/stop"
+
+
+def _read_pump_statuses(config: dict) -> dict[str, dict[str, Any]]:
+    statuses: dict[str, dict[str, Any]] = {}
+    for actuator in sorted(PUMP_ACTUATORS):
+        raw = fetch_json(
+            _esp32_url(config, _pump_status_path(actuator)),
+            float(config["timeout_seconds"]),
+        )
+        statuses[actuator] = _translate_pump_status(raw)
+    return statuses
+
+
+def _stop_pump_once(config: dict, actuator: str) -> dict[str, Any]:
+    stop_path = _pump_stop_path(actuator)
+    stop_response = fetch_json(
+        _esp32_url(config, stop_path),
+        float(config["timeout_seconds"]),
+    )
+    if stop_response != {"stopped": True}:
+        raise BridgeError("ESP32 returned an invalid pump safety-stop response")
+    return {"path": stop_path, "response": stop_response}
+
+
+def _wait_for_configured_pump_dose(
+    config: dict,
+    actuator: str,
+    initial_status: dict[str, Any],
+) -> dict[str, Any]:
+    """Wait for the firmware's configured volume move, never re-triggering it."""
+    started_at = time.monotonic()
+    timeout_seconds = float(config.get("pump_completion_timeout_seconds", PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS))
+    deadline = started_at + timeout_seconds
+    saw_active = False
+
+    while True:
+        raw = fetch_json(
+            _esp32_url(config, _pump_status_path(actuator)),
+            float(config["timeout_seconds"]),
+        )
+        current_status = _translate_pump_status(raw)
+        if current_status["active"]:
+            saw_active = True
+
+        dose_started = current_status["dose_count"] > initial_status["dose_count"]
+        if not current_status["active"] and (saw_active or dose_started):
+            return {
+                "configured_volume_ml": current_status["volume_ml"],
+                "completion_observed": True,
+                "elapsed_ms": round((time.monotonic() - started_at) * 1000),
+            }
+
+        if time.monotonic() >= deadline:
+            raise BridgeError("Pump configured-volume dispense did not complete before the safety timeout")
+        time.sleep(PUMP_STATUS_POLL_INTERVAL_SECONDS)
+
+
 def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dict[str, Any]:
-    """Make one allowlisted physical call, with a bounded pump test cutoff."""
+    """Make one allowlisted physical call without reissuing ambiguous commands."""
+    initial_pump_status: dict[str, Any] | None = None
+    if translated["actuator"] in PUMP_ACTUATORS and translated["action"] == "dispense":
+        pump_statuses = _read_pump_statuses(config)
+        if any(status["active"] for status in pump_statuses.values()):
+            raise BridgeError("A syringe pump is already active; dispense was not started")
+        initial_pump_status = pump_statuses[translated["actuator"]]
+
     raw_response = fetch_json(
         _esp32_url(config, translated["path"], translated["query"]),
         float(config["timeout_seconds"]),
@@ -480,16 +553,13 @@ def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dic
 
     result: dict[str, Any] = {"path": translated["path"], "response": raw_response}
     if translated["actuator"] in PUMP_ACTUATORS and translated["action"] == "dispense":
-        duration_ms = translated["duration_ms"]
-        time.sleep(duration_ms / 1000)
-        stop_path = "/syringeA/stop" if translated["actuator"] == "pump_a" else "/syringeB/stop"
-        stop_response = fetch_json(
-            _esp32_url(config, stop_path),
-            float(config["timeout_seconds"]),
-        )
-        if stop_response != {"stopped": True}:
-            raise BridgeError("ESP32 returned an invalid pump safety-stop response")
-        result["safety_stop"] = {"path": stop_path, "response": stop_response}
+        try:
+            result.update(_wait_for_configured_pump_dose(config, translated["actuator"], initial_pump_status or {}))
+        except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
+            # A stop is an intentional one-shot safety action after a
+            # physical dispense has started. It is never a retry of dispense.
+            result["safety_stop"] = _stop_pump_once(config, translated["actuator"])
+            raise error
     return result
 
 
@@ -579,6 +649,7 @@ def load_config(path: Path) -> dict:
     config.setdefault("timeout_seconds", 5)
     config.setdefault("actuator_enabled", True)
     config.setdefault("pump_manual_test_enabled", False)
+    config.setdefault("pump_completion_timeout_seconds", PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS)
     numeric_keys = ("poll_interval_seconds", "timeout_seconds")
     if any(isinstance(config[key], bool) or not isinstance(config[key], (int, float)) or config[key] <= 0 for key in numeric_keys):
         raise BridgeError("Polling interval and timeout must be positive")
@@ -586,6 +657,16 @@ def load_config(path: Path) -> dict:
         raise BridgeError("actuator_enabled must be boolean")
     if not isinstance(config["pump_manual_test_enabled"], bool):
         raise BridgeError("pump_manual_test_enabled must be boolean")
+    completion_timeout = config["pump_completion_timeout_seconds"]
+    if (
+        isinstance(completion_timeout, bool)
+        or not isinstance(completion_timeout, (int, float))
+        or not PUMP_COMPLETION_TIMEOUT_MIN_SECONDS <= completion_timeout <= PUMP_COMPLETION_TIMEOUT_MAX_SECONDS
+    ):
+        raise BridgeError(
+            f"pump_completion_timeout_seconds must be between {PUMP_COMPLETION_TIMEOUT_MIN_SECONDS} and "
+            f"{PUMP_COMPLETION_TIMEOUT_MAX_SECONDS}"
+        )
     _validate_private_esp32_url(config["esp32_data_url"])
     _validate_backend_url(config["aqualogic_backend_url"])
     return config

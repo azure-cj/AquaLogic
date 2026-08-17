@@ -191,6 +191,26 @@ public ESP32 access remain excluded. A physical timeout or ambiguous response
 is reported as failed and never retried automatically; the tester must use the
 visible Stop control or inspect the hardware locally.
 
+## 2026-08-17 — Execute pump doses by firmware-configured volume
+
+**Decision:** Replace the dashboard and backend pump millisecond cutoff payload
+with an empty `dispense` payload. The bridge reads both pump statuses, refuses
+to start while either pump is active, triggers the selected firmware dispense
+route once, and polls its status until the configured `volume_ml` move reports
+complete. A bounded bridge timeout may issue one intentional safety stop.
+
+**Reason:** The current calibrated firmware computes the step target from its
+internal `syringe*DispenseML` and `syringe*StepsPerML` values, but its dispense
+routes accept no query parameter. A millisecond value therefore measures bridge
+runtime rather than the configured volume and cannot be presented as an exact
+mL dose.
+
+**Consequences:** The UI can show and execute the firmware-reported configured
+volume, but cannot edit it yet. Adding editable mL configuration requires a
+separately approved firmware endpoint and persistence review. Pump tests remain
+empty-syringe/water-only, default-off, admin-only, and never automatically
+retry a physical dispense.
+
 ## Adding a decision
 
 Use this format:

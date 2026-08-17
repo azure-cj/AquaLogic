@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## System overview
 
@@ -98,10 +98,14 @@ The ESP32 bridge is temporary test infrastructure. It polls the local firmware
 `/data` endpoint and forwards four installed sensors, then polls pending admin
 commands through the backend. UV, normal LED, feeder, and manual-test-only
 Syringe Pump A/B actions are allowlisted. Pump dispense sends the firmware's
-exact `/syringeA/dispense` or `/syringeB/dispense` route once, waits only for
-the validated short cutoff, and sends the matching stop route as a safety
-cutoff. Hardware calls are not automatically retried after an ambiguous
-response because the actuator may already have run. Dissolved oxygen and
+exact `/syringeA/dispense` or `/syringeB/dispense` route once, then polls the
+matching status route until the firmware-configured `volume_ml` move reports
+complete. If completion is not observed before the bounded local safety
+timeout, the bridge sends one intentional matching stop request. Hardware
+calls are not automatically retried after an ambiguous response because the
+actuator may already have run. The current firmware does not expose a
+volume-setting route, so the dashboard displays the firmware-reported volume
+and does not accept a fake millisecond dose value. Dissolved oxygen and
 ammonia remain nullable/unavailable, are skipped by threshold evaluation, and
 have no actuator or command path.
 

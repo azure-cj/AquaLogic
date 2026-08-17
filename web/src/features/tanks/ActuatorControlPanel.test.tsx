@@ -153,14 +153,15 @@ describe('admin actuator controls', () => {
     expect(document.querySelector('.admin-toast')).toBeInTheDocument();
   });
 
-  it('requires confirmation for pump dispense and retract, and queues a bounded test command', async () => {
+  it('requires confirmation for pump dispense and retract, and queues the configured-volume test command', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.selectOptions(await screen.findByRole('combobox', { name: 'Syringe Pump A test duration' }), '1000');
+    expect((await screen.findAllByText('Volume-controlled dispense')).length).toBe(2);
+    expect(screen.getAllByText('1.00 mL')).toHaveLength(4);
     await user.click(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' }));
     let dialog = screen.getByRole('alertdialog');
     expect(dialog).toHaveTextContent('Manual test only');
-    expect(dialog).toHaveTextContent('maximum 1000 ms');
+    expect(dialog).toHaveTextContent('configured 1.00 mL dose');
     await user.click(within(dialog).getByRole('button', { name: 'Dispense / test' }));
     await screen.findByText('Syringe Pump A dispense/test command queued. The bridge will report the result.');
 
@@ -171,7 +172,7 @@ describe('admin actuator controls', () => {
     await screen.findByText('Syringe Pump A retract command queued. The bridge will report the result.');
 
     const calls = vi.mocked(api).mock.calls.filter(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
-    expect(calls.some(([, init]) => init?.body?.toString().includes('"actuator":"pump_a"') && init.body.toString().includes('"duration_ms":1000') && init.body.toString().includes('"expires_in_seconds":20'))).toBe(true);
+    expect(calls.some(([, init]) => init?.body?.toString().includes('"actuator":"pump_a"') && init.body.toString().includes('"action":"dispense"') && init.body.toString().includes('"payload":{}') && init.body.toString().includes('"expires_in_seconds":20'))).toBe(true);
     expect(calls.some(([, init]) => init?.body?.toString().includes('"action":"retract"'))).toBe(true);
   });
 

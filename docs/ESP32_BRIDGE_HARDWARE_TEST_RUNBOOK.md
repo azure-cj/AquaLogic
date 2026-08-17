@@ -1,7 +1,7 @@
 # ESP32 bridge hardware-test runbook
 
 Status: Temporary local-first sensor and actuator test procedure
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## Safety and scope
 
@@ -89,7 +89,8 @@ Fill placeholders only with the local test values:
   "poll_interval_seconds": 15,
   "timeout_seconds": 5,
   "actuator_enabled": true,
-  "pump_manual_test_enabled": false
+  "pump_manual_test_enabled": false,
+  "pump_completion_timeout_seconds": 30
 }
 ```
 
@@ -110,11 +111,13 @@ calls only the allowlisted local routes, and reports state/results. It does not
 print the device key or Wi-Fi configuration.
 
 For a controlled pump test only, confirm the physical setup is empty or
-water-only, then change `pump_manual_test_enabled` to `true`. Select a 100,
-250, 500, 1,000, 1,500, or 2,000 ms dispense cutoff in the admin dashboard.
-The bridge calls the exact dispense endpoint once and then the matching stop
-endpoint after the cutoff; it never retries either physical call. Return the
-flag to `false` after testing.
+water-only, then change `pump_manual_test_enabled` to `true`. The dashboard
+shows the firmware-reported configured volume in mL; **Dispense / test** starts
+that configured dose rather than selecting a seconds or milliseconds cutoff.
+The bridge waits for the matching status route to report completion. If the
+configured move does not complete before `pump_completion_timeout_seconds`,
+the bridge sends one intentional safety stop and reports failure; it never
+retries dispense. Return the flag to `false` after testing.
 
 ## Dashboard verification
 

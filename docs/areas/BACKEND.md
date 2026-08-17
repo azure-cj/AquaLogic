@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## Read first
 
@@ -30,7 +30,8 @@ Last reviewed: 2026-08-15
   current actuator state, and append-only actuator state history.
 - `backend/app/schemas/device.py`: strict UV, normal LED, feeder, and guarded
   Pump A/B command/state contracts, including timer, schedule, firmware
-  configuration bounds, short pump dispense cutoffs, and pump expiry limits.
+  configuration bounds, configured-volume dispense monitoring, and pump expiry
+  limits.
 - `backend/alembic/versions/0008_actuator_controls.py`: actuator command/state
   schema migration.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.

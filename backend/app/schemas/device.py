@@ -9,8 +9,6 @@ FEEDER_ANGLE_MIN = 0
 FEEDER_ANGLE_MAX = 180
 FEEDER_DURATION_MIN_MS = 500
 FEEDER_DURATION_MAX_MS = 60_000
-PUMP_DISPENSE_MIN_MS = 100
-PUMP_DISPENSE_MAX_MS = 2_000
 PUMP_COMMAND_EXPIRY_DEFAULT_SECONDS = 20
 PUMP_COMMAND_EXPIRY_MAX_SECONDS = 30
 FEEDER_SCHEDULE_SLOTS = 3
@@ -68,14 +66,6 @@ class FeederSchedulePayload(BaseModel):
     slots: list[FeederScheduleSlot] = Field(min_length=FEEDER_SCHEDULE_SLOTS, max_length=FEEDER_SCHEDULE_SLOTS)
 
 
-class PumpDispensePayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    # This is a bridge safety cutoff, not a firmware query parameter. The
-    # received firmware always starts its configured move at /dispense.
-    duration_ms: StrictInt = Field(ge=PUMP_DISPENSE_MIN_MS, le=PUMP_DISPENSE_MAX_MS)
-
-
 class ActuatorCommandCreate(BaseModel):
     """Admin command input; payload is normalized to the bridge contract."""
 
@@ -121,7 +111,13 @@ class ActuatorCommandCreate(BaseModel):
         elif self.action == "schedule":
             self.payload = FeederSchedulePayload.model_validate(self.payload).model_dump()
         elif self.action == "dispense":
-            self.payload = PumpDispensePayload.model_validate(self.payload).model_dump()
+            # The received firmware's dispense route starts the volume
+            # configured inside the firmware and accepts no query payload.
+            # The bridge waits for that configured move to finish; a time
+            # value here would be a safety cutoff, not a measured volume.
+            if self.payload:
+                raise ValueError("Pump dispense uses the firmware-configured volume and does not accept a payload")
+            self.payload = {}
         elif self.action in {"stop", "retract"}:
             if self.payload:
                 raise ValueError("This pump action does not accept a payload")

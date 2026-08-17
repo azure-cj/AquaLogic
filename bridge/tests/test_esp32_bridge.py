@@ -59,6 +59,19 @@ def test_pump_manual_test_flag_defaults_to_false(tmp_path):
     }))
     config = bridge.load_config(path)
     assert config["pump_manual_test_enabled"] is False
+    assert config["pump_completion_timeout_seconds"] == bridge.PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS
+
+
+def test_pump_completion_timeout_is_bounded(tmp_path):
+    path = tmp_path / "bridge-config.json"
+    path.write_text(json.dumps({
+        "esp32_data_url": "http://esp32/data",
+        "aqualogic_backend_url": "https://api.example",
+        "device_key": "key",
+        "pump_completion_timeout_seconds": 121,
+    }))
+    with pytest.raises(bridge.BridgeError, match="pump_completion_timeout_seconds"):
+        bridge.load_config(path)
 
 
 def command(actuator, action, payload):
@@ -86,10 +99,10 @@ def command(actuator, action, payload):
         (command("feeder", "feed_now", {}), "/feeder/feed", {}),
         (command("feeder", "config", {"open_angle": 125, "duration_ms": 1000}), "/feeder/config", {"angle": "125", "duration": "1000"}),
         (command("feeder", "schedule", {"slots": [{"enabled": True, "time": "08:00"}, {"enabled": False, "time": "12:30"}, {"enabled": True, "time": "18:00"}]}), "/feeder/schedule", {"h0": "08", "m0": "00", "e0": "1", "h1": "12", "m1": "30", "e1": "0", "h2": "18", "m2": "00", "e2": "1"}),
-        (command("pump_a", "dispense", {"duration_ms": 500}), "/syringeA/dispense", {}),
+        (command("pump_a", "dispense", {}), "/syringeA/dispense", {}),
         (command("pump_a", "stop", {}), "/syringeA/stop", {}),
         (command("pump_a", "retract", {}), "/syringeA/retract", {}),
-        (command("pump_b", "dispense", {"duration_ms": 2_000}), "/syringeB/dispense", {}),
+        (command("pump_b", "dispense", {}), "/syringeB/dispense", {}),
         (command("pump_b", "stop", {}), "/syringeB/stop", {}),
         (command("pump_b", "retract", {}), "/syringeB/retract", {}),
     ],
@@ -109,8 +122,8 @@ def test_translates_each_allowlisted_firmware_endpoint(raw, path, query):
         {**command("uv", "on", {}), "expires_at": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()},
         command("uv", "timer", {"duration_ms": 86_400_001}),
         command("feeder", "config", {"open_angle": 181, "duration_ms": 1000}),
-        command("pump_a", "dispense", {"duration_ms": 99}),
-        command("pump_b", "dispense", {"duration_ms": 2_001}),
+        command("pump_a", "dispense", {"volume_ml": 1}),
+        command("pump_b", "dispense", {"unexpected": True}),
         command("pump_a", "stop", {"unexpected": True}),
     ],
 )
@@ -177,29 +190,56 @@ def test_successful_command_is_sent_once_and_reported():
     succeeded.assert_called_once()
 
 
-def test_pump_dispense_is_cut_off_once_without_retrying_dispense():
+def pump_status(*, active=False, dose_count=2, volume_ml=1.0):
+    return {
+        "active": active,
+        "dose_count": dose_count,
+        "last_dispensed": "12:34:56",
+        "volume_ml": volume_ml,
+        "schedule": [
+            {"hour": 8, "minute": 0, "enabled": False},
+            {"hour": 12, "minute": 30, "enabled": False},
+            {"hour": 18, "minute": 0, "enabled": False},
+        ],
+    }
+
+
+def test_pump_dispense_waits_for_configured_volume_without_retrying_dispense():
     config = {
         "esp32_data_url": "http://192.168.1.50/data",
         "aqualogic_backend_url": "https://api.example/api",
         "device_key": "key",
         "timeout_seconds": 1,
         "pump_manual_test_enabled": True,
+        "pump_completion_timeout_seconds": 5,
     }
-    pending = command("pump_a", "dispense", {"duration_ms": 500})
+    pending = command("pump_a", "dispense", {})
     with patch.object(bridge, "_pending_commands", return_value=[pending]), \
         patch.object(bridge, "_mark_executing"), \
         patch.object(bridge, "refresh_actuator_states") as refresh, \
         patch.object(bridge, "_report_succeeded") as succeeded, \
-        patch.object(bridge, "fetch_json", side_effect=[{"dispensed": True}, {"stopped": True}]) as fetch, \
+        patch.object(bridge, "fetch_json", side_effect=[
+            pump_status(dose_count=2),
+            pump_status(dose_count=2),
+            {"dispensed": True},
+            pump_status(active=True, dose_count=3),
+            pump_status(active=False, dose_count=3),
+        ]) as fetch, \
         patch.object(bridge.time, "sleep") as sleep:
         assert bridge.process_pending_actuator_commands(config) == 1
     assert [call.args[0] for call in fetch.call_args_list] == [
+        "http://192.168.1.50/syringeA/status",
+        "http://192.168.1.50/syringeB/status",
         "http://192.168.1.50/syringeA/dispense",
-        "http://192.168.1.50/syringeA/stop",
+        "http://192.168.1.50/syringeA/status",
+        "http://192.168.1.50/syringeA/status",
     ]
-    sleep.assert_called_once_with(0.5)
+    sleep.assert_called_once_with(bridge.PUMP_STATUS_POLL_INTERVAL_SECONDS)
     refresh.assert_called_once_with(config, command_id=pending["command_id"])
     succeeded.assert_called_once()
+    assert succeeded.call_args.args[1] == pending["command_id"]
+    assert succeeded.call_args.args[2]["configured_volume_ml"] == 1.0
+    assert succeeded.call_args.args[2]["completion_observed"] is True
 
 
 def test_invalid_pump_safety_stop_reports_failure_without_retrying():
@@ -209,17 +249,27 @@ def test_invalid_pump_safety_stop_reports_failure_without_retrying():
         "device_key": "key",
         "timeout_seconds": 1,
         "pump_manual_test_enabled": True,
+        "pump_completion_timeout_seconds": 5,
     }
-    pending = command("pump_b", "dispense", {"duration_ms": 250})
+    pending = command("pump_b", "dispense", {})
     with patch.object(bridge, "_pending_commands", return_value=[pending]), \
         patch.object(bridge, "_mark_executing"), \
         patch.object(bridge, "_report_failed") as failed, \
         patch.object(bridge, "refresh_actuator_states"), \
-        patch.object(bridge, "fetch_json", side_effect=[{"dispensed": True}, {"unexpected": True}]) as fetch, \
-        patch.object(bridge.time, "sleep"):
+        patch.object(bridge, "fetch_json", side_effect=[
+            pump_status(dose_count=2),
+            pump_status(dose_count=2),
+            {"dispensed": True},
+            pump_status(active=True, dose_count=3),
+            {"stopped": True},
+        ]) as fetch, \
+        patch.object(bridge.time, "monotonic", side_effect=[0, 6]):
         assert bridge.process_pending_actuator_commands(config) == 0
     assert [call.args[0] for call in fetch.call_args_list] == [
+        "http://192.168.1.50/syringeA/status",
+        "http://192.168.1.50/syringeB/status",
         "http://192.168.1.50/syringeB/dispense",
+        "http://192.168.1.50/syringeB/status",
         "http://192.168.1.50/syringeB/stop",
     ]
     failed.assert_called_once()

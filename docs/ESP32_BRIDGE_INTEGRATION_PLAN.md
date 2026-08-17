@@ -2,7 +2,7 @@
 
 Status: v1 UV/LED/feeder controls plus Pump A/B manual-test bridge implemented
 for temporary hardware testing
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 ## Goal and boundary
 
@@ -44,11 +44,11 @@ translation is intentionally exact:
 | Feeder configuration | `GET /feeder/config` | `angle`, `duration` milliseconds | `{"config":"saved"}` |
 | Feeder schedule | `GET /feeder/schedule` | `h0/m0/e0` through `h2/m2/e2` | `{"schedule":"saved"}` |
 | Pump A status | `GET /syringeA/status` | none | `active`, `dose_count`, `last_dispensed`, `volume_ml`, three schedule slots |
-| Pump A dispense test | `GET /syringeA/dispense` | none; bridge applies cutoff locally | `{"dispensed":true}` |
+| Pump A dispense test | `GET /syringeA/dispense` | none; bridge waits for configured `volume_ml` completion | `{"dispensed":true}` |
 | Pump A stop | `GET /syringeA/stop` | none | `{"stopped":true}` |
 | Pump A retract | `GET /syringeA/retract` | none | `{"retracted":true}` |
 | Pump B status | `GET /syringeB/status` | none | same pump status shape |
-| Pump B dispense test | `GET /syringeB/dispense` | none; bridge applies cutoff locally | `{"dispensed":true}` |
+| Pump B dispense test | `GET /syringeB/dispense` | none; bridge waits for configured `volume_ml` completion | `{"dispensed":true}` |
 | Pump B stop | `GET /syringeB/stop` | none | `{"stopped":true}` |
 | Pump B retract | `GET /syringeB/retract` | none | `{"retracted":true}` |
 
@@ -108,9 +108,10 @@ available through an expandable detail view.
 Validation limits are deliberately narrower than an unconstrained query
 string: light timers are 1–86,400,000 ms, schedule times are `HH:MM`, feeder
 angles are 0–180, feeder durations are 500–60,000 ms, and the feeder has exactly
-three schedule slots. Pump dispense cutoffs are 100–2,000 ms, pump commands
-expire within 30 seconds, and pump queue requests require a fresh bridge
-heartbeat.
+three schedule slots. Pump dispense payloads are empty because the current
+firmware owns the configured volume; the bridge completion timeout is bounded
+to the tester configuration, pump commands expire within 30 seconds, and pump
+queue requests require a fresh bridge heartbeat.
 
 ## Bridge implementation
 
@@ -122,9 +123,10 @@ Each cycle:
 2. polls `/device-ingestion/actuators/pending`;
 3. validates the command, expiry, and pump safety flag locally;
 4. claims it as `executing`;
-5. makes the matching allowlisted ESP32 actuator request; a successful pump
-   dispense then waits for its bounded cutoff and makes one intentional matching
-   stop request; and
+5. makes the matching allowlisted ESP32 actuator request; a pump dispense then
+   polls its status until the firmware-configured volume completes and makes
+   one intentional matching stop request only if the bounded safety timeout is
+   reached; and
 6. reports success/failure and refreshes the corresponding local state.
 
 Hardware calls are never retried automatically after a timeout or ambiguous

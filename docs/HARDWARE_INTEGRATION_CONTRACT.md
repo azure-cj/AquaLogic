@@ -1,7 +1,7 @@
 # AquaLogic Hardware Integration Contract
 
 Status: Current v1 bridge contract for temporary hardware testing
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-17
 
 This document is the shared boundary between the ESP32 firmware and the
 software system. The v1 bridge uses the received firmware as a read-only
@@ -97,17 +97,22 @@ Allowed action payloads are:
 - feeder: `feed_now`, `config` with `open_angle` 0–180 and `duration_ms`
   500–60,000, and `schedule` with exactly three `{enabled,time}` slots.
 
-Pump A/B manual tests add `dispense` with a 100–2,000 ms bridge safety
-cutoff, plus payload-free `stop` and `retract`; the cutoff is not sent to
-firmware.
+Pump A/B manual tests add payload-free `dispense`, `stop`, and `retract`.
+The firmware's `volume_ml` status value describes the configured dose; the
+current dispense routes accept no volume parameter. The bridge waits for that
+configured move to report complete and applies a bounded local safety timeout,
+with one intentional stop only when completion is not observed. A future
+editable dose volume requires a separately reviewed firmware configuration
+endpoint and is not implied by this contract.
 
 The device-key bridge contract claims pending commands at
 `/device-ingestion/actuators/pending`, marks them executing before a local
 request, then reports success/failure and posts refreshed state to
 `/device-ingestion/actuator-state`. Claim and final reports are idempotent.
-The bridge makes one physical request per command, except for a successful pump
-dispense's intentional matching stop cutoff, and never retries a request whose
-execution may already have happened.
+The bridge makes one physical dispense request per command, with status polling
+and at most one intentional matching safety stop if the configured move does
+not complete. It never retries a request whose execution may already have
+happened.
 
 ## Firmware actuator boundary used by v1
 

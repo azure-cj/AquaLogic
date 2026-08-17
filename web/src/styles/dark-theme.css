@@ -87,7 +87,6 @@
 :root[data-theme='dark'] .compact-select select,
 :root[data-theme='dark'] .search-field input,
 :root[data-theme='dark'] .tank-picker > summary,
-:root[data-theme='dark'] .pump-duration-field select,
 :root[data-theme='dark'] .actuator-history-filter select,
 :root[data-theme='dark'] .actuator-card input[type='number'],
 :root[data-theme='dark'] .actuator-card input[type='time'] {
