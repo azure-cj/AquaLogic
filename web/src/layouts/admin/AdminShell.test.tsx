@@ -1,4 +1,5 @@
 import AdminShell from './AdminShell';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -38,19 +39,21 @@ vi.mock('@/shared/api/client', async (importOriginal) => {
 function renderShell(initialEntry = '/admin/fleet') {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <Routes>
-          <Route path="/admin" element={<AdminShell />}>
-            <Route path="fleet" element={<div>Fleet content</div>} />
-            <Route path="*" element={<div>Admin content</div>} />
-          </Route>
-          <Route path="/admin/login" element={<div>Login destination</div>} />
-          <Route
-            path="/admin/change-password"
-            element={<div>Password destination</div>}
-          />
-        </Routes>
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route path="/admin" element={<AdminShell />}>
+              <Route path="fleet" element={<div>Fleet content</div>} />
+              <Route path="*" element={<div>Admin content</div>} />
+            </Route>
+            <Route path="/admin/login" element={<div>Login destination</div>} />
+            <Route
+              path="/admin/change-password"
+              element={<div>Password destination</div>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -91,6 +94,7 @@ describe('admin shell guards and navigation', () => {
     expect(screen.getAllByText('Account center')).not.toHaveLength(0);
     expect(screen.queryByText('Security')).not.toBeInTheDocument();
     expect(screen.queryByText('Staff & roles')).not.toBeInTheDocument();
+    expect(screen.queryByText('Actuators')).not.toBeInTheDocument();
     expect(screen.queryByText('Thresholds')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Configure' })).not.toBeInTheDocument();
     expect(document.querySelector('.island-nav')).not.toHaveClass('island-nav-count-clustered');
@@ -106,6 +110,7 @@ describe('admin shell guards and navigation', () => {
       'Fish species',
       'Customers',
       'Account center',
+      'Actuators',
       'Thresholds',
     ]);
     expect(adminNavigationItemCount).toBeLessThanOrEqual(NAVIGATION_FLAT_ITEM_LIMIT);

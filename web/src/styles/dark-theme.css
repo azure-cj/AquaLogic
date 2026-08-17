@@ -1,0 +1,876 @@
+/* Dark theme overrides. Keep the light palette as the default in tokens.css. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  background: var(--canvas);
+  color: var(--text);
+  --canvas: #08161f;
+  --surface: #10252f;
+  --surface-soft: #142e39;
+  --surface-raised: #193641;
+  --teal-700: #6bd8d0;
+  --teal-600: #3dc2b8;
+  --teal-100: #16434a;
+  --text: #e8f4f3;
+  --muted: #a3bbc0;
+  --border: #2c4953;
+  --border-strong: #476670;
+  --input-background: #0d2029;
+  --normal: #65d2a0;
+  --warning: #f2b65b;
+  --critical: #f18490;
+  --offline: #a4b8be;
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  --shadow-strong: 0 24px 54px rgba(0, 0, 0, 0.42);
+  --navy-950: #061019;
+  --navy-900: #0a202d;
+  --navy-800: #153748;
+}
+
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] #root {
+  background: var(--canvas);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] ::selection {
+  background: rgba(61, 194, 184, 0.32);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .muted {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] :focus-visible {
+  outline-color: rgba(107, 216, 208, 0.62);
+}
+
+/* Shared controls, panels, tables, feedback, and overlays. */
+:root[data-theme='dark'] .button-primary {
+  color: #062b2d;
+  box-shadow: 0 8px 20px rgba(61, 194, 184, 0.18);
+}
+
+:root[data-theme='dark'] .button-primary:hover {
+  background: #8be3dc;
+}
+
+:root[data-theme='dark'] .button-secondary,
+:root[data-theme='dark'] .icon-button {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .button-secondary:hover,
+:root[data-theme='dark'] .icon-button:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .button-quiet-danger {
+  border-color: #75434d;
+  background: #3a2028;
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .button-danger {
+  background: #c85a68;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .field input,
+:root[data-theme='dark'] .field select,
+:root[data-theme='dark'] .field textarea,
+:root[data-theme='dark'] .range-select select,
+:root[data-theme='dark'] .compact-select select,
+:root[data-theme='dark'] .search-field input,
+:root[data-theme='dark'] .tank-picker > summary,
+:root[data-theme='dark'] .pump-duration-field select,
+:root[data-theme='dark'] .actuator-history-filter select,
+:root[data-theme='dark'] .actuator-card input[type='number'],
+:root[data-theme='dark'] .actuator-card input[type='time'] {
+  border-color: var(--border-strong);
+  background: var(--input-background);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] input::placeholder,
+:root[data-theme='dark'] textarea::placeholder {
+  color: #78949c;
+}
+
+:root[data-theme='dark'] option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .panel,
+:root[data-theme='dark'] .stat-card,
+:root[data-theme='dark'] .analytics-stats > div,
+:root[data-theme='dark'] .metric-tabs,
+:root[data-theme='dark'] .metric-preview,
+:root[data-theme='dark'] .tank-summary-card,
+:root[data-theme='dark'] .actuator-tank-card,
+:root[data-theme='dark'] .actuator-summary-card,
+:root[data-theme='dark'] .actuator-card,
+:root[data-theme='dark'] .threshold-card {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme='dark'] .panel-header,
+:root[data-theme='dark'] .data-row,
+:root[data-theme='dark'] .alert-feed-item,
+:root[data-theme='dark'] .security-session,
+:root[data-theme='dark'] .security-event,
+:root[data-theme='dark'] .resource-row {
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .data-head,
+:root[data-theme='dark'] .bridge-device-summary,
+:root[data-theme='dark'] .actuator-history-summary,
+:root[data-theme='dark'] .actuator-history-list,
+:root[data-theme='dark'] .actuator-history-row,
+:root[data-theme='dark'] .command-details-grid > div {
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .data-row {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] a.data-row:hover,
+:root[data-theme='dark'] .uptime-row:hover,
+:root[data-theme='dark'] .uptime-row:focus-visible {
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .tank-mark,
+:root[data-theme='dark'] .resource-avatar,
+:root[data-theme='dark'] .threshold-icon,
+:root[data-theme='dark'] .stat-icon {
+  border-color: var(--border-strong);
+  background: var(--teal-100);
+}
+
+:root[data-theme='dark'] .status-badge {
+  color: color-mix(in srgb, var(--badge-color) 72%, #f2fbfa);
+  background: color-mix(in srgb, var(--badge-color) 18%, var(--surface));
+}
+
+:root[data-theme='dark'] .alert-warning,
+:root[data-theme='dark'] .notice-warning,
+:root[data-theme='dark'] .actuator-offline-warning,
+:root[data-theme='dark'] .pump-safety-warning {
+  border-color: #795d2c;
+  background: #342917;
+  color: #f5ca78;
+}
+
+:root[data-theme='dark'] .alert-critical,
+:root[data-theme='dark'] .notice-error {
+  border-color: #75434d;
+  background: #3a2028;
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .notice {
+  border-color: #2d6857;
+  background: #17372f;
+  color: #8be0bd;
+}
+
+:root[data-theme='dark'] .state-icon {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .state-error .state-icon {
+  background: #3a2028;
+  color: var(--critical);
+}
+
+:root[data-theme='dark'] .spinner {
+  border-color: #31515b;
+  border-top-color: var(--teal-600);
+}
+
+:root[data-theme='dark'] .route-skeleton-heading,
+:root[data-theme='dark'] .route-skeleton-subheading,
+:root[data-theme='dark'] .route-skeleton-grid > span,
+:root[data-theme='dark'] .route-skeleton-panel {
+  border-color: rgba(55, 86, 96, 0.7);
+  background: linear-gradient(
+    90deg,
+    rgba(16, 37, 47, 0.7) 20%,
+    rgba(31, 67, 77, 0.95) 50%,
+    rgba(16, 37, 47, 0.7) 80%
+  );
+}
+
+:root[data-theme='dark'] .admin-toast {
+  border-color: #2d6857;
+  background: #17372f;
+  color: #8be0bd;
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme='dark'] .admin-toast-warning {
+  border-color: #795d2c;
+  background: #342917;
+  color: #f5ca78;
+}
+
+:root[data-theme='dark'] .admin-toast-error {
+  border-color: #75434d;
+  background: #3a2028;
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .modal-backdrop,
+:root[data-theme='dark'] .nav-scrim {
+  background: rgba(1, 8, 13, 0.72);
+}
+
+:root[data-theme='dark'] .drawer,
+:root[data-theme='dark'] .drawer-footer {
+  background: var(--surface);
+}
+
+:root[data-theme='dark'] .drawer {
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.46);
+}
+
+:root[data-theme='dark'] .toggle-field,
+:root[data-theme='dark'] .care-filter button,
+:root[data-theme='dark'] .command-status-detail {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .toggle-field > span {
+  background: #49616a;
+}
+
+:root[data-theme='dark'] .toggle-field > span::after {
+  background: #eaf7f5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Admin navigation keeps its dark glass identity in both themes. */
+:root[data-theme='dark'] .floating-island {
+  background: rgba(7, 26, 38, 0.92);
+  border-color: rgba(107, 216, 208, 0.3);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+:root[data-theme='dark'] .cluster-menu,
+:root[data-theme='dark'] .mobile-nav-drawer {
+  background: rgba(7, 26, 38, 0.98);
+  border-color: rgba(107, 216, 208, 0.3);
+  box-shadow: var(--shadow-strong);
+}
+
+/* Analytics and fleet visual surfaces. */
+:root[data-theme='dark'] .tank-picker-popover,
+:root[data-theme='dark'] .analytics-tooltip {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme='dark'] .metric-tabs button.active {
+  border-color: var(--border-strong);
+  background: var(--teal-100);
+}
+
+:root[data-theme='dark'] .analytics-alert-marker > circle:first-of-type {
+  stroke: var(--surface);
+}
+
+:root[data-theme='dark'] .analytics-alert-marker .marker-core,
+:root[data-theme='dark'] .legend-dot {
+  fill: var(--surface);
+  border-color: var(--surface);
+}
+
+:root[data-theme='dark'] .analytics-page .recharts-cartesian-grid line {
+  stroke: #2c4953 !important;
+}
+
+:root[data-theme='dark'] .analytics-page .recharts-cartesian-axis-tick-value {
+  fill: #a3bbc0 !important;
+}
+
+:root[data-theme='dark'] .progress-track,
+:root[data-theme='dark'] .uptime-bars > span.no-report {
+  background: #29454e;
+}
+
+:root[data-theme='dark'] .segmented button.active {
+  background: var(--surface-raised);
+}
+
+:root[data-theme='dark'] .uptime-range {
+  background: var(--input-background);
+  color: var(--text);
+}
+
+/* Tank and actuator-specific state surfaces. */
+:root[data-theme='dark'] .tank-info-list div,
+:root[data-theme='dark'] .actuator-tank-scope span,
+:root[data-theme='dark'] .actuator-summary-stats span,
+:root[data-theme='dark'] .actuator-meta-grid span,
+:root[data-theme='dark'] .care-check,
+:root[data-theme='dark'] .reading-item,
+:root[data-theme='dark'] .command-details-grid > div {
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .tank-actuator-panel,
+:root[data-theme='dark'] .actuator-history,
+:root[data-theme='dark'] .pump-test-section {
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .care-filter {
+  border-color: var(--border);
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .care-filter button.active {
+  background: var(--surface-raised);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme='dark'] .bridge-online,
+:root[data-theme='dark'] .actuator-state.is-on,
+:root[data-theme='dark'] .care-status-suitable {
+  background: #173c31;
+  color: #8be0bd;
+}
+
+:root[data-theme='dark'] .bridge-offline,
+:root[data-theme='dark'] .command-details-error,
+:root[data-theme='dark'] .actuator-state.is-off,
+:root[data-theme='dark'] .care-status-unavailable {
+  background: #3a2028;
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .bridge-unknown,
+:root[data-theme='dark'] .actuator-state.is-unknown {
+  background: #3b301c;
+  color: #f5ca78;
+}
+
+:root[data-theme='dark'] .pump-card .actuator-meta-grid span:nth-child(3),
+:root[data-theme='dark'] .pump-card .actuator-meta-grid span:nth-child(4),
+:root[data-theme='dark'] .actuator-summary-pump-list span {
+  border-color: var(--border);
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .pump-card .actuator-meta-grid span:nth-child(4) strong {
+  color: var(--critical);
+}
+
+:root[data-theme='dark'] .pump-disabled-note {
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .command-history-help-trigger {
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .command-history-tooltip {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme='dark'] .command-history-tooltip::before {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+:root[data-theme='dark'] .command-details-summary,
+:root[data-theme='dark'] .command-details-result {
+  background: #17372f;
+  color: #8be0bd;
+}
+
+:root[data-theme='dark'] .command-expired-badge {
+  border-color: #66527a;
+  background: #302640;
+  color: #d9b9f0;
+}
+
+/* Fish directory variants use their own scoped palettes. */
+:root[data-theme='dark'] .compact-fish {
+  --compact-ink: #e8f4f3;
+  --compact-muted: #a3bbc0;
+  --compact-teal: #6bd8d0;
+  --compact-teal-dark: #8be3dc;
+  --compact-border: #2c4953;
+}
+
+:root[data-theme='dark'] .fdg-page {
+  --fdg-navy: #e8f4f3;
+  --fdg-teal: #6bd8d0;
+  --fdg-teal-dark: #8be3dc;
+  --fdg-muted: #a3bbc0;
+  --fdg-border: #2c4953;
+}
+
+:root[data-theme='dark'] .fdg-toolbar,
+:root[data-theme='dark'] .compact-fish__search {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme='dark'] .fdg-search {
+  background: var(--input-background);
+}
+
+:root[data-theme='dark'] .fdg-search input,
+:root[data-theme='dark'] .compact-fish__search input {
+  background: transparent;
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .fdg-search input::placeholder,
+:root[data-theme='dark'] .compact-fish__search input::placeholder {
+  color: #78949c;
+}
+
+:root[data-theme='dark'] .fdg-filters {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .fdg-filters select,
+:root[data-theme='dark'] .fdg-toggle {
+  border-color: var(--border-strong);
+  background: var(--input-background);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .fdg-toggle > span {
+  background: #49616a;
+}
+
+:root[data-theme='dark'] .fdg-toggle > span::after {
+  background: #eaf7f5;
+}
+
+:root[data-theme='dark'] .fdg-results-note strong,
+:root[data-theme='dark'] .fdg-column-labels,
+:root[data-theme='dark'] .compact-fish__table-head {
+  color: #a3bbc0;
+}
+
+:root[data-theme='dark'] .fdg-group-meta {
+  color: #a3bbc0;
+}
+
+:root[data-theme='dark'] .fdg-description,
+:root[data-theme='dark'] .compact-fish__description {
+  color: #a3bbc0;
+}
+
+:root[data-theme='dark'] .fdg-species-row + .fdg-species-row,
+:root[data-theme='dark'] .compact-fish__row {
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .fdg-group-icon,
+:root[data-theme='dark'] .compact-fish__thumbnail {
+  border-color: #2d686d;
+  background: #16434a;
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .fdg-omnivore,
+:root[data-theme='dark'] .compact-fish__diet-badge--omnivore {
+  border-color: #2d686d;
+  background: #163e48;
+  color: #9ce8df;
+}
+
+:root[data-theme='dark'] .fdg-carnivore,
+:root[data-theme='dark'] .compact-fish__diet-badge--carnivore {
+  border-color: #754b43;
+  background: #422a2b;
+  color: #f4b7a9;
+}
+
+:root[data-theme='dark'] .fdg-herbivore,
+:root[data-theme='dark'] .compact-fish__diet-badge--herbivore {
+  border-color: #4b653b;
+  background: #2a3d2b;
+  color: #b7db8e;
+}
+
+:root[data-theme='dark'] .fdg-usage strong,
+:root[data-theme='dark'] .compact-fish__usage.is-assigned .compact-fish__usage-count {
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .fdg-usage.is-unused strong,
+:root[data-theme='dark'] .compact-fish__usage strong,
+:root[data-theme='dark'] .compact-fish__usage small {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .fdg-actions button,
+:root[data-theme='dark'] .compact-fish__actions button,
+:root[data-theme='dark'] .compact-fish__search button,
+:root[data-theme='dark'] .fdg-empty button {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .fdg-actions button:hover:not(:disabled),
+:root[data-theme='dark'] .compact-fish__actions button:hover:not(:disabled),
+:root[data-theme='dark'] .fdg-empty button:hover,
+:root[data-theme='dark'] .compact-fish__search button:hover {
+  border-color: var(--teal-600);
+  background: var(--surface-soft);
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .fdg-actions button:disabled,
+:root[data-theme='dark'] .compact-fish__actions button:disabled {
+  border-color: var(--border);
+  background: var(--surface-soft);
+  color: #647c84;
+}
+
+:root[data-theme='dark'] .compact-fish__usage-count {
+  border-color: var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .compact-fish__filters button.is-active {
+  background: var(--surface-raised);
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .fdg-empty {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .fdg-empty strong,
+:root[data-theme='dark'] .compact-fish__empty strong {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .actuator-directory-note,
+:root[data-theme='dark'] .actuator-control-page-context > div {
+  border-color: var(--border);
+  background: linear-gradient(135deg, #142e39, #10252f);
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .actuator-directory-note svg {
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .actuator-tank-mark {
+  border-color: #2d686d;
+  background: var(--teal-100);
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .compact-fish__panel,
+:root[data-theme='dark'] .compact-fish__row,
+:root[data-theme='dark'] .compact-fish__filters,
+:root[data-theme='dark'] .compact-fish__search,
+:root[data-theme='dark'] .compact-fish__thumbnail,
+:root[data-theme='dark'] .compact-fish__usage,
+:root[data-theme='dark'] .fdg-summary,
+:root[data-theme='dark'] .fdg-group,
+:root[data-theme='dark'] .fdg-species-row,
+:root[data-theme='dark'] .fdg-search,
+:root[data-theme='dark'] .fdg-toggle,
+:root[data-theme='dark'] .fdg-empty {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+:root[data-theme='dark'] .compact-fish__table-head,
+:root[data-theme='dark'] .compact-fish__footer,
+:root[data-theme='dark'] .fdg-group-header,
+:root[data-theme='dark'] .fdg-group-body,
+:root[data-theme='dark'] .fdg-column-labels,
+:root[data-theme='dark'] .fdg-results-note {
+  border-color: var(--border);
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .compact-fish__row:hover,
+:root[data-theme='dark'] .fdg-species-row:hover,
+:root[data-theme='dark'] .fdg-toggle:hover {
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .fish-view-toggle,
+:root[data-theme='dark'] .fish-directory__state,
+:root[data-theme='dark'] .compact-fish__diet-badge--unset,
+:root[data-theme='dark'] .fdg-unset {
+  border-color: var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .fish-view-toggle button.is-active {
+  background: var(--surface-raised);
+  color: var(--teal-700);
+}
+
+:root[data-theme='dark'] .threshold-card > header {
+  background: var(--surface-soft);
+}
+
+:root[data-theme='dark'] .resource-description,
+:root[data-theme='dark'] .resource-meta strong {
+  color: var(--muted);
+}
+
+/* Authentication and account/security pages. */
+:root[data-theme='dark'] .auth-layout {
+  background: var(--canvas);
+}
+
+:root[data-theme='dark'] .auth-story {
+  background:
+    radial-gradient(circle at 80% 80%, rgba(20, 132, 139, 0.28), transparent 30%),
+    radial-gradient(circle at 20% 22%, rgba(79, 196, 185, 0.11), transparent 25%),
+    linear-gradient(145deg, #0b2b3b, #061019);
+}
+
+:root[data-theme='dark'] .auth-card {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-strong);
+}
+
+:root[data-theme='dark'] .auth-icon {
+  background: var(--teal-100);
+}
+
+:root[data-theme='dark'] .security-current-badge,
+:root[data-theme='dark'] .security-event-outcome-success {
+  background: #173c31;
+  color: #8be0bd;
+}
+
+:root[data-theme='dark'] .security-danger-panel {
+  border-color: #75434d;
+}
+
+:root[data-theme='dark'] .security-danger-icon,
+:root[data-theme='dark'] .security-event-outcome-failure,
+:root[data-theme='dark'] .security-event-outcome-blocked {
+  background: #3a2028;
+  color: #ffabb2;
+}
+
+:root[data-theme='dark'] .security-reassurance {
+  border-color: #2d6857;
+  background: rgba(23, 55, 47, 0.75);
+}
+
+/* Legacy public utility classes remain readable if a route still uses them. */
+:root[data-theme='dark'] .public {
+  background: var(--surface);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .public .reading,
+:root[data-theme='dark'] .public .fish {
+  border-color: var(--border);
+  background: var(--surface-raised);
+}
+
+:root[data-theme='dark'] .public .reading strong {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .public .reading strong small,
+:root[data-theme='dark'] .public .fish i {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .public .empty {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+/* Public tank experience. It follows the same saved preference without changing its identity. */
+:root[data-theme='dark'] .visitor-shell {
+  --visitor-ink: #e8f4f3;
+  --visitor-muted: #a3bbc0;
+  --visitor-teal: #54d4d1;
+  --visitor-deep: #b5e9e8;
+  --visitor-line: #2c4953;
+  background:
+    radial-gradient(circle at 50% 4%, rgba(47, 204, 207, 0.12), transparent 28rem),
+    linear-gradient(180deg, #0b232e 0%, #08161f 46%, #0b2029 100%);
+}
+
+:root[data-theme='dark'] .visitor-summary,
+:root[data-theme='dark'] .visitor-metric,
+:root[data-theme='dark'] .visitor-more-readings,
+:root[data-theme='dark'] .visitor-fish-card,
+:root[data-theme='dark'] .visitor-care-card,
+:root[data-theme='dark'] .visitor-business-card {
+  border-color: var(--visitor-line);
+  background: rgba(16, 37, 47, 0.96);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme='dark'] .visitor-summary small,
+:root[data-theme='dark'] .visitor-summary > p,
+:root[data-theme='dark'] .visitor-update,
+:root[data-theme='dark'] .visitor-metric > p,
+:root[data-theme='dark'] .visitor-metric > strong small,
+:root[data-theme='dark'] .visitor-fish-name > i,
+:root[data-theme='dark'] .visitor-fish-detail,
+:root[data-theme='dark'] .visitor-business-card p,
+:root[data-theme='dark'] .visitor-footer {
+  color: var(--visitor-muted);
+}
+
+:root[data-theme='dark'] .visitor-overall-status strong,
+:root[data-theme='dark'] .visitor-section-heading > svg,
+:root[data-theme='dark'] .visitor-eyebrow,
+:root[data-theme='dark'] .visitor-section-heading span {
+  color: var(--visitor-teal);
+}
+
+:root[data-theme='dark'] .visitor-metric-status {
+  color: #d5e8e8;
+}
+
+:root[data-theme='dark'] .visitor-icon-bubble {
+  color: var(--visitor-teal);
+  background: #16434a;
+}
+
+:root[data-theme='dark'] .visitor-more-readings > summary,
+:root[data-theme='dark'] .visitor-fish-detail strong,
+:root[data-theme='dark'] .visitor-rule-list h3,
+:root[data-theme='dark'] .visitor-faq-list summary {
+  color: var(--visitor-ink);
+}
+
+:root[data-theme='dark'] .visitor-alert-note,
+:root[data-theme='dark'] .visitor-empty {
+  border-color: #2c6870;
+  background: rgba(19, 67, 74, 0.72);
+  color: #b4e6e5;
+}
+
+:root[data-theme='dark'] .visitor-fish-fallback {
+  color: #073a49;
+}
+
+:root[data-theme='dark'] .visitor-rule-list article,
+:root[data-theme='dark'] .visitor-faq-list details,
+:root[data-theme='dark'] .visitor-hours,
+:root[data-theme='dark'] .visitor-nav {
+  border-color: var(--visitor-line);
+  background: rgba(16, 37, 47, 0.9);
+}
+
+:root[data-theme='dark'] .visitor-toast {
+  border-color: #2d6857;
+  background: #17372f;
+  color: #8be0bd;
+}
+
+/* A short, origin-aware ink bloom gives the theme change a tactile moment. */
+:root.theme-ink-bleed::after {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  background: var(--theme-ink-color);
+  content: '';
+  filter: blur(8px);
+  opacity: 0;
+  animation: theme-ink-bleed 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  clip-path: circle(0 at var(--theme-ink-x) var(--theme-ink-y));
+}
+
+:root.theme-ink-bleed body,
+:root.theme-ink-bleed .admin-shell,
+:root.theme-ink-bleed .auth-layout,
+:root.theme-ink-bleed .visitor-shell,
+:root.theme-ink-bleed .panel,
+:root.theme-ink-bleed .auth-card,
+:root.theme-ink-bleed .visitor-summary,
+:root.theme-ink-bleed .visitor-metric,
+:root.theme-ink-bleed .visitor-fish-card,
+:root.theme-ink-bleed .theme-control-menu {
+  transition:
+    background-color 260ms ease,
+    color 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease;
+}
+
+@keyframes theme-ink-bleed {
+  0% {
+    clip-path: circle(0 at var(--theme-ink-x) var(--theme-ink-y));
+    opacity: 0;
+  }
+
+  12% {
+    clip-path: circle(7vmax at var(--theme-ink-x) var(--theme-ink-y));
+    opacity: 0.48;
+  }
+
+  62% {
+    clip-path: circle(25vmax at var(--theme-ink-x) var(--theme-ink-y));
+    opacity: 0.16;
+  }
+
+  100% {
+    clip-path: circle(42vmax at var(--theme-ink-x) var(--theme-ink-y));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root.theme-ink-bleed::after {
+    display: none;
+    animation: none;
+  }
+
+  :root.theme-ink-bleed .theme-control-trigger svg {
+    animation: none;
+    transform: none;
+  }
+
+  :root.theme-ink-bleed body,
+  :root.theme-ink-bleed .admin-shell,
+  :root.theme-ink-bleed .auth-layout,
+  :root.theme-ink-bleed .visitor-shell,
+  :root.theme-ink-bleed .panel,
+  :root.theme-ink-bleed .auth-card,
+  :root.theme-ink-bleed .visitor-summary,
+  :root.theme-ink-bleed .visitor-metric,
+  :root.theme-ink-bleed .visitor-fish-card,
+  :root.theme-ink-bleed .theme-control-menu {
+    transition: none;
+  }
+}

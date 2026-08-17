@@ -118,10 +118,15 @@ decision engine; operational thresholds and persisted Alert records remain
 separate.
 
 The staff web surface separates the tank directory (`/admin/tanks`), the
-bookmarkable operations workspace (`/admin/tanks/:tankId`), and the shared
-configuration drawer (`?edit=`). The detail route owns live operations and
-care polling, assignments, and alert resolution; the directory only scans and
-opens configuration.
+administrator actuator chooser (`/admin/actuators`), the bookmarkable
+operations workspace (`/admin/tanks/:tankId`), the dedicated
+administrator actuator control center (`/admin/tanks/:tankId/actuators`), and
+the shared configuration drawer (`?edit=`). The detail route owns live
+operations and care polling, assignments, alert resolution, and a compact
+actuator snapshot; the dedicated actuator route owns full controls, pump-test
+safety prompts, and paginated command history. The chooser only selects a tank
+view; both actuator surfaces reuse the same backend command boundary, and the
+page routes do not replace backend authorization.
 
 ## Deployment direction
 

@@ -1,4 +1,5 @@
 import { api } from '@/shared/api/client';
+import { ThemeControl } from '@/shared/components/ThemeControl';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
@@ -315,6 +316,9 @@ export function PublicTank() {
             <Share2 size={18} aria-hidden="true" />
             <span className="sr-only">Share this tank</span>
           </button>
+          <div className="visitor-theme-control">
+            <ThemeControl />
+          </div>
           <div className="visitor-hero-copy">
             <span className="visitor-kicker">
               <Waves size={14} aria-hidden="true" />

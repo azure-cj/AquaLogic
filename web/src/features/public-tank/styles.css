@@ -100,6 +100,13 @@
   background: rgba(2, 42, 61, 0.75);
 }
 
+.visitor-theme-control {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 68px;
+  z-index: 3;
+}
+
 .visitor-hero-copy {
   position: absolute;
   right: 18px;

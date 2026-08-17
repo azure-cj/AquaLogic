@@ -1,6 +1,7 @@
 import App from '@/app/App';
 import { AppProviders } from '@/app/providers';
 import '@/styles/base.css';
+import '@/styles/dark-theme.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 

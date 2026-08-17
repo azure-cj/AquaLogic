@@ -50,6 +50,18 @@ Last reviewed: 2026-08-15
 - Public mobile-first `/tank/:publicId` experience.
 - Staff/admin routes for fleet, alerts, tanks, fish, customers, analytics, staff,
   and thresholds.
+- Tank workspaces keep a compact actuator snapshot while administrators can open
+  the focused `/admin/tanks/:tankId/actuators` control center for full timers,
+  schedules, guarded pump tests, and paginated command history.
+- The Configure navigation group now exposes an administrator-only Actuators
+  chooser beside Thresholds; it lists tanks and links into their scoped control
+  workspaces without exposing device credentials or ESP32 endpoints.
+- The web shell now supports persistent System, Light, and Dark themes through
+  one accessible appearance control shared by the admin, authentication, and
+  public tank surfaces; dark-mode tokens cover panels, controls, overlays,
+  actuator history, and analytics/public status surfaces. Deliberate changes
+  use a short origin-aware teal ink-bloom transition with a reduced-motion
+  fallback.
 - Lazy route loading, feature-first structure, shared API client, responsive
   layouts, and accessible loading/dialog patterns.
 - Floating-island navigation uses one grouped configuration and adapts from
@@ -130,7 +142,7 @@ Last reviewed: 2026-08-15
 - Database: `DATABASE_URL=sqlite:///./.actuator-validation.db alembic upgrade
   head` reached `0008_actuator_controls`; the temporary validation database was
   removed afterward.
-- Web: `npm run typecheck`, `npm test` (60 tests across 13 files), and
+- Web: `npm run typecheck`, `npm test` (70 tests across 16 files), and
   `npm run build` passed.
 
 ## Validation checkpoint — 2026-07-29

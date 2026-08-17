@@ -205,6 +205,35 @@ function ChartTooltip({
   );
 }
 
+function AlertChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string; name?: string; value?: number | string; color?: string; }>;
+  label?: number | string;
+}) {
+  if (!active || !payload?.length || label == null) return null;
+  return (
+    <div className="analytics-tooltip analytics-alert-tooltip">
+      <strong>{formatAnalyticsDate(label)}</strong>
+      {payload
+        .filter((item) => item.value != null)
+        .map((item) => {
+          const key = item.dataKey ?? item.name ?? 'value';
+          const name = key === 'warning' ? 'Warning' : key === 'critical' ? 'Critical' : item.name ?? key;
+          return (
+            <span key={key}>
+              <i style={{ background: item.color }} />
+              {name}: {item.value}
+            </span>
+          );
+        })}
+    </div>
+  );
+}
+
 function ThresholdOverlays({
   segments,
   metric,
@@ -965,7 +994,7 @@ export default function AnalyticsPage() {
                       minTickGap={24}
                     />
                     <YAxis allowDecimals={false} tick={{ fill: '#6f8590', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip labelFormatter={(value) => formatAnalyticsDate(String(value))} />
+                    <Tooltip content={<AlertChartTooltip />} />
                     <Bar dataKey="warning" stackId="alerts" fill="#e99a21" radius={[3, 3, 0, 0]} />
                     <Bar dataKey="critical" stackId="alerts" fill="#dc5664" radius={[3, 3, 0, 0]} />
                   </BarChart>

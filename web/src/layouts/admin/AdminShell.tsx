@@ -31,6 +31,7 @@ import {
 
 import { Brand } from '@/shared/components/Brand';
 import { RouteLoading } from '@/shared/components/RouteLoading';
+import { ThemeControl } from '@/shared/components/ThemeControl';
 import { useMe } from '@/shared/hooks/useMe';
 import {
   adminNavigation,
@@ -48,6 +49,7 @@ const pageTitles: Record<string, string> = {
   account: 'Account center',
   security: 'Account security',
   analytics: 'Fleet analytics',
+  actuators: 'Actuator controls',
   staff: 'Staff & roles',
   settings: 'System thresholds',
 };
@@ -219,6 +221,7 @@ export function AdminShell() {
                 <strong>{me.data!.name}</strong>
                 <small>{me.data!.role}</small>
               </div>
+              <ThemeControl />
               <button
                 className="icon-button island-signout"
                 type="button"
@@ -264,6 +267,7 @@ export function AdminShell() {
             <strong>{me.data!.name}</strong>
             <small>{me.data!.role}</small>
           </div>
+          <ThemeControl />
           <button
             className="icon-button mobile-signout"
             type="button"

@@ -9,6 +9,21 @@
     />
     <meta name="theme-color" content="#0b2538" />
     <title>AquaLogic Operations</title>
+    <script>
+      (() => {
+        try {
+          const stored = window.localStorage.getItem('aqualogic-theme');
+          const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme = stored === 'dark' || (stored !== 'light' && systemDark) ? 'dark' : 'light';
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          const themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.content = theme === 'dark' ? '#08161f' : '#0b2538';
+        } catch {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
