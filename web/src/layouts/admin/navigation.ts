@@ -5,6 +5,7 @@ import {
   Droplets,
   FishSymbol,
   LayoutDashboard,
+  Power,
   SlidersHorizontal,
   UserRoundCog,
   UsersRound,
@@ -50,6 +51,12 @@ export const adminNavigation: AdminNavigationGroup[] = [
     id: 'configure',
     label: 'Configure',
     items: [
+      {
+        to: '/admin/actuators',
+        label: 'Actuators',
+        icon: Power,
+        adminOnly: true,
+      },
       {
         to: '/admin/settings/thresholds',
         label: 'Thresholds',

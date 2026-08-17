@@ -12,6 +12,8 @@ const FleetPage = lazy(pageLoaders.fleet);
 const AlertsPage = lazy(pageLoaders.alerts);
 const TanksPage = lazy(pageLoaders.tanks);
 const TankDetailPage = lazy(pageLoaders.tankDetail);
+const ActuatorControlPage = lazy(pageLoaders.actuatorControls);
+const ActuatorDirectoryPage = lazy(pageLoaders.actuatorDirectory);
 const FishPage = lazy(pageLoaders.fish);
 const CustomersPage = lazy(pageLoaders.customers);
 const AnalyticsPage = lazy(pageLoaders.analytics);
@@ -25,6 +27,8 @@ export const adminRoutePaths = [
   'alerts',
   'tanks',
   'tanks/:tankId',
+  'tanks/:tankId/actuators',
+  'actuators',
   'fish',
   'customers',
   'account',
@@ -74,7 +78,9 @@ export function AppRouter() {
         <Route path="fleet" element={<FleetPage />} />
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="tanks" element={<TanksPage />} />
+        <Route path="tanks/:tankId/actuators" element={<ActuatorControlPage />} />
         <Route path="tanks/:tankId" element={<TankDetailPage />} />
+        <Route path="actuators" element={<ActuatorDirectoryPage />} />
         <Route path="fish" element={<FishPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="account" element={<AccountCenterPage />} />

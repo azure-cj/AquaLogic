@@ -585,7 +585,7 @@ export function TankDetail() {
         </Panel>
       </div>
 
-      {isAdmin ? <ActuatorControlPanel tankId={id} /> : <StaffActuatorNotice />}
+      {isAdmin ? <ActuatorControlPanel tankId={id} variant="summary" /> : <StaffActuatorNotice />}
 
       <TankEditorDrawer
         open={editing}

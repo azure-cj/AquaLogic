@@ -23,10 +23,11 @@ import {
 } from '@/shared/components/admin-ui';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Info, LockKeyhole, Play, Power, RefreshCw, RotateCcw, Square, Utensils } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Info, LockKeyhole, Play, Power, RefreshCw, RotateCcw, Square, Utensils } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 type LightScheduleForm = {
   enabled: boolean;
@@ -52,6 +53,7 @@ const PUMP_DISPENSE_DURATIONS = [100, 250, 500, 1_000, 1_500, 2_000];
 
 type HistoryActuatorFilter = 'all' | ActuatorName;
 type HistoryStatusFilter = 'all' | ActuatorCommandStatus;
+export type ActuatorControlPanelVariant = 'summary' | 'full';
 type TooltipPosition = {
   top: number;
   left: number;
@@ -397,7 +399,141 @@ function PumpCard({
   );
 }
 
-export function ActuatorControlPanel({ tankId }: { tankId: number }) {
+function BridgeOfflineWarning({ freshness }: { freshness?: DeviceActuatorStatus['device_freshness']; }) {
+  return (
+    <div className="actuator-offline-warning" role="status">
+      <AlertTriangle size={17} aria-hidden="true" />
+      <span>
+        <strong>Bridge is {freshness === 'unknown' ? 'not reporting' : 'offline or stale'}</strong>
+        <small>Light and feeder commands may expire while waiting. Pump manual tests are not queued until the bridge is online.</small>
+      </span>
+    </div>
+  );
+}
+
+function SummaryLightCard({
+  actuator,
+  state,
+  busy,
+  onCommand,
+}: {
+  actuator: 'uv' | 'led';
+  state: LightActuatorState | null;
+  busy: string | null;
+  onCommand: (action: 'on' | 'off', label: string) => void;
+}) {
+  const label = actuator === 'uv' ? 'UV light' : 'Normal LED light';
+  return (
+    <article className="actuator-summary-card">
+      <div className="actuator-summary-card-header">
+        <div>
+          <p className="actuator-kicker">{actuator === 'uv' ? 'UV sterilization' : 'Aquarium lighting'}</p>
+          <h3>{label}</h3>
+        </div>
+        <span className={`actuator-state ${state?.on ? 'is-on' : state ? 'is-off' : 'is-unknown'}`}>
+          <Power size={14} aria-hidden="true" />
+          {state ? (state.on ? 'On' : 'Off') : 'Unknown'}
+        </span>
+      </div>
+      <p className="actuator-summary-detail">
+        {state?.schedule_enabled ? `Schedule ${state.on_time} -> ${state.off_time}` : 'Schedule disabled'}
+        {state?.remaining_ms ? ` · ${Math.ceil(state.remaining_ms / 1000)}s remaining` : ''}
+      </p>
+      <div className="actuator-summary-actions" aria-label={`${label} quick controls`}>
+        <button className="button button-primary button-small" type="button" disabled={Boolean(busy)} onClick={() => onCommand('on', `${label} on`)}>On</button>
+        <button className="button button-secondary button-small" type="button" disabled={Boolean(busy)} onClick={() => onCommand('off', `${label} off`)}>Off</button>
+      </div>
+    </article>
+  );
+}
+
+function SummaryFeederCard({
+  state,
+  busy,
+  onFeed,
+}: {
+  state: FeederActuatorState | null;
+  busy: string | null;
+  onFeed: () => void;
+}) {
+  return (
+    <article className="actuator-summary-card">
+      <div className="actuator-summary-card-header">
+        <div>
+          <p className="actuator-kicker">Portion control</p>
+          <h3>Fish feeder</h3>
+        </div>
+        <span className={`actuator-state ${state?.feeding ? 'is-on' : state ? 'is-off' : 'is-unknown'}`}>
+          <Utensils size={14} aria-hidden="true" />
+          {state?.feeding ? 'Feeding' : state ? 'Ready' : 'Unknown'}
+        </span>
+      </div>
+      <div className="actuator-summary-stats">
+        <span><small>Feed count</small><strong>{state?.feed_count ?? '—'}</strong></span>
+        <span><small>Last fed</small><strong>{state?.last_fed ?? '—'}</strong></span>
+      </div>
+      <button className="button button-primary button-small" type="button" disabled={Boolean(busy)} onClick={onFeed}>
+        <Utensils size={14} /> Feed now
+      </button>
+      <p className="actuator-summary-detail">Configuration and feeding schedules are available in full controls.</p>
+    </article>
+  );
+}
+
+function SummaryPumpCard({ pumpA, pumpB, tankId }: { pumpA: PumpActuatorState | null; pumpB: PumpActuatorState | null; tankId: number; }) {
+  const pumpStatus = (state: PumpActuatorState | null) => state ? (state.active ? 'Running' : 'Ready') : 'Unknown';
+  return (
+    <article className="actuator-summary-card actuator-summary-pumps">
+      <div className="actuator-summary-card-header">
+        <div>
+          <p className="actuator-kicker">Guarded manual tests</p>
+          <h3>Syringe pumps</h3>
+        </div>
+        <span className="actuator-state is-unknown"><Power size={14} aria-hidden="true" />Full page</span>
+      </div>
+      <div className="actuator-summary-pump-list">
+        <span><strong>Pump A</strong><small>{pumpStatus(pumpA)}</small></span>
+        <span><strong>Pump B</strong><small>{pumpStatus(pumpB)}</small></span>
+      </div>
+      <p className="actuator-summary-detail">Dispense, stop, and retract stay on the dedicated page for safer testing.</p>
+      <Link className="text-link" to={`/admin/tanks/${tankId}/actuators`}>Open full controls <ArrowRight size={14} /></Link>
+    </article>
+  );
+}
+
+function ActuatorSummary({
+  tankId,
+  uv,
+  led,
+  feeder,
+  pumpA,
+  pumpB,
+  busy,
+  onCommand,
+  onFeed,
+}: {
+  tankId: number;
+  uv: LightActuatorState | null;
+  led: LightActuatorState | null;
+  feeder: FeederActuatorState | null;
+  pumpA: PumpActuatorState | null;
+  pumpB: PumpActuatorState | null;
+  busy: string | null;
+  onCommand: (actuator: 'uv' | 'led', action: 'on' | 'off', label: string) => void;
+  onFeed: () => void;
+}) {
+  return (
+    <div className="actuator-summary-grid">
+      <SummaryLightCard actuator="uv" state={uv} busy={busy} onCommand={(action, label) => onCommand('uv', action, label)} />
+      <SummaryLightCard actuator="led" state={led} busy={busy} onCommand={(action, label) => onCommand('led', action, label)} />
+      <SummaryFeederCard state={feeder} busy={busy} onFeed={onFeed} />
+      <SummaryPumpCard pumpA={pumpA} pumpB={pumpB} tankId={tankId} />
+    </div>
+  );
+}
+
+export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: number; variant?: ActuatorControlPanelVariant }) {
+  const fullView = variant === 'full';
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [feedConfirmOpen, setFeedConfirmOpen] = useState(false);
@@ -431,6 +567,7 @@ export function ActuatorControlPanel({ tankId }: { tankId: number }) {
       if (historyStatus !== 'all') params.set('status', historyStatus);
       return api<ActuatorCommandHistoryPage>(`/tanks/${tankId}/actuators/history?${params.toString()}`);
     },
+    enabled: fullView,
     placeholderData: keepPreviousData,
     refetchInterval: 5_000,
   });
@@ -514,16 +651,26 @@ export function ActuatorControlPanel({ tankId }: { tankId: number }) {
         onDismiss={() => setFeedback(null)}
       />
       <Panel
-      title="Actuator controls"
-      description="Administrator-only controls for the registered bridge device"
-      className="tank-actuator-panel"
-      action={
-        <span className={`bridge-freshness bridge-${status.data?.device_freshness ?? 'unknown'}`}>
-          <span className="bridge-freshness-dot" aria-hidden="true" />
-          {status.data?.device_freshness ?? 'unknown'}
-        </span>
-      }
-    >
+        title={fullView ? 'Actuator controls' : 'Actuator snapshot'}
+        description={fullView ? 'Administrator-only controls for the registered bridge device' : 'Quick controls for the registered bridge device'}
+        className={`tank-actuator-panel ${fullView ? '' : 'tank-actuator-summary-panel'}`}
+        action={fullView ? (
+          <span className={`bridge-freshness bridge-${status.data?.device_freshness ?? 'unknown'}`}>
+            <span className="bridge-freshness-dot" aria-hidden="true" />
+            {status.data?.device_freshness ?? 'unknown'}
+          </span>
+        ) : (
+          <div className="actuator-summary-panel-actions">
+            <span className={`bridge-freshness bridge-${status.data?.device_freshness ?? 'unknown'}`}>
+              <span className="bridge-freshness-dot" aria-hidden="true" />
+              {status.data?.device_freshness ?? 'unknown'}
+            </span>
+            <Link className="button button-secondary button-small" to={`/admin/tanks/${tankId}/actuators`}>
+              Full controls <ArrowRight size={14} />
+            </Link>
+          </div>
+        )}
+      >
       {status.isLoading ? (
         <LoadingState label="Loading bridge actuator state…" />
       ) : status.isError ? (
@@ -536,15 +683,21 @@ export function ActuatorControlPanel({ tankId }: { tankId: number }) {
             <span><small>Last bridge report</small><strong>{relativeTime(status.data?.last_seen_at)}</strong></span>
             <button className="icon-button" type="button" aria-label="Refresh actuator state" onClick={() => void status.refetch()}><RefreshCw size={16} /></button>
           </div>
-          {!status.data?.device_online && (
-            <div className="actuator-offline-warning" role="status">
-              <AlertTriangle size={17} aria-hidden="true" />
-              <span>
-                <strong>Bridge is {status.data?.device_freshness === 'unknown' ? 'not reporting' : 'offline or stale'}</strong>
-                <small>Light and feeder commands may expire while waiting. Pump manual tests are not queued until the bridge is online.</small>
-              </span>
-            </div>
-          )}
+          {!status.data?.device_online && <BridgeOfflineWarning freshness={status.data?.device_freshness} />}
+          {variant === 'summary' ? (
+            <ActuatorSummary
+              tankId={tankId}
+              uv={uv}
+              led={led}
+              feeder={feeder}
+              pumpA={pumpA}
+              pumpB={pumpB}
+              busy={busy}
+              onCommand={(actuator, action, label) => void queueCommand(actuator, action, {}, label)}
+              onFeed={() => setFeedConfirmOpen(true)}
+            />
+          ) : (
+          <>
           <div className="actuator-grid">
             <LightCard actuator="uv" state={uv} schedule={uvSchedule} timerSeconds={uvTimer} onTimerChange={setUvTimer} onScheduleChange={setUvSchedule} onCommand={(action, payload, label) => void queueCommand('uv', action, payload, label)} busy={busy} />
             <LightCard actuator="led" state={led} schedule={ledSchedule} timerSeconds={ledTimer} onTimerChange={setLedTimer} onScheduleChange={setLedSchedule} onCommand={(action, payload, label) => void queueCommand('led', action, payload, label)} busy={busy} />
@@ -729,6 +882,8 @@ export function ActuatorControlPanel({ tankId }: { tankId: number }) {
               <EmptyState title="No matching commands" message="Try a different actuator or status filter." />
             ) : <EmptyState title="No actuator commands yet" message="Queued commands and their bridge results will appear here." />}
           </div>
+          </>
+          )}
         </>
       )}
       <ConfirmDialog

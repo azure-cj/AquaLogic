@@ -18,6 +18,8 @@ export const pageLoaders = {
   alerts: once(() => import('@/features/alerts/AlertsPage')),
   tanks: once(() => import('@/features/tanks/TanksPage')),
   tankDetail: once(() => import('@/features/tanks/TankDetailPage')),
+  actuatorControls: once(() => import('@/features/tanks/ActuatorControlPage')),
+  actuatorDirectory: once(() => import('@/features/tanks/ActuatorDirectoryPage')),
   fish: once(() => import('@/features/fish/FishPage')),
   customers: once(() => import('@/features/customers/CustomersPage')),
   analytics: once(() => import('@/features/analytics/AnalyticsPage')),
@@ -35,6 +37,8 @@ const adminLoaders = {
   '/admin/alerts': pageLoaders.alerts,
   '/admin/tanks': pageLoaders.tanks,
   '/admin/tanks/:tankId': pageLoaders.tankDetail,
+  '/admin/tanks/:tankId/actuators': pageLoaders.actuatorControls,
+  '/admin/actuators': pageLoaders.actuatorDirectory,
   '/admin/fish': pageLoaders.fish,
   '/admin/customers': pageLoaders.customers,
   '/admin/account': pageLoaders.account,
@@ -46,7 +50,8 @@ const adminLoaders = {
 
 export function prefetchAdminRoute(path: string) {
   const normalized = path.startsWith('/admin/tanks/')
-    ? '/admin/tanks/:tankId'
+    ? path.replace(/^\/admin\/tanks\/[^/]+\/actuators$/, '/admin/tanks/:tankId/actuators')
+      .replace(/^\/admin\/tanks\/[^/]+$/, '/admin/tanks/:tankId')
     : path;
   const loader = adminLoaders[normalized as keyof typeof adminLoaders];
   return loader?.();

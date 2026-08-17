@@ -33,6 +33,12 @@ vi.mock('@/features/tanks/TanksPage', () => ({
 vi.mock('@/features/tanks/TankDetailPage', () => ({
   default: () => <div>Tank detail route</div>,
 }));
+vi.mock('@/features/tanks/ActuatorControlPage', () => ({
+  default: () => <div>Actuator controls route</div>,
+}));
+vi.mock('@/features/tanks/ActuatorDirectoryPage', () => ({
+  default: () => <div>Actuator directory route</div>,
+}));
 vi.mock('@/features/fish/FishPage', () => ({
   default: () => <div>Fish route</div>,
 }));
@@ -57,6 +63,8 @@ const routes = [
   ['/admin/alerts', 'Alerts route'],
   ['/admin/tanks', 'Tanks route'],
   ['/admin/tanks/42', 'Tank detail route'],
+  ['/admin/tanks/42/actuators', 'Actuator controls route'],
+  ['/admin/actuators', 'Actuator directory route'],
   ['/admin/fish', 'Fish route'],
   ['/admin/customers', 'Customers route'],
   ['/admin/account', 'Account center route'],
@@ -77,6 +85,8 @@ describe('application router', () => {
       'alerts',
       'tanks',
       'tanks/:tankId',
+      'tanks/:tankId/actuators',
+      'actuators',
       'fish',
       'customers',
       'account',

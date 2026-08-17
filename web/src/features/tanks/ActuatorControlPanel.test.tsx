@@ -2,6 +2,7 @@ import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActuatorControlPanel, StaffActuatorNotice } from './ActuatorControlPanel';
@@ -81,11 +82,13 @@ const emptySummary = {
   expired: 0,
 };
 
-function renderPanel() {
+function renderPanel(variant: 'full' | 'summary' = 'full') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ActuatorControlPanel tankId={1} />
+      <MemoryRouter>
+        <ActuatorControlPanel tankId={1} variant={variant} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -124,6 +127,16 @@ describe('admin actuator controls', () => {
     expect(screen.getByRole('heading', { name: 'Syringe Pump B' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Feed now' })).toBeInTheDocument();
     expect(screen.getByText('Three firmware slots')).toBeInTheDocument();
+  });
+
+  it('keeps the tank-page snapshot compact and defers history to the full route', async () => {
+    renderPanel('summary');
+
+    expect(await screen.findByRole('heading', { name: 'Actuator snapshot' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Syringe pumps' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Full controls$/ })).toHaveAttribute('href', '/admin/tanks/1/actuators');
+    expect(screen.queryByRole('heading', { name: 'Command history' })).not.toBeInTheDocument();
+    expect(vi.mocked(api).mock.calls.some(([path]) => path.includes('/actuators/history'))).toBe(false);
   });
 
   it('requires confirmation and queues a feed-now command for the registered device', async () => {

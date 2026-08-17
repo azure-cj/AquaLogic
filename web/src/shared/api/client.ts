@@ -120,8 +120,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const statusText = (status: string) =>
   ({
-    normal: 'Normal â€” readings are within configured limits',
-    warning: 'Warning â€” a reading needs attention',
-    critical: 'Critical â€” immediate attention required',
-    offline: 'Offline â€” no recent sensor report',
+    normal: 'Normal — readings are within configured limits',
+    warning: 'Warning — a reading needs attention',
+    critical: 'Critical — immediate attention required',
+    offline: 'Offline — no recent sensor report',
   })[status] || status;
