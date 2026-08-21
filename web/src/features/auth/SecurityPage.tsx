@@ -1,4 +1,4 @@
-import { api, clearSession } from '@/shared/api/client';
+import { api, clearSession, SecurityAuditEvent, User } from '@/shared/api/client';
 import {
   ConfirmDialog,
   EmptyState,
@@ -37,13 +37,7 @@ type Session = {
   user_agent?: string | null;
 };
 
-type AuditEvent = {
-  id: number;
-  event_type: string;
-  outcome: string;
-  actor_user_id?: number | null;
-  created_at: string;
-};
+type AuditEvent = SecurityAuditEvent;
 
 const auditPageSize = 12;
 
@@ -51,7 +45,16 @@ function formatWhen(value?: string | null) {
   if (!value) return 'Just now';
   const date = new Date(value);
   const difference = Date.now() - date.getTime();
-  const minutes = Math.max(0, Math.floor(difference / 60_000));
+  const future = difference < 0;
+  const minutes = Math.floor(Math.abs(difference) / 60_000);
+  if (future) {
+    if (minutes < 1) return 'in <1 min';
+    if (minutes < 60) return `in ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `in ${hours} hr`;
+    const days = Math.floor(hours / 24);
+    return `in ${days} day${days === 1 ? '' : 's'}`;
+  }
   if (minutes < 1) return 'Just now';
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
@@ -98,10 +101,15 @@ function eventLabel(eventType: string) {
     'password.setup': 'Password set',
     'session.revoke': 'Session revoked',
     'user.password_reset': 'Password reset issued',
+    'user.sessions_revoked': 'All sessions revoked',
     'user.update': 'Account settings updated',
     'refresh.replay': 'Session replay blocked',
+    'device.auth': 'Device authenticated',
+    'device.ingest': 'Sensor data received',
+    'device.actuator_state': 'Actuator state updated',
   };
-  return labels[eventType] || eventType.replaceAll('.', ' ').replaceAll('_', ' ');
+  const fallback = eventType.replaceAll('.', ' ').replaceAll('_', ' ');
+  return labels[eventType] || fallback.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function eventIcon(eventType: string) {
@@ -111,6 +119,10 @@ function eventIcon(eventType: string) {
   return <History size={17} />;
 }
 
+function isRoutineAuditEvent(eventType: string) {
+  return eventType === 'refresh' || eventType === 'device.ingest' || eventType === 'device.actuator_state';
+}
+
 export default function SecurityPage() {
   const client = useQueryClient();
   const me = useMe();
@@ -118,12 +130,30 @@ export default function SecurityPage() {
     queryKey: ['auth-sessions'],
     queryFn: () => api<Session[]>('/auth/sessions'),
   });
+  const adminUsers = useQuery({
+    queryKey: ['users', 'security-audit'],
+    queryFn: () => api<User[]>('/users'),
+    enabled: me.data?.role === 'admin',
+  });
+  const [auditUserId, setAuditUserId] = useState('');
+  const [auditEventType, setAuditEventType] = useState('');
+  const [auditOutcome, setAuditOutcome] = useState('');
+  const [auditSince, setAuditSince] = useState('');
+  const [auditUntil, setAuditUntil] = useState('');
   const audit = useInfiniteQuery({
-    queryKey: ['security-audit-events'],
+    queryKey: ['security-audit-events', auditUserId, auditEventType, auditOutcome, auditSince, auditUntil],
     initialPageParam: undefined as number | undefined,
-    queryFn: ({ pageParam }) => api<AuditEvent[]>(
-      `/security/audit-events?limit=${auditPageSize}${pageParam ? `&before_id=${pageParam}` : ''}`,
-    ),
+    queryFn: ({ pageParam, queryKey }) => {
+      const [, userId, eventType, outcome, since, until] = queryKey as [string, string, string, string, string, string];
+      const params = new URLSearchParams({ limit: String(auditPageSize) });
+      if (userId) params.set('user_id', userId);
+      if (eventType) params.set('event_type', eventType);
+      if (outcome) params.set('outcome', outcome);
+      if (since) params.set('since', `${since}T00:00:00Z`);
+      if (until) params.set('until', `${until}T23:59:59.999Z`);
+      if (pageParam) params.set('before_id', String(pageParam));
+      return api<AuditEvent[]>(`/security/audit-events?${params.toString()}`);
+    },
     getNextPageParam: (page) => (
       page.length === auditPageSize ? page[page.length - 1]?.id : undefined
     ),
@@ -141,7 +171,11 @@ export default function SecurityPage() {
     [audit.data],
   );
   const routineRefreshes = auditEvents.filter((event) => event.event_type === 'refresh');
-  const meaningfulAuditEvents = auditEvents.filter((event) => event.event_type !== 'refresh');
+  const routineBridgeEvents = auditEvents.filter((event) => event.event_type === 'device.ingest' || event.event_type === 'device.actuator_state');
+  const groupingEnabled = !auditEventType;
+  const routineEvents = groupingEnabled ? auditEvents.filter((event) => isRoutineAuditEvent(event.event_type)) : [];
+  const meaningfulAuditEvents = groupingEnabled ? auditEvents.filter((event) => !isRoutineAuditEvent(event.event_type)) : auditEvents;
+  const hasAuditFilters = Boolean(auditUserId || auditEventType || auditOutcome || auditSince || auditUntil);
 
   const revoke = async () => {
     if (!sessionToRevoke) return;
@@ -224,6 +258,7 @@ export default function SecurityPage() {
                       </div>
                       <div className="security-session-meta">
                         <span><Clock3 size={14} />Active {formatWhen(session.last_seen_at)}</span>
+                        <span>Signed in {formatWhen(session.created_at)}</span>
                         <span>Expires {formatWhen(session.expires_at)}</span>
                       </div>
                       {session.user_agent && (
@@ -303,8 +338,16 @@ export default function SecurityPage() {
         <Panel
           className="security-audit-panel"
           title="Security activity"
-          description="Account-changing events are shown first; routine token refreshes are grouped to keep this feed useful."
+          description="Account-changing events are shown first; routine refreshes and bridge telemetry are grouped when no event filter is selected."
         >
+          <div className="security-audit-filters" aria-label="Filter security activity">
+            <label className="field"><span>Account</span><select value={auditUserId} onChange={(event) => setAuditUserId(event.target.value)}><option value="">All accounts</option>{adminUsers.data?.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.email}</option>)}</select></label>
+            <label className="field"><span>Event</span><select value={auditEventType} onChange={(event) => setAuditEventType(event.target.value)}><option value="">All events</option><option value="login">Signed in</option><option value="logout">Signed out</option><option value="logout_all">Signed out everywhere</option><option value="password.change">Password changed</option><option value="password.setup">Password set</option><option value="session.revoke">Session revoked</option><option value="user.password_reset">Password reset issued</option><option value="user.sessions_revoked">All sessions revoked</option><option value="user.update">Account settings updated</option><option value="refresh.replay">Session replay blocked</option><option value="device.ingest">Sensor data received</option><option value="device.actuator_state">Actuator state updated</option></select></label>
+            <label className="field"><span>Outcome</span><select value={auditOutcome} onChange={(event) => setAuditOutcome(event.target.value)}><option value="">All outcomes</option><option value="success">Success</option><option value="failure">Failure</option><option value="blocked">Blocked</option></select></label>
+            <label className="field"><span>Since</span><input type="date" value={auditSince} onChange={(event) => setAuditSince(event.target.value)} /></label>
+            <label className="field"><span>Until</span><input type="date" value={auditUntil} onChange={(event) => setAuditUntil(event.target.value)} /></label>
+            {hasAuditFilters && <button className="button button-ghost button-small security-clear-filters" type="button" onClick={() => { setAuditUserId(''); setAuditEventType(''); setAuditOutcome(''); setAuditSince(''); setAuditUntil(''); }}>Clear filters</button>}
+          </div>
           {audit.isLoading ? (
             <LoadingState label="Loading security activity…" />
           ) : audit.isError ? (
@@ -325,11 +368,14 @@ export default function SecurityPage() {
               )) : (
                 <EmptyState
                   title="No recent account changes"
-                  message={routineRefreshes.length ? 'Routine session refreshes are being grouped below.' : 'Security-relevant activity will appear here.'}
+                  message={routineEvents.length ? 'Routine refreshes and bridge telemetry are being grouped below.' : 'Security-relevant activity will appear here.'}
                 />
               )}
-              {routineRefreshes.length > 0 && (
+              {groupingEnabled && routineRefreshes.length > 0 && (
                 <p className="security-routine-summary"><History size={15} />{routineRefreshes.length} routine refresh{routineRefreshes.length === 1 ? '' : 'es'} grouped</p>
+              )}
+              {groupingEnabled && routineBridgeEvents.length > 0 && (
+                <p className="security-routine-summary"><History size={15} />{routineBridgeEvents.length} bridge update{routineBridgeEvents.length === 1 ? '' : 's'} grouped</p>
               )}
               {audit.hasNextPage && (
                 <button

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -13,6 +14,13 @@ class UserRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminUserRead(UserRead):
+    account_status: Literal["active", "setup_required", "inactive"]
+    password_changed_at: datetime | None = None
+    active_session_count: int = 0
+    last_activity_at: datetime | None = None
 
 
 class UserCreate(BaseModel):

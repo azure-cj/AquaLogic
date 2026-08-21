@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.database import Base, get_db
+from app.database import Base, configure_sqlite_foreign_keys, get_db
 from app.main import app
 from app.models import User
 from app.security import get_password_hash
@@ -18,6 +18,7 @@ engine = create_engine(
     poolclass=StaticPool,
     future=True,
 )
+configure_sqlite_foreign_keys(engine)
 TestingSessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
@@ -49,6 +50,9 @@ class SyncASGIClient:
 
     def put(self, url: str, **kwargs):
         return self.request("PUT", url, **kwargs)
+
+    def patch(self, url: str, **kwargs):
+        return self.request("PATCH", url, **kwargs)
 
     def delete(self, url: str, **kwargs):
         return self.request("DELETE", url, **kwargs)

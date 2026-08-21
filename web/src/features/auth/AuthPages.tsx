@@ -51,12 +51,16 @@ export function ChangePassword() {
 
 export function SetupPassword() {
   const nav = useNavigate();
-  const [setupToken, setSetupToken] = useState('');
+  // Capture the fragment during the initial render. React StrictMode runs
+  // effects twice in development; reading the hash from the effect after the
+  // first run has already removed it can otherwise erase a valid token.
+  const [setupToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    setSetupToken(new URLSearchParams(window.location.hash.slice(1)).get('token') || '');
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    if (window.location.hash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
   }, []);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from .user import UserRead
 
@@ -45,6 +45,20 @@ class SessionRead(BaseModel):
     expires_at: datetime
     current: bool = False
     user_agent: str | None = None
+
+
+class AdminSessionRead(BaseModel):
+    id: str
+    created_at: datetime
+    last_seen_at: datetime | None = None
+    expires_at: datetime
+    user_agent: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RevokeSessionsResponse(BaseModel):
+    revoked_count: int
 
 
 class SecurityAuditEventRead(BaseModel):

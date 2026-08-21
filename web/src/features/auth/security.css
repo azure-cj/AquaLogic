@@ -250,6 +250,47 @@
   margin-top: 1rem;
 }
 
+.security-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.security-audit-filters .field {
+  flex: 1 1 9rem;
+  min-width: 8rem;
+}
+
+.security-audit-filters .field:first-child {
+  flex-basis: 14rem;
+}
+
+.security-audit-filters .field span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.security-audit-filters select,
+.security-audit-filters input {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.security-clear-filters {
+  min-height: 2.25rem;
+}
+
 .security-event {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
