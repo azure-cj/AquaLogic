@@ -47,6 +47,14 @@ class FishSpecies(Base):
     def tank_count(self) -> int:
         return len(self.tank_links)
 
+    @property
+    def assigned_tanks(self) -> list[dict[str, int | str]]:
+        return [
+            {"id": link.tank.id, "name": link.tank.name}
+            for link in self.tank_links
+            if link.tank is not None
+        ]
+
 
 class TankFish(Base):
     __tablename__ = "tank_fish"

@@ -17,10 +17,17 @@ const species = [
     common_name: 'Betta',
     scientific_name: 'Betta splendens',
     category: 'Labyrinth fish',
+    ideal_temp_min: 24,
+    ideal_temp_max: 28,
+    ideal_ph_min: 6.5,
+    ideal_ph_max: 7.5,
+    ideal_tds_min: 100,
+    ideal_tds_max: 300,
     diet_type: 'Carnivore',
     diet: 'Micropellets and occasional live food.',
     description: 'Colorful labyrinth fish.',
     tank_count: 2,
+    assigned_tanks: [{ id: 1, name: 'Display tank' }, { id: 2, name: 'Quarantine tank' }],
   },
   {
     id: 2,
@@ -56,7 +63,7 @@ describe('Fish species directory', () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(await screen.findByText('Labyrinth fish')).toBeInTheDocument();
+    expect(await screen.findByText('Labyrinth fish', { selector: 'strong' })).toBeInTheDocument();
     const totalSpecies = screen.getByText('Total species');
     expect(totalSpecies.parentElement?.tagName).toBe('DIV');
     expect(totalSpecies.parentElement).toHaveTextContent('2Total species');
@@ -79,5 +86,56 @@ describe('Fish species directory', () => {
     );
     expect(localStorage.getItem('aqualogic:fish-species-view')).toBe('compact');
     expect(screen.getByText('Diet & feeding')).toBeInTheDocument();
+  });
+
+  it('supports explicit filters and a readable species details view', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'View details for Betta' }));
+
+    expect(await screen.findByRole('heading', { name: 'Preferred water conditions' })).toBeInTheDocument();
+    expect(screen.getByText('24–28 °C')).toBeInTheDocument();
+    expect(screen.getByText('Display tank')).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Close' })[0]);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by care group' }), 'Livebearers');
+
+    expect(screen.getByText('Molly', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('Betta', { selector: 'strong' })).not.toBeInTheDocument();
+  });
+
+  it('submits supported preferred water ranges from the species form', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Add fish species' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Common name' }), 'Guppy');
+    await user.type(screen.getByRole('textbox', { name: 'Scientific name' }), 'Poecilia reticulata');
+    await user.type(screen.getByRole('spinbutton', { name: 'Temperature minimum (°C)' }), '24');
+    await user.type(screen.getByRole('spinbutton', { name: 'Temperature maximum (°C)' }), '28');
+    await user.click(screen.getByRole('button', { name: 'Save fish species' }));
+
+    expect(api).toHaveBeenCalledWith('/fish', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"ideal_temp_min":"24"'),
+    }));
+  });
+
+  it('uploads a validated species photo after saving the profile', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api).mockImplementation((path: string) => Promise.resolve(
+      path === '/fish/1' ? species[0] : species,
+    ));
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit Betta' }));
+    const file = new File(['fish-photo'], 'betta.png', { type: 'image/png' });
+    await user.upload(await screen.findByTestId('fish-photo-upload'), file);
+    await user.click(screen.getByRole('button', { name: 'Save fish species' }));
+
+    const uploadCall = vi.mocked(api).mock.calls.find(([path]) => path === '/fish/1/photo-image');
+    expect(uploadCall?.[1]).toEqual(expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
+    expect((uploadCall?.[1]?.body as FormData).get('image')).toBe(file);
   });
 });

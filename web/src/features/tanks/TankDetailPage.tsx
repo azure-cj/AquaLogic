@@ -1,6 +1,5 @@
 import { ApiError, api } from '@/shared/api/client';
 import type {
-  Customer,
   Fish,
   SpeciesSuitabilityResponse,
   Tank,
@@ -43,10 +42,16 @@ const measurements = [
   ['temperature', 'Temperature', '°C', 1],
   ['ph', 'pH', '', 1],
   ['turbidity', 'Turbidity', 'NTU', 1],
-  ['dissolved_oxygen', 'Dissolved oxygen', 'mg/L', 1],
   ['tds', 'TDS', 'ppm', 0],
-  ['ammonia', 'Ammonia', 'ppm', 2],
 ] as const;
+
+function currentReleaseOperationalStatus(operations: TankOperations): TankOperations['status'] {
+  if (operations.status === 'offline') return 'offline';
+  const statuses = measurements.map(([key]) => operations.parameter_statuses[key]);
+  if (statuses.includes('critical')) return 'critical';
+  if (statuses.includes('warning')) return 'warning';
+  return 'normal';
+}
 
 const errorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -91,11 +96,6 @@ export function TankDetail() {
       api<SpeciesSuitabilityResponse>(`/tanks/${id}/species-suitability`),
     enabled: tank.isSuccess,
     refetchInterval: 30_000,
-  });
-  const customers = useQuery({
-    queryKey: ['customers'],
-    queryFn: () => api<Customer[]>('/customers'),
-    enabled: validId && canManage,
   });
   const fish = useQuery({
     queryKey: ['fish'],
@@ -213,6 +213,10 @@ export function TankDetail() {
   const reading = operations.data?.latest_reading;
   const assigned = value.fish_species ?? [];
   const care = suitability.data;
+  const operationalStatus = operations.data ? currentReleaseOperationalStatus(operations.data) : null;
+  const visibleActiveAlerts = operations.data?.active_alerts.filter((alert) =>
+    measurements.some(([key]) => key === alert.parameter),
+  ) ?? [];
   const publicActions = value.is_public ? (
     <>
       <a
@@ -293,7 +297,7 @@ export function TankDetail() {
           ) : operations.isError ? (
             <strong>Unavailable</strong>
           ) : (
-            <StatusBadge value={operations.data!.status} />
+            <StatusBadge value={operationalStatus!} />
           )}
         </div>
         <div className="tank-summary-card">
@@ -311,7 +315,7 @@ export function TankDetail() {
           <strong>
             {operations.isLoading || operations.isError
               ? '—'
-              : operations.data!.active_alerts.length}
+              : visibleActiveAlerts.length}
           </strong>
         </div>
         <div className="tank-summary-card">
@@ -343,8 +347,8 @@ export function TankDetail() {
           <Panel
             title="Current readings"
             description={
-              reading
-                ? `Observed ${formatDate(reading.timestamp)} · ${operations.data?.status === 'offline' ? 'Device offline or stale' : 'Device data current'}`
+                reading
+                 ? `Observed ${formatDate(reading.timestamp)} · ${operationalStatus === 'offline' ? 'Device offline or stale' : 'Device data current'}`
                 : 'No sensor reading is available'
             }
             className="tank-readings-panel"
@@ -393,9 +397,9 @@ export function TankDetail() {
                 message="Operational alerts could not be loaded."
                 retry={() => operations.refetch()}
               />
-            ) : operations.data!.active_alerts.length ? (
+            ) : visibleActiveAlerts.length ? (
               <div className="alert-feed">
-                {operations.data!.active_alerts.map((alert) => (
+                {visibleActiveAlerts.map((alert) => (
                   <div className="alert-feed-item" key={alert.id}>
                     <span
                       className={`alert-symbol alert-${alert.severity}`}
@@ -590,10 +594,6 @@ export function TankDetail() {
       <TankEditorDrawer
         open={editing}
         tank={value}
-        customers={customers.data ?? []}
-        customersLoading={customers.isLoading}
-        customersError={customers.isError}
-        onRetryCustomers={() => customers.refetch()}
         onClose={closeEditor}
         onSaved={() => {
           client.invalidateQueries({ queryKey: ['tank', id] });

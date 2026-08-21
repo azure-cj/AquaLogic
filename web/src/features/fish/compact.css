@@ -213,7 +213,7 @@
     minmax(210px, 1.5fr)
     minmax(235px, 1.4fr)
     minmax(135px, 0.75fr)
-    78px;
+    112px;
   align-items: center;
   column-gap: 1.1rem;
 }
@@ -506,7 +506,7 @@
       minmax(180px, 1.3fr)
       minmax(205px, 1.35fr)
       minmax(120px, 0.7fr)
-      72px;
+      112px;
     column-gap: 0.8rem;
   }
 }
@@ -538,7 +538,7 @@
   }
 
   .compact-fish__row {
-    grid-template-columns: minmax(170px, 1.1fr) minmax(170px, 1.2fr) 110px 72px;
+    grid-template-columns: minmax(170px, 1.1fr) minmax(170px, 1.2fr) 110px 112px;
     min-height: 82px;
   }
 

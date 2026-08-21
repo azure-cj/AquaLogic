@@ -38,6 +38,9 @@ class Settings:
     demo_sensor_interval_seconds: int
     public_base_url: str
     public_image_hosts: set[str]
+    media_root: str
+    max_hero_image_bytes: int
+    max_fish_image_bytes: int
     analytics_uptime_warning: float
     analytics_uptime_critical: float
 
@@ -87,6 +90,9 @@ def get_settings() -> Settings:
         demo_sensor_interval_seconds=int(os.getenv("DEMO_SENSOR_INTERVAL_SECONDS", "30")),
         public_base_url=os.getenv("PUBLIC_BASE_URL", "http://localhost:5173").rstrip("/"),
         public_image_hosts=set(_parse_csv(os.getenv("PUBLIC_IMAGE_HOSTS"), ["images.unsplash.com"] if environment != "production" else [])),
+        media_root=os.getenv("MEDIA_ROOT", "./media"),
+        max_hero_image_bytes=int(os.getenv("MAX_HERO_IMAGE_BYTES", str(5 * 1024 * 1024))),
+        max_fish_image_bytes=int(os.getenv("MAX_FISH_IMAGE_BYTES", os.getenv("MAX_HERO_IMAGE_BYTES", str(5 * 1024 * 1024)))),
         analytics_uptime_warning=float(os.getenv("ANALYTICS_UPTIME_WARNING", "99")),
         analytics_uptime_critical=float(os.getenv("ANALYTICS_UPTIME_CRITICAL", "95")),
     )

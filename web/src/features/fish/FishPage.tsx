@@ -10,7 +10,10 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
+  Eye,
+  ExternalLink,
   FishSymbol,
+  ImagePlus,
   Layers3,
   List,
   Pencil,
@@ -19,9 +22,10 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useMe } from '@/shared/hooks/useMe';
 
 import './compact.css';
@@ -37,7 +41,28 @@ type FishRecord = ApiFish & {
   tank_count: number;
 };
 
+type UsageFilter = 'All usage' | 'In use' | 'Not assigned';
+
+function formatRange(min: number | null | undefined, max: number | null | undefined, unit: string) {
+  if (min == null && max == null) return 'Not configured';
+  const value = (number: number) => Number.isInteger(number) ? String(number) : number.toFixed(1);
+  if (min != null && max != null) return `${value(min)}–${value(max)} ${unit}`.trim();
+  if (min != null) return `At least ${value(min)} ${unit}`.trim();
+  return `At most ${value(max as number)} ${unit}`.trim();
+}
+
+function careProfileState(fish: FishRecord) {
+  const configured = [
+    fish.ideal_temp_min != null || fish.ideal_temp_max != null,
+    fish.ideal_ph_min != null || fish.ideal_ph_max != null,
+    fish.ideal_tds_min != null || fish.ideal_tds_max != null,
+  ].filter(Boolean).length;
+  return configured === 3 ? 'Complete care profile' : configured ? 'Partially configured' : 'Care ranges not configured';
+}
+
 const viewStorageKey = 'aqualogic:fish-species-view';
+const MAX_FISH_IMAGE_BYTES = 5 * 1024 * 1024;
+const FISH_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const categorySuggestions = [
   'Livebearers',
   'Cichlids',
@@ -135,46 +160,57 @@ function RowActions({
   fish,
   compact = false,
   onEdit,
+  onView,
   onDelete,
   canManage,
 }: {
   fish: FishRecord;
   compact?: boolean;
   onEdit: (fish: FishRecord) => void;
+  onView: (fish: FishRecord) => void;
   onDelete: (fish: FishRecord) => void;
   canManage: boolean;
 }) {
   const inUse = fish.tank_count > 0;
   const className = compact ? 'compact-fish__actions' : 'fdg-actions';
-  if (!canManage) return <span className={className} aria-label="Read-only species catalog" />;
   return (
     <div className={className}>
       <button
         type="button"
-        onClick={() => onEdit(fish)}
-        aria-label={`Edit ${fish.common_name}`}
-        title={`Edit ${fish.common_name}`}
+        onClick={() => onView(fish)}
+        aria-label={`View details for ${fish.common_name}`}
+        title={`View details for ${fish.common_name}`}
       >
-        <Pencil size={16} />
+        <Eye size={16} />
       </button>
-      <button
-        className={compact ? 'compact-fish__delete' : 'fdg-delete'}
-        type="button"
-        disabled={inUse}
-        onClick={() => onDelete(fish)}
-        aria-label={
-          inUse
-            ? `Cannot delete ${fish.common_name}; assigned to ${fish.tank_count} tanks`
-            : `Delete ${fish.common_name}`
-        }
-        title={
-          inUse
-            ? `Remove this species from ${fish.tank_count} tanks before deleting`
-            : `Delete ${fish.common_name}`
-        }
-      >
-        {compact && inUse ? <ShieldCheck size={16} /> : <Trash2 size={16} />}
-      </button>
+      {canManage && <>
+        <button
+          type="button"
+          onClick={() => onEdit(fish)}
+          aria-label={`Edit ${fish.common_name}`}
+          title={`Edit ${fish.common_name}`}
+        >
+          <Pencil size={16} />
+        </button>
+        <button
+          className={compact ? 'compact-fish__delete' : 'fdg-delete'}
+          type="button"
+          disabled={inUse}
+          onClick={() => onDelete(fish)}
+          aria-label={
+            inUse
+              ? `Cannot delete ${fish.common_name}; assigned to ${fish.tank_count} tanks`
+              : `Delete ${fish.common_name}`
+          }
+          title={
+            inUse
+              ? `Remove this species from ${fish.tank_count} tanks before deleting`
+              : `Delete ${fish.common_name}`
+          }
+        >
+          {compact && inUse ? <ShieldCheck size={16} /> : <Trash2 size={16} />}
+        </button>
+      </>}
     </div>
   );
 }
@@ -189,16 +225,36 @@ export function Fish() {
   });
   const [view, setView] = useState<ViewMode>(initialView);
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('All care groups');
   const [diet, setDiet] = useState<'All diets' | DietType>('All diets');
-  const [onlyInUse, setOnlyInUse] = useState(false);
+  const [usage, setUsage] = useState<UsageFilter>('All usage');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Partial<FishRecord> | null>(null);
+  const [viewing, setViewing] = useState<FishRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FishRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview(photoUrl);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(photoFile);
+    setPhotoPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [photoFile, photoUrl]);
 
   const fish = query.data ?? [];
+  const categories = useMemo(
+    () => [...new Set(fish.map((item) => item.category || 'Other'))].sort((left, right) => left.localeCompare(right)),
+    [fish],
+  );
   const visible = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     return fish.filter((item) => {
@@ -213,9 +269,12 @@ export function Fish() {
           item.diet_type,
         ].some((value) => value?.toLowerCase().includes(normalized));
       const matchesDiet = diet === 'All diets' || item.diet_type === diet;
-      return matchesSearch && matchesDiet && (!onlyInUse || item.tank_count > 0);
+      const matchesCategory = category === 'All care groups' || item.category === category;
+      const matchesUsage = usage === 'All usage'
+        || (usage === 'In use' ? item.tank_count > 0 : item.tank_count === 0);
+      return matchesSearch && matchesCategory && matchesDiet && matchesUsage;
     });
-  }, [diet, fish, onlyInUse, search]);
+  }, [category, diet, fish, search, usage]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, FishRecord[]>();
@@ -238,6 +297,49 @@ export function Fish() {
   const startEdit = (item: FishRecord) => {
     setError('');
     setEditing(item);
+    setPhotoUrl(item.photo_url ?? '');
+    setPhotoFile(null);
+    setPhotoPreview(item.photo_url ?? '');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const startCreate = () => {
+    setError('');
+    setEditing({ category: 'Other' });
+    setPhotoUrl('');
+    setPhotoFile(null);
+    setPhotoPreview('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const selectPhotoFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!FISH_IMAGE_TYPES.includes(file.type)) {
+      setError('Choose a JPG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_FISH_IMAGE_BYTES) {
+      setError('Fish photos must be 5 MB or smaller.');
+      return;
+    }
+    setError('');
+    setPhotoUrl('');
+    setPhotoFile(file);
+  };
+
+  const usePhotoUrl = (value: string) => {
+    setPhotoUrl(value);
+    if (photoFile) {
+      setPhotoFile(null);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const clearPhoto = () => {
+    setPhotoFile(null);
+    setPhotoUrl('');
+    setPhotoPreview('');
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -250,19 +352,37 @@ export function Fish() {
         'common_name',
         'scientific_name',
         'category',
+        'ideal_temp_min',
+        'ideal_temp_max',
+        'ideal_ph_min',
+        'ideal_ph_max',
+        'ideal_tds_min',
+        'ideal_tds_max',
         'diet_type',
         'photo_url',
         'description',
         'diet',
         'compatibility_notes',
         'care_tips',
-      ].map((key) => [key, form.get(key) || null]),
+      ].map((key) => [key, key === 'photo_url' && photoFile ? editing?.photo_url ?? null : form.get(key) || null]),
     );
     try {
-      await api(editing?.id ? `/fish/${editing.id}` : '/fish', {
+      const saved = await api<ApiFish>(editing?.id ? `/fish/${editing.id}` : '/fish', {
         method: editing?.id ? 'PUT' : 'POST',
         body: JSON.stringify(body),
       });
+      if (photoFile && saved.id) {
+        const upload = new FormData();
+        upload.append('image', photoFile);
+        try {
+          await api(`/fish/${saved.id}/photo-image`, { method: 'POST', body: upload });
+        } catch (caught) {
+          setError(caught instanceof Error
+            ? `Species saved, but the photo could not be uploaded: ${caught.message}`
+            : 'Species saved, but the photo could not be uploaded.');
+          return;
+        }
+      }
       setNotice(`${body.common_name} ${editing?.id ? 'updated' : 'created'} successfully.`);
       setEditing(null);
       await queryClient.invalidateQueries({ queryKey: ['/fish'] });
@@ -298,8 +418,9 @@ export function Fish() {
 
   const clearFilters = () => {
     setSearch('');
+    setCategory('All care groups');
     setDiet('All diets');
-    setOnlyInUse(false);
+    setUsage('All usage');
   };
 
   return (
@@ -331,13 +452,10 @@ export function Fish() {
               Compact
             </button>
           </div>
-          {canManage && <button
-            className="fdg-primary-button"
-            type="button"
-            onClick={() => {
-              setError('');
-              setEditing({ category: 'Other' });
-            }}
+           {canManage && <button
+             className="fdg-primary-button"
+             type="button"
+             onClick={startCreate}
           >
             <Plus size={17} />
             Add fish species
@@ -381,6 +499,14 @@ export function Fish() {
         <div className="fdg-filters" aria-label="Species filters">
           <SlidersHorizontal size={16} aria-hidden="true" />
           <select
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            aria-label="Filter by care group"
+          >
+            <option>All care groups</option>
+            {categories.map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <select
             value={diet}
             onChange={(event) => setDiet(event.target.value as typeof diet)}
             aria-label="Filter by diet"
@@ -390,15 +516,15 @@ export function Fish() {
             <option>Omnivore</option>
             <option>Herbivore</option>
           </select>
-          <label className="fdg-toggle">
-            <input
-              type="checkbox"
-              checked={onlyInUse}
-              onChange={(event) => setOnlyInUse(event.target.checked)}
-            />
-            <span aria-hidden="true" />
-            In use only
-          </label>
+          <select
+            value={usage}
+            onChange={(event) => setUsage(event.target.value as UsageFilter)}
+            aria-label="Filter by tank usage"
+          >
+            <option>All usage</option>
+            <option>In use</option>
+            <option>Not assigned</option>
+          </select>
         </div>
       </div>
 
@@ -484,6 +610,7 @@ export function Fish() {
                           <RowActions
                             fish={item}
                             onEdit={startEdit}
+                            onView={setViewing}
                             onDelete={setDeleteTarget}
                             canManage={canManage}
                           />
@@ -524,6 +651,7 @@ export function Fish() {
                 fish={item}
                 compact
                 onEdit={startEdit}
+                onView={setViewing}
                 onDelete={setDeleteTarget}
                 canManage={canManage}
               />
@@ -540,6 +668,91 @@ export function Fish() {
           </footer>
         </div>
       )}
+
+      <Drawer
+        open={Boolean(viewing)}
+        title={viewing?.common_name ?? 'Species details'}
+        description={viewing?.scientific_name ?? 'Read-only care profile'}
+        onClose={() => setViewing(null)}
+        footer={
+          <div className="drawer-actions">
+            <button className="button button-secondary" type="button" onClick={() => setViewing(null)}>
+              Close
+            </button>
+            {canManage && viewing && (
+              <button
+                 className="button button-primary"
+                 type="button"
+                 onClick={() => {
+                   startEdit(viewing);
+                   setViewing(null);
+                 }}
+              >
+                Edit profile
+              </button>
+            )}
+          </div>
+        }
+      >
+        {viewing && (
+          <div className="fish-details">
+            <div className="fish-details__identity">
+              <SpeciesImage fish={viewing} />
+              <div>
+                <span className="fish-details__category">{viewing.category}</span>
+                <h3>{viewing.common_name}</h3>
+                <em>{viewing.scientific_name}</em>
+              </div>
+            </div>
+            <div className="fish-details__status-row">
+              <span className="fish-details__profile-status">{careProfileState(viewing)}</span>
+              <span className="fish-details__usage-status">
+                {viewing.tank_count ? `${viewing.tank_count} assigned ${viewing.tank_count === 1 ? 'tank' : 'tanks'}` : 'Not assigned to a tank'}
+              </span>
+            </div>
+
+            <section className="fish-details__section">
+              <h3>Preferred water conditions</h3>
+              <p className="fish-details__helper">Used for care guidance against the tank’s latest supported readings.</p>
+              <div className="fish-details__ranges">
+                <div><span>Temperature</span><strong>{formatRange(viewing.ideal_temp_min, viewing.ideal_temp_max, '°C')}</strong></div>
+                <div><span>pH</span><strong>{formatRange(viewing.ideal_ph_min, viewing.ideal_ph_max, '')}</strong></div>
+                <div><span>TDS</span><strong>{formatRange(viewing.ideal_tds_min, viewing.ideal_tds_max, 'ppm')}</strong></div>
+              </div>
+            </section>
+
+            <section className="fish-details__section">
+              <h3>Diet and care</h3>
+              <div className="fish-details__copy-grid">
+                <div><span>Diet type</span><strong>{viewing.diet_type ?? 'Not set'}</strong></div>
+                <div><span>Feeding details</span><p>{viewing.diet || 'No feeding details added.'}</p></div>
+                <div><span>Compatibility</span><p>{viewing.compatibility_notes || 'No compatibility notes added.'}</p></div>
+                <div><span>Care tips</span><p>{viewing.care_tips || 'No care tips added.'}</p></div>
+              </div>
+            </section>
+
+            <section className="fish-details__section">
+              <h3>Assigned tanks</h3>
+              {viewing.assigned_tanks?.length ? (
+                <ul className="fish-details__tank-list">
+                  {viewing.assigned_tanks.map((tank) => (
+                    <li key={tank.id}>
+                      <a href={`/admin/tanks/${tank.id}`}>
+                        {tank.name}
+                        <ExternalLink size={13} aria-hidden="true" />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : viewing.tank_count ? (
+                <p className="fish-details__helper">This species is assigned, but tank names are not available in the current response.</p>
+              ) : (
+                <p className="fish-details__helper">Assign this species from a tank workspace to begin care checks.</p>
+              )}
+            </section>
+          </div>
+        )}
+      </Drawer>
 
       <Drawer
         open={Boolean(editing)}
@@ -602,10 +815,88 @@ export function Fish() {
                 </select>
               </label>
             </div>
-            <label className="field">
-              <span>Photo URL</span>
-              <input name="photo_url" type="url" defaultValue={editing?.photo_url ?? ''} />
-            </label>
+          </div>
+          <div className="form-section fish-photo-section">
+              <div>
+                <h3>Species photo</h3>
+                <p className="form-section__copy">Use a hosted image URL or upload a JPG, PNG, or WebP image for this species.</p>
+              </div>
+              <label className="field">
+                <span>Image URL <small>Optional</small></span>
+                <input
+                  name="photo_url"
+                  type="url"
+                  value={photoUrl}
+                  onChange={(event) => usePhotoUrl(event.target.value)}
+                  placeholder="https://images.example.com/fish.jpg"
+                  maxLength={500}
+                  disabled={Boolean(photoFile)}
+                  aria-describedby="fish-photo-help"
+                />
+              </label>
+              <label className="field">
+                <span>Upload image <small>JPG, PNG, or WebP · max 5 MB</small></span>
+                <span className="fish-file-input-wrap">
+                  <Upload size={16} aria-hidden="true" />
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    aria-label="Upload fish photo"
+                    data-testid="fish-photo-upload"
+                    onChange={(event) => selectPhotoFile(event.target.files?.[0])}
+                    disabled={!editing?.id || busy}
+                  />
+                </span>
+                <small id="fish-photo-help" className="field-help">
+                  {editing?.id ? 'Uploading replaces the current species photo after you save.' : 'Save the species first, then edit it to upload an image.'}
+                </small>
+              </label>
+              {photoPreview ? (
+                <div className="fish-photo-preview-wrap">
+                  <img className="fish-photo-preview" src={photoPreview} alt="Species photo preview" onError={() => setPhotoPreview('')} />
+                  <button className="button button-secondary fish-photo-clear" type="button" onClick={clearPhoto} disabled={busy}>
+                    <Trash2 size={15} /> Remove image
+                  </button>
+                </div>
+              ) : (
+                <div className="fish-photo-empty" role="status">
+                  <ImagePlus size={20} aria-hidden="true" />
+                  <span>No species photo selected</span>
+                </div>
+              )}
+          </div>
+          <div className="form-section">
+            <h3>Preferred water conditions</h3>
+            <p className="form-section__copy">
+              These ranges support species-care guidance and are separate from operational tank alert thresholds.
+            </p>
+            <div className="fish-range-grid">
+              <label className="field">
+                <span>Temperature minimum (°C)</span>
+                <input name="ideal_temp_min" type="number" min="0" max="50" step="0.1" defaultValue={editing?.ideal_temp_min ?? ''} placeholder="e.g. 24" />
+              </label>
+              <label className="field">
+                <span>Temperature maximum (°C)</span>
+                <input name="ideal_temp_max" type="number" min="0" max="50" step="0.1" defaultValue={editing?.ideal_temp_max ?? ''} placeholder="e.g. 28" />
+              </label>
+              <label className="field">
+                <span>pH minimum</span>
+                <input name="ideal_ph_min" type="number" min="0" max="14" step="0.1" defaultValue={editing?.ideal_ph_min ?? ''} placeholder="e.g. 6.5" />
+              </label>
+              <label className="field">
+                <span>pH maximum</span>
+                <input name="ideal_ph_max" type="number" min="0" max="14" step="0.1" defaultValue={editing?.ideal_ph_max ?? ''} placeholder="e.g. 7.5" />
+              </label>
+              <label className="field">
+                <span>TDS minimum (ppm)</span>
+                <input name="ideal_tds_min" type="number" min="0" step="1" defaultValue={editing?.ideal_tds_min ?? ''} placeholder="e.g. 100" />
+              </label>
+              <label className="field">
+                <span>TDS maximum (ppm)</span>
+                <input name="ideal_tds_max" type="number" min="0" step="1" defaultValue={editing?.ideal_tds_max ?? ''} placeholder="e.g. 300" />
+              </label>
+            </div>
           </div>
           <div className="form-section">
             <h3>Care information</h3>

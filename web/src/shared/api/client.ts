@@ -53,6 +53,7 @@ export type AuthToken = {
 };
 
 const base = import.meta.env.VITE_API_BASE_URL || '/api';
+const REQUEST_TIMEOUT_MS = 10_000;
 let accessToken: string | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 const authChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('aqualogic-auth');
@@ -100,15 +101,28 @@ export class ApiError extends Error {
 }
 
 async function request(path: string, init: RequestInit = {}, includeToken = true): Promise<Response> {
-  return fetch(`${base}${path}`, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(includeToken && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
+  const headers = new Headers(init.headers);
+  if (!(typeof FormData !== 'undefined' && init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (includeToken && accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(`${base}${path}`, {
+      ...init,
+      credentials: 'same-origin',
+      headers,
+      signal: init.signal ?? controller.signal,
+    });
+  } catch (caught) {
+    if (caught instanceof DOMException && caught.name === 'AbortError') {
+      throw new ApiError('The server did not respond in time. Check that the AquaLogic API is running.', 408);
+    }
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export async function refreshAccessToken(): Promise<boolean> {

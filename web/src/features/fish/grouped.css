@@ -324,7 +324,7 @@
     minmax(210px, 1.25fr)
     minmax(165px, 0.9fr)
     minmax(95px, 0.55fr)
-    72px;
+    112px;
   align-items: center;
   gap: 1rem;
 }
@@ -552,7 +552,7 @@
   }
 
   .fdg-species-row {
-    grid-template-columns: minmax(190px, 1fr) minmax(190px, 1.2fr) minmax(150px, 0.8fr) 72px;
+    grid-template-columns: minmax(190px, 1fr) minmax(190px, 1.2fr) minmax(150px, 0.8fr) 112px;
   }
 
   .fdg-usage {

@@ -1,5 +1,6 @@
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -75,6 +76,9 @@ def _openapi_schema() -> dict:
 
 app.openapi = _openapi_schema
 app.mount("/static/swagger-ui", StaticFiles(directory=swagger_ui_path), name="swagger-ui")
+media_root = Path(settings.media_root)
+media_root.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=media_root), name="media")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
@@ -132,11 +136,16 @@ async def security_headers_and_body_limit(request: Request, call_next):
         declared_size = int(content_length) if content_length else 0
     except ValueError:
         return _apply_security_headers(request, JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"}))
-    if declared_size > 64 * 1024:
+    is_multipart = request.headers.get("content-type", "").startswith("multipart/form-data")
+    is_hero_upload = request.url.path.endswith("/hero-image") and is_multipart
+    is_fish_upload = request.url.path.endswith("/photo-image") and is_multipart
+    upload_limit = settings.max_hero_image_bytes if is_hero_upload else settings.max_fish_image_bytes
+    max_request_size = upload_limit + 128 * 1024 if is_hero_upload or is_fish_upload else 64 * 1024
+    if declared_size > max_request_size:
         return _apply_security_headers(request, JSONResponse(status_code=413, content={"detail": "Request body is too large"}))
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         body = await request.body()
-        if len(body) > 64 * 1024:
+        if len(body) > max_request_size:
             return _apply_security_headers(request, JSONResponse(status_code=413, content={"detail": "Request body is too large"}))
     response = await call_next(request)
     return _apply_security_headers(request, response)

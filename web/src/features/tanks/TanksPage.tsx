@@ -1,5 +1,5 @@
 import { api } from '@/shared/api/client';
-import type { Customer, FleetTank, Tank } from '@/shared/api/models';
+import type { FleetTank, Tank } from '@/shared/api/models';
 import {
   ConfirmDialog,
   EmptyState,
@@ -141,10 +141,6 @@ export function Tanks() {
     queryKey: ['fleet'],
     queryFn: () => api<FleetTank[]>('/fleet'),
   });
-  const customers = useQuery({
-    queryKey: ['customers'],
-    queryFn: () => api<Customer[]>('/customers'),
-  });
   const editTankId = Number(searchParams.get('edit'));
   const chosen = canManage ? tanks.data?.find((tank) => tank.id === editTankId) : undefined;
   const visible = (tanks.data ?? []).filter((tank) =>
@@ -193,7 +189,7 @@ export function Tanks() {
       <PageHeader
         eyebrow="Fleet management"
         title="Tanks"
-        description="Manage installations, customer access, configuration, and QR labels."
+        description="Manage tanks, public visibility, configuration, and QR labels."
         actions={canManage ? (
           <button
             className="button button-primary"
@@ -239,7 +235,6 @@ export function Tanks() {
           <div className="data-table management-table tanks-table">
             <div className="data-head">
               <span>Tank</span>
-              <span>Customer</span>
               <span>Health</span>
               <span>Public page</span>
               <span>Actions</span>
@@ -259,11 +254,6 @@ export function Tanks() {
                       <Link to={`/admin/tanks/${tank.id}`}>{tank.name}</Link>
                       <small>{tank.location}</small>
                     </span>
-                  </span>
-                  <span>
-                    {customers.data?.find(
-                      (customer) => customer.id === tank.customer_id,
-                    )?.name ?? 'Unassigned'}
                   </span>
                   {health ? (
                     <StatusBadge value={health.status} />
@@ -340,10 +330,6 @@ export function Tanks() {
       {canManage && <TankEditorDrawer
         open={creating || Boolean(chosen)}
         tank={chosen}
-        customers={customers.data ?? []}
-        customersLoading={customers.isLoading}
-        customersError={customers.isError}
-        onRetryCustomers={() => customers.refetch()}
         onClose={closeDrawer}
         onSaved={saved}
       />}

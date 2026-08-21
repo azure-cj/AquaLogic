@@ -1,6 +1,6 @@
 .tanks-table .data-head,
 .tanks-table .data-row {
-  grid-template-columns: minmax(190px, 1.4fr) minmax(130px, 0.85fr) 100px minmax(100px, 0.7fr) minmax(190px, auto);
+  grid-template-columns: minmax(220px, 1.6fr) 100px minmax(120px, 0.8fr) minmax(190px, auto);
 }
 
 .tanks-table .action-tooltip {
@@ -125,6 +125,20 @@
 .care-status-suitable { background: #e5f6ee; color: #1e6d50; }
 .care-status-attention { background: #fff1dc; color: #a95d08; }
 .care-status-unavailable { background: #eef1f4; color: #55616b; }
+
+.species-care-status {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  max-width: 230px;
+  text-align: right;
+}
+
+.species-care-status small {
+  color: var(--muted);
+  font-size: 0.63rem;
+  line-height: 1.35;
+}
 
 .care-reading { margin-top: 0.75rem; }
 .care-species-list { display: grid; gap: 0.6rem; margin-top: 0.7rem; }
@@ -322,6 +336,20 @@
 .tank-info-list dd { margin: .2rem 0 0; color: var(--text); font-size: .72rem; }
 .tank-hero-preview { width: 100%; max-height: 170px; margin-top: .8rem; border-radius: 9px; object-fit: cover; background: #eef1f4; }
 .drawer-detail-link { display: inline-flex; align-items: center; gap: .3rem; margin: .85rem 0 0; }
+
+.form-section-copy { margin: -.35rem 0 0; color: var(--muted); font-size: .68rem; line-height: 1.45; }
+.field > span { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.field > span small { color: var(--muted); font-size: .6rem; font-weight: 600; }
+.field-help { display: block; margin-top: -.08rem; color: var(--muted); font-size: .64rem; font-weight: 500; line-height: 1.4; }
+.file-input-wrap { display: flex; align-items: center; gap: .55rem; min-height: 40px; padding: .42rem .62rem; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-soft); color: var(--muted); }
+.file-input-wrap input[type='file'] { min-width: 0; border: 0; padding: 0; background: transparent; color: var(--text); font-size: .72rem; }
+.file-input-wrap input[type='file']::file-selector-button { margin-right: .55rem; padding: .35rem .52rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: .66rem; font-weight: 700; cursor: pointer; }
+.file-input-wrap input[type='file']::file-selector-button:hover { border-color: var(--teal-600); }
+.hero-image-preview-wrap { display: grid; gap: .55rem; padding: .65rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.hero-image-preview { display: block; width: 100%; max-height: 170px; border-radius: 7px; object-fit: cover; background: var(--surface); }
+.hero-image-clear { justify-self: start; min-height: 34px; font-size: .68rem; }
+.hero-image-empty { display: flex; align-items: center; gap: .5rem; min-height: 72px; padding: .8rem; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: .7rem; }
+.form-section-visibility { gap: .55rem; }
 
 @media (max-width: 980px) { .tank-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tank-primary-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .tank-summary-grid, .tank-secondary-grid, .reading-grid, .tank-info-list { grid-template-columns: 1fr; } .tank-summary-card { min-height: auto; } .tank-detail-actions { width: 100%; } .tank-detail-actions .button { flex: 1 1 120px; min-height: 42px; } .care-filter { width: 100%; overflow-x: auto; } }
