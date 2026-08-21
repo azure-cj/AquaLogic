@@ -190,6 +190,37 @@ def test_successful_command_is_sent_once_and_reported():
     succeeded.assert_called_once()
 
 
+def test_schedule_command_is_forwarded_once_with_exact_device_times():
+    config = {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "key",
+        "timeout_seconds": 1,
+    }
+    pending = command(
+        "feeder",
+        "schedule",
+        {
+            "slots": [
+                {"enabled": True, "time": "08:05"},
+                {"enabled": False, "time": "12:30"},
+                {"enabled": True, "time": "18:45"},
+            ]
+        },
+    )
+    with patch.object(bridge, "_pending_commands", return_value=[pending]), \
+        patch.object(bridge, "_mark_executing"), \
+        patch.object(bridge, "refresh_actuator_states"), \
+        patch.object(bridge, "_report_succeeded") as succeeded, \
+        patch.object(bridge, "fetch_json", return_value={"schedule": "saved"}) as fetch:
+        assert bridge.process_pending_actuator_commands(config) == 1
+    fetch.assert_called_once_with(
+        "http://192.168.1.50/feeder/schedule?h0=08&m0=05&e0=1&h1=12&m1=30&e1=0&h2=18&m2=45&e2=1",
+        1.0,
+    )
+    succeeded.assert_called_once()
+
+
 def pump_status(*, active=False, dose_count=2, volume_ml=1.0):
     return {
         "active": active,

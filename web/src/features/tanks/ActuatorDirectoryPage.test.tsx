@@ -78,7 +78,7 @@ describe('actuator directory page', () => {
     const tankWorkspaceLinks = screen.getAllByRole('link', { name: /^Tank workspace$/ });
     expect(tankWorkspaceLinks[0]).toHaveAttribute('href', '/admin/tanks/1');
     expect(screen.getByText('Nursery tank')).toBeInTheDocument();
-    expect(screen.getByText('The browser chooses a tank view only. It never chooses a device, receives a device key, or contacts the ESP32 directly.')).toBeInTheDocument();
+    expect(screen.getByText('Every action stays associated with the selected tank and is processed through AquaLogic.')).toBeInTheDocument();
   });
 
   it('does not fetch the tank directory for staff users', async () => {

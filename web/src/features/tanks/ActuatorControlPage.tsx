@@ -67,7 +67,7 @@ export function ActuatorControlPage() {
       <PageHeader
         eyebrow={`Tank operations · ${tank.data?.name ?? `Tank ${id}`}`}
         title="Actuator control center"
-        description="Run light, feeder, timer, schedule, and guarded pump-test actions for this tank’s registered bridge."
+        description="Manage this tank’s lights, feeder, schedules, and advanced maintenance checks from one focused workspace."
         actions={backAction}
       />
       {tank.isLoading ? (
@@ -81,11 +81,11 @@ export function ActuatorControlPage() {
           <div className="actuator-control-page-context" role="note">
             <div>
               <strong>Focused workspace</strong>
-              <span>Use this page for schedules, timer controls, pump safety checks, and command history.</span>
+              <span>Review equipment status, manage schedules, and follow command activity in one place.</span>
             </div>
             <div>
-              <strong>Safe command path</strong>
-              <span>Commands are queued through AquaLogic; the browser never connects directly to the ESP32.</span>
+              <strong>Protected command flow</strong>
+              <span>Requests are processed through AquaLogic and remain associated with this tank.</span>
             </div>
           </div>
           <ActuatorControlPanel tankId={id} variant="full" />

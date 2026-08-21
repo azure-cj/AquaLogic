@@ -57,13 +57,13 @@ export function ActuatorDirectoryPage() {
       <PageHeader
         eyebrow="Administration"
         title="Actuator controls"
-        description="Choose a tank to open its focused control center. The backend keeps every command scoped to the bridge registered for that tank."
+        description="Choose a tank to open its dedicated equipment workspace."
       />
       <div className="actuator-directory-note" role="note">
         <LockKeyhole size={18} aria-hidden="true" />
         <span>
-          <strong>Server-scoped hardware access</strong>
-          <small>The browser chooses a tank view only. It never chooses a device, receives a device key, or contacts the ESP32 directly.</small>
+          <strong>Protected equipment access</strong>
+          <small>Every action stays associated with the selected tank and is processed through AquaLogic.</small>
         </span>
       </div>
       <Panel
@@ -88,10 +88,10 @@ export function ActuatorDirectoryPage() {
                   </div>
                 </div>
                 <div className="actuator-tank-scope">
-                  <span><small>Command boundary</small><strong>Registered tank only</strong></span>
-                  <span><small>Hardware access</small><strong>Verified on open</strong></span>
+                  <span><small>Control scope</small><strong>Selected tank only</strong></span>
+                  <span><small>Access</small><strong>Available to admins</strong></span>
                 </div>
-                <p className="actuator-tank-card-copy">Open the full workspace to view bridge freshness before sending a command.</p>
+                <p className="actuator-tank-card-copy">Review equipment status before sending an administrator action.</p>
                 <div className="actuator-tank-card-actions">
                   <Link className="button button-primary button-small" to={`/admin/tanks/${tank.id}/actuators`}>
                     Open controls <ArrowRight size={14} />

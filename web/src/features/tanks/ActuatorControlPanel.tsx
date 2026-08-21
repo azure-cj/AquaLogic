@@ -62,19 +62,19 @@ type TooltipPosition = {
 type PumpConfirmation = { actuator: 'pump_a' | 'pump_b'; action: 'dispense' | 'retract' };
 
 const commandStatusDescription: Record<ActuatorCommandStatus, string> = {
-  queued: 'Waiting for bridge — no physical call yet',
-  executing: 'Bridge claimed — physical call may be in progress',
-  succeeded: 'Physical endpoint reported success',
-  failed: 'Physical endpoint call failed',
-  expired: 'Never sent to ESP32 — expired in queue',
+  queued: 'Waiting to be sent — no equipment action yet',
+  executing: 'In progress — the equipment action may be underway',
+  succeeded: 'Completed — the equipment confirmed the action',
+  failed: 'Not completed — the equipment did not confirm the action',
+  expired: 'Not sent — the request expired while waiting',
 };
 
 const commandStatusFilterLabel: Record<ActuatorCommandStatus, string> = {
-  queued: 'Queued · waiting for bridge',
-  executing: 'Executing · bridge claimed',
-  succeeded: 'Succeeded · endpoint reported success',
-  failed: 'Failed · endpoint call failed',
-  expired: 'Expired · never sent to bridge',
+  queued: 'Queued · waiting to send',
+  executing: 'In progress · being processed',
+  succeeded: 'Completed · action confirmed',
+  failed: 'Failed · action not confirmed',
+  expired: 'Expired · not sent',
 };
 
 const actuatorLabels: Record<ActuatorName, string> = {
@@ -114,7 +114,7 @@ function formatPayloadSummary(command: ActuatorCommand) {
     return duration ? `Run for ${duration}` : 'Timer configuration';
   }
   if (command.action === 'dispense') {
-    return 'Run the firmware-configured volume';
+    return 'Run the configured dose';
   }
   if (command.action === 'config') {
     const angle = typeof payload.open_angle === 'number' ? `${payload.open_angle} degrees` : 'configured angle';
@@ -185,7 +185,7 @@ function CommandHistoryTooltip() {
         '--tooltip-arrow-left': `${tooltipPosition.arrowLeft}px`,
       } as CSSProperties}
     >
-      This audit trail records administrator commands created for this tank&apos;s registered bridge. Queued commands may still be waiting; expired commands were never sent to the ESP32.
+      This history shows administrator actions for this tank. Queued means waiting to be sent; Completed means the equipment confirmed the action; Expired means it was not sent before the request window closed.
     </span>,
     document.body,
   ) : null;
@@ -229,13 +229,13 @@ function CommandDetails({ command }: { command: ActuatorCommand }) {
         <div><dt>Command ID</dt><dd className="command-id">{command.command_id}</dd></div>
         <div><dt>Requested</dt><dd>{formatDate(command.requested_at)}</dd></div>
         <div><dt>Expires</dt><dd>{formatDate(command.expires_at)}</dd></div>
-        <div><dt>Bridge claimed</dt><dd>{command.executing_at ? formatDate(command.executing_at) : 'Not claimed'}</dd></div>
-        <div><dt>Physical result</dt><dd>{command.execution_at ? formatDate(command.execution_at) : 'Not reported'}</dd></div>
+        <div><dt>Processing started</dt><dd>{command.executing_at ? formatDate(command.executing_at) : 'Not started'}</dd></div>
+        <div><dt>Equipment result</dt><dd>{command.execution_at ? formatDate(command.execution_at) : 'Not reported'}</dd></div>
         <div><dt>Actor</dt><dd>{command.actor_name ?? 'Administrator'}</dd></div>
       </dl>
       {payloadSummary && <p className="command-details-summary"><strong>Validated request</strong><span>{payloadSummary}</span></p>}
       {command.error && <p className="command-details-error"><strong>Reported failure</strong><span>{command.error}</span></p>}
-      {command.result && <p className="command-details-result"><strong>Bridge result</strong><span>The bridge returned a completion result for this command.</span></p>}
+      {command.result && <p className="command-details-result"><strong>Completion result</strong><span>The equipment action was reported as complete.</span></p>}
     </div>
   );
 }
@@ -328,7 +328,7 @@ function LightCard({
           Save schedule
         </button>
       </div>
-      {busyFor('on') && <small className="actuator-busy">Queueing command…</small>}
+      {busyFor('on') && <small className="actuator-busy">Preparing request…</small>}
     </article>
   );
 }
@@ -356,7 +356,7 @@ function PumpCard({
     <article className="actuator-card pump-card">
       <div className="actuator-card-header">
         <div>
-          <p className="actuator-kicker">Dry-run mechanical test</p>
+          <p className="actuator-kicker">Maintenance check</p>
           <h3>{label}</h3>
         </div>
         <span className={`actuator-state ${state?.active ? 'is-on' : state ? 'is-off' : 'is-unknown'}`}>
@@ -365,13 +365,13 @@ function PumpCard({
         </span>
       </div>
       <div className="actuator-meta-grid">
-        <span><small>Test dose count</small><strong>{state?.dose_count ?? '—'}</strong></span>
-        <span><small>Firmware dose</small><strong>{state ? `${state.volume_ml.toFixed(2)} mL` : '—'}</strong></span>
+        <span><small>Test cycles</small><strong>{state?.dose_count ?? '—'}</strong></span>
+        <span><small>Configured dose</small><strong>{state ? `${state.volume_ml.toFixed(2)} mL` : '—'}</strong></span>
         <span><small>Last dispense</small><strong>{state?.last_dispensed ?? '—'}</strong></span>
-        <span><small>Bridge access</small><strong>{disabled ? 'Reconnect bridge' : 'Available'}</strong></span>
+        <span><small>Connection</small><strong>{disabled ? 'Connection required' : 'Ready'}</strong></span>
       </div>
       <div className="pump-configured-dose">
-        <span><strong>Volume-controlled dispense</strong><small>The ESP32 controls the step count; no time cutoff is selected.</small></span>
+        <span><strong>Configured-volume dispense</strong><small>This uses the configured dose volume rather than a time cutoff.</small></span>
         <strong>{state ? `${state.volume_ml.toFixed(2)} mL` : 'Unknown'}</strong>
       </div>
       <div className="pump-action-grid" aria-label={`${label} manual test controls`}>
@@ -385,7 +385,7 @@ function PumpCard({
           <RotateCcw size={15} /> Retract
         </button>
       </div>
-      {disabled && <small className="pump-disabled-note">Reconnect the bridge before sending a pump test. No offline pump command is queued.</small>}
+      {disabled && <small className="pump-disabled-note">Reconnect the equipment connection before starting a pump test. No offline test is queued.</small>}
       {busyFor('dispense') && <small className="actuator-busy">Queueing pump test…</small>}
     </article>
   );
@@ -396,8 +396,8 @@ function BridgeOfflineWarning({ freshness }: { freshness?: DeviceActuatorStatus[
     <div className="actuator-offline-warning" role="status">
       <AlertTriangle size={17} aria-hidden="true" />
       <span>
-        <strong>Bridge is {freshness === 'unknown' ? 'not reporting' : 'offline or stale'}</strong>
-        <small>Light and feeder commands may expire while waiting. Pump manual tests are not queued until the bridge is online.</small>
+        <strong>Equipment connection is {freshness === 'unknown' ? 'not reporting' : 'offline or stale'}</strong>
+        <small>Light and feeder requests may expire while waiting. Pump maintenance checks are available only when the connection is online.</small>
       </span>
     </div>
   );
@@ -478,7 +478,7 @@ function SummaryPumpCard({ pumpA, pumpB, tankId }: { pumpA: PumpActuatorState | 
     <article className="actuator-summary-card actuator-summary-pumps">
       <div className="actuator-summary-card-header">
         <div>
-          <p className="actuator-kicker">Guarded manual tests</p>
+          <p className="actuator-kicker">Advanced maintenance checks</p>
           <h3>Syringe pumps</h3>
         </div>
         <span className="actuator-state is-unknown"><Power size={14} aria-hidden="true" />Full page</span>
@@ -487,7 +487,7 @@ function SummaryPumpCard({ pumpA, pumpB, tankId }: { pumpA: PumpActuatorState | 
         <span><strong>Pump A</strong><small>{pumpStatus(pumpA)}</small></span>
         <span><strong>Pump B</strong><small>{pumpStatus(pumpB)}</small></span>
       </div>
-      <p className="actuator-summary-detail">Dispense, stop, and retract stay on the dedicated page for safer testing.</p>
+      <p className="actuator-summary-detail">Dispense, stop, and retract stay on the dedicated page for safer maintenance checks.</p>
       <Link className="text-link" to={`/admin/tanks/${tankId}/actuators`}>Open full controls <ArrowRight size={14} /></Link>
     </article>
   );
@@ -611,7 +611,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
       ]);
       setHistoryPage(1);
       setExpandedCommandId(null);
-      setFeedback({ tone: 'success', message: `${label} command queued. The bridge will report the result.` });
+      setFeedback({ tone: 'success', message: `${label} request queued. The system will update its status after processing.` });
     } catch (caught) {
       setFeedback({ tone: 'error', message: errorMessage(caught, `Could not queue the ${label.toLowerCase()} command.`) });
     } finally {
@@ -642,7 +642,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
       />
       <Panel
         title={fullView ? 'Actuator controls' : 'Actuator snapshot'}
-        description={fullView ? 'Administrator-only controls for the registered bridge device' : 'Quick controls for the registered bridge device'}
+        description={fullView ? 'Administrator-only controls for this tank’s equipment' : 'Quick equipment controls for this tank'}
         className={`tank-actuator-panel ${fullView ? '' : 'tank-actuator-summary-panel'}`}
         action={fullView ? (
           <span className={`bridge-freshness bridge-${status.data?.device_freshness ?? 'unknown'}`}>
@@ -662,15 +662,15 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
         )}
       >
       {status.isLoading ? (
-        <LoadingState label="Loading bridge actuator state…" />
+        <LoadingState label="Loading equipment state…" />
       ) : status.isError ? (
-        <ErrorState message="Bridge actuator state could not be loaded. No hardware command was sent." retry={() => status.refetch()} />
+        <ErrorState message="Equipment state could not be loaded. No control action was sent." retry={() => status.refetch()} />
       ) : (
         <>
           <div className="bridge-device-summary">
-            <span><small>Registered device</small><strong>{status.data?.device_id}</strong></span>
-            <span><small>Bridge freshness</small><strong>{status.data?.device_online ? 'Online' : 'Offline / stale'}</strong></span>
-            <span><small>Last bridge report</small><strong>{relativeTime(status.data?.last_seen_at)}</strong></span>
+            <span><small>Equipment status</small><strong>{status.data?.device_online ? 'Online' : 'Offline / stale'}</strong></span>
+            <span><small>Connection freshness</small><strong>{status.data?.device_online ? 'Up to date' : 'Needs attention'}</strong></span>
+            <span><small>Last update</small><strong>{relativeTime(status.data?.last_seen_at)}</strong></span>
             <button className="icon-button" type="button" aria-label="Refresh actuator state" onClick={() => void status.refetch()}><RefreshCw size={16} /></button>
           </div>
           {!status.data?.device_online && <BridgeOfflineWarning freshness={status.data?.device_freshness} />}
@@ -707,7 +707,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
               </div>
               <button className="button button-secondary" type="button" disabled={Boolean(busy)} onClick={() => void queueCommand('feeder', 'config', { open_angle: Number(feederAngle), duration_ms: Number(feederDuration) }, 'Feeder configuration')}>Save feeder configuration</button>
               <div className="actuator-schedule">
-                <div className="actuator-schedule-heading"><strong>Feeding schedule</strong><small>Three firmware slots</small></div>
+                <div className="actuator-schedule-heading"><strong>Feeding schedule</strong><small>Up to 3 daily times</small></div>
                 {feederSchedule.map((slot, index) => (
                   <div className="feeder-slot" key={index}>
                     <label className="toggle-label"><input type="checkbox" checked={slot.enabled} onChange={(event) => setFeederSchedule((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} /> Slot {index + 1}</label>
@@ -721,14 +721,14 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
           <section className="pump-test-section" aria-labelledby="pump-test-heading">
             <div className="pump-test-heading">
               <div>
-                <p className="actuator-kicker">Controlled hardware test</p>
-                <h3 id="pump-test-heading">Syringe pump manual tests</h3>
-                <p>Empty-syringe or water-only checks for the registered device. No schedules or pH auto-dose controls are included.</p>
+                <p className="actuator-kicker">Advanced maintenance check</p>
+                <h3 id="pump-test-heading">Syringe pump checks</h3>
+                <p>Use this area to verify the configured dispense and retract actions for this tank.</p>
               </div>
             </div>
             <div className="pump-safety-warning" role="note">
               <AlertTriangle size={18} aria-hidden="true" />
-              <span><strong>Manual test only — confirm physical setup first.</strong><small>Use empty syringes or water, keep both pumps clear of chemicals, and be ready to use Stop. The tester bridge must have <code>pump_manual_test_enabled: true</code> for these actions.</small></span>
+              <span><strong>Manual check only — confirm the setup first.</strong><small>Use empty syringes or water only, keep both pumps clear of chemicals, and stay ready to press Stop. These checks are available only when maintenance mode is enabled.</small></span>
             </div>
             <div className="pump-grid">
               <PumpCard
@@ -755,7 +755,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
             <div className="actuator-history-heading">
               <div>
                 <div className="actuator-history-title"><h3>Command history</h3><CommandHistoryTooltip /></div>
-                <p>Admin command activity for this registered bridge</p>
+                <p>Recent administrator activity for this tank</p>
               </div>
               <div className="actuator-history-heading-actions">
                 {history.isFetching && !history.isLoading && <small className="actuator-history-updating">Updating…</small>}
@@ -866,7 +866,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
               <EmptyState title="No commands on this page" message="Go back to the previous page to view newer actuator commands." />
             ) : historyActuator !== 'all' || historyStatus !== 'all' ? (
               <EmptyState title="No matching commands" message="Try a different actuator or status filter." />
-            ) : <EmptyState title="No actuator commands yet" message="Queued commands and their bridge results will appear here." />}
+            ) : <EmptyState title="No actuator commands yet" message="Queued requests and their results will appear here." />}
           </div>
           </>
           )}
@@ -875,7 +875,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
       <ConfirmDialog
         open={feedConfirmOpen}
         title="Feed this tank now?"
-        message="This sends one manual feed command to the registered ESP32 feeder. Confirm the tank and feeder are ready before continuing."
+        message="This sends one manual feed request for this tank. Confirm the tank and feeder are ready before continuing."
         confirmLabel="Feed now"
         tone="primary"
         busy={busy === 'feeder:feed_now'}
@@ -886,8 +886,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
         open={pumpConfirmation !== null}
         title={pumpConfirmation?.action === 'dispense' ? `Start ${confirmedPumpLabel} test?` : `Retract ${confirmedPumpLabel}?`}
         message={pumpConfirmation?.action === 'dispense'
-          ? `Manual test only. This will start the ${confirmedPumpLabel} firmware dispense route for its configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The bridge waits for completion and uses a bounded safety timeout. Confirm the syringe is empty or contains water and keep your hand near Stop.`
-          : `This will call the ${confirmedPumpLabel} firmware retract route. Confirm the physical setup is safe and the pump is not handling chemicals.`}
+          ? `Manual check only. This will start the ${confirmedPumpLabel} configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The system waits for completion and uses a bounded safety timeout. Confirm the syringe is empty or contains water and keep your hand near Stop.`
+          : `This will start the ${confirmedPumpLabel} retract action. Confirm the setup is safe and the pump is not handling chemicals.`}
         confirmLabel={pumpConfirmation?.action === 'dispense' ? 'Dispense / test' : 'Retract'}
         tone={pumpConfirmation?.action === 'dispense' ? 'primary' : 'danger'}
         busy={pumpConfirmation ? busy === `${pumpConfirmation.actuator}:${pumpConfirmation.action}` : false}
@@ -912,8 +912,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
 
 export function StaffActuatorNotice() {
   return (
-    <Panel title="Actuator controls" description="Restricted hardware actions">
-      <div className="actuator-staff-notice"><LockKeyhole size={18} aria-hidden="true" /><span><strong>Administrator access required</strong><small>Staff accounts can monitor tank operations but cannot view or send actuator commands.</small></span></div>
+    <Panel title="Actuator controls" description="Administrator-only equipment controls">
+      <div className="actuator-staff-notice"><LockKeyhole size={18} aria-hidden="true" /><span><strong>Administrator access required</strong><small>Staff accounts can monitor tank operations but cannot use equipment controls.</small></span></div>
     </Panel>
   );
 }

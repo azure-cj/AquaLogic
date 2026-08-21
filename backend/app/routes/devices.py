@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -52,6 +53,26 @@ router = APIRouter(tags=["devices"])
 ACTUATORS = ("uv", "led", "feeder", "pump_a", "pump_b")
 PUMP_ACTUATORS = {"pump_a", "pump_b"}
 DEVICE_ONLINE_WINDOW_SECONDS = 90
+_SENSITIVE_ACTUATOR_KEYS = {
+    "access_token",
+    "backend_url",
+    "credential",
+    "device_key",
+    "device_url",
+    "esp32_url",
+    "key",
+    "key_hash",
+    "password",
+    "private_url",
+    "refresh_token",
+    "secret",
+    "ssid",
+    "url",
+    "wifi_password",
+}
+_SENSITIVE_TEXT_PATTERN = re.compile(
+    r"(?i)\b(device[-_ ]?key|key[-_ ]?hash|access[-_ ]?token|refresh[-_ ]?token|password|secret|credential)\b\s*[:=]\s*([^\s,;]+)"
+)
 
 
 def _explicit_utc(value: datetime | None) -> datetime | None:
@@ -67,6 +88,28 @@ def _json_object(value: str | None) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _sanitize_bridge_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return _SENSITIVE_TEXT_PATTERN.sub(lambda match: f"{match.group(1)}=[redacted]", value)
+
+
+def _sanitize_bridge_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            normalized_key = re.sub(r"[^a-z0-9]", "", key_text.casefold())
+            normalized_sensitive = {re.sub(r"[^a-z0-9]", "", item.casefold()) for item in _SENSITIVE_ACTUATOR_KEYS}
+            sanitized[key_text] = "[redacted]" if normalized_key in normalized_sensitive else _sanitize_bridge_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_bridge_value(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_bridge_text(value)
+    return value
+
+
 def _command_read(db: Session, command: ActuatorCommand) -> ActuatorCommandRead:
     actor = db.get(User, command.actor_user_id) if command.actor_user_id is not None else None
     return ActuatorCommandRead(
@@ -77,14 +120,14 @@ def _command_read(db: Session, command: ActuatorCommand) -> ActuatorCommandRead:
         actor_name=actor.name if actor else None,
         actuator=command.actuator,
         action=command.action,
-        payload=json.loads(command.payload_json),
+        payload=_sanitize_bridge_value(json.loads(command.payload_json)),
         status=command.status,
         requested_at=_explicit_utc(command.requested_at),
         expires_at=_explicit_utc(command.expires_at),
         executing_at=_explicit_utc(command.executing_at),
         execution_at=_explicit_utc(command.execution_at),
-        result=_json_object(command.result_json),
-        error=command.error_message,
+        result=_sanitize_bridge_value(_json_object(command.result_json)),
+        error=_sanitize_bridge_text(command.error_message),
     )
 
 
@@ -613,9 +656,10 @@ def mark_actuator_command_succeeded(
 ):
     device = _authenticate_device(x_device_key, request, db)
     command = _get_device_command(db, device, command_id)
+    safe_result = _sanitize_bridge_value(payload.result)
     existing_result = _json_object(command.result_json)
     if command.status == "succeeded":
-        if existing_result == payload.result:
+        if existing_result == safe_result:
             db.commit()
             return _command_read(db, command)
         db.commit()
@@ -625,7 +669,7 @@ def mark_actuator_command_succeeded(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Cannot succeed command in {command.status} state")
     command.status = "succeeded"
     command.execution_at = utc_now()
-    command.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True)
+    command.result_json = json.dumps(safe_result, separators=(",", ":"), sort_keys=True)
     command.error_message = None
     audit_event(
         db,
@@ -651,8 +695,10 @@ def mark_actuator_command_failed(
 ):
     device = _authenticate_device(x_device_key, request, db)
     command = _get_device_command(db, device, command_id)
+    safe_error = _sanitize_bridge_text(payload.error) or "Bridge reported an unspecified failure"
+    safe_result = _sanitize_bridge_value(payload.result)
     if command.status == "failed":
-        if command.error_message == payload.error:
+        if command.error_message == safe_error:
             db.commit()
             return _command_read(db, command)
         db.commit()
@@ -662,8 +708,8 @@ def mark_actuator_command_failed(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Cannot fail command in {command.status} state")
     command.status = "failed"
     command.execution_at = utc_now()
-    command.result_json = json.dumps(payload.result, separators=(",", ":"), sort_keys=True) if payload.result else None
-    command.error_message = payload.error
+    command.result_json = json.dumps(safe_result, separators=(",", ":"), sort_keys=True) if safe_result else None
+    command.error_message = safe_error
     audit_event(
         db,
         request,
@@ -671,7 +717,7 @@ def mark_actuator_command_failed(
         "success",
         target_type="actuator_command",
         target_id=command.command_id,
-        details={"device_id": device.id, "tank_id": device.tank_id, "error": payload.error},
+        details={"device_id": device.id, "tank_id": device.tank_id, "error": safe_error},
     )
     db.commit()
     db.refresh(command)

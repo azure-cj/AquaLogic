@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from app.models import ActuatorCommand, User
+from app.models import ActuatorCommand, SecurityAuditEvent, User
 from app.security import get_password_hash
 from app.security import utc_now
 
@@ -151,6 +151,124 @@ def test_actuator_history_is_paginated(client, auth_headers):
     assert len(filtered.json()["items"]) == 3
 
 
+def test_normal_command_expiry_defaults_and_bounds_are_explicit(client, auth_headers):
+    tank = create_tank(client, auth_headers, "Command expiry tank")
+    register(client, auth_headers, tank["id"], "esp32-expiry-bounds")
+
+    default_command = queue(client, auth_headers, tank["id"], {"actuator": "uv", "action": "on", "payload": {}})
+    maximum_command = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "led", "action": "off", "payload": {}, "expires_in_seconds": 300},
+    )
+    too_long = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "feeder", "action": "feed_now", "payload": {}, "expires_in_seconds": 301},
+    )
+
+    assert default_command.status_code == 201
+    default_seconds = (
+        datetime.fromisoformat(default_command.json()["expires_at"])
+        - datetime.fromisoformat(default_command.json()["requested_at"])
+    ).total_seconds()
+    assert 119 <= default_seconds <= 121
+    assert maximum_command.status_code == 201
+    maximum_seconds = (
+        datetime.fromisoformat(maximum_command.json()["expires_at"])
+        - datetime.fromisoformat(maximum_command.json()["requested_at"])
+    ).total_seconds()
+    assert 299 <= maximum_seconds <= 301
+    assert too_long.status_code == 422
+
+
+def test_multiple_active_devices_require_explicit_selection(client, auth_headers):
+    tank = create_tank(client, auth_headers, "Multiple bridge tank")
+    first = register(client, auth_headers, tank["id"], "esp32-multiple-a")
+    second = register(client, auth_headers, tank["id"], "esp32-multiple-b")
+
+    ambiguous = queue(client, auth_headers, tank["id"], {"actuator": "uv", "action": "on", "payload": {}})
+    first_command = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "uv", "action": "on", "payload": {}},
+        device_id=first["device_id"],
+    )
+    second_command = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "led", "action": "off", "payload": {}},
+        device_id=second["device_id"],
+    )
+
+    assert ambiguous.status_code == 409
+    assert "Multiple active bridge devices" in ambiguous.json()["detail"]
+    assert first_command.status_code == 201
+    assert first_command.json()["device_id"] == first["device_id"]
+    assert second_command.status_code == 201
+    assert second_command.json()["device_id"] == second["device_id"]
+
+
+def test_actuator_audit_is_complete_and_history_redacts_bridge_secrets(client, auth_headers, db_session):
+    tank = create_tank(client, auth_headers, "Audit actuator tank")
+    device = register(client, auth_headers, tank["id"], "esp32-audit-safe")
+    key_headers = {"X-Device-Key": device["device_key"]}
+
+    succeeded = queue(client, auth_headers, tank["id"], {"actuator": "uv", "action": "on", "payload": {}}).json()
+    path = f"/device-ingestion/actuators/{succeeded['command_id']}"
+    assert client.post(f"{path}/executing", headers=key_headers).status_code == 200
+    success = client.post(
+        f"{path}/succeeded",
+        headers=key_headers,
+        json={"result": {"path": "/uv/on", "device_key": "do-not-store-this-key"}},
+    )
+    assert success.status_code == 200
+    assert success.json()["result"]["device_key"] == "[redacted]"
+    assert client.post(
+        "/device-ingestion/actuator-state",
+        headers=key_headers,
+        json={"actuator": "uv", "state": LIGHT_STATE, "command_id": succeeded["command_id"]},
+    ).status_code == 200
+
+    failed = queue(client, auth_headers, tank["id"], {"actuator": "led", "action": "off", "payload": {}}).json()
+    failed_path = f"/device-ingestion/actuators/{failed['command_id']}"
+    assert client.post(f"{failed_path}/executing", headers=key_headers).status_code == 200
+    failure = client.post(
+        f"{failed_path}/failed",
+        headers=key_headers,
+        json={"error": "device_key=do-not-store-this-key", "result": {"secret": "hidden"}},
+    )
+    assert failure.status_code == 200
+    assert "do-not-store-this-key" not in failure.text
+    assert failure.json()["result"]["secret"] == "[redacted]"
+
+    expired = queue(client, auth_headers, tank["id"], {"actuator": "feeder", "action": "feed_now", "payload": {}}).json()
+    expired_row = db_session.get(ActuatorCommand, expired["command_id"])
+    expired_row.expires_at = utc_now() - timedelta(seconds=1)
+    db_session.commit()
+    assert client.get("/device-ingestion/actuators/pending", headers=key_headers).status_code == 200
+
+    history = client.get(f"/tanks/{tank['id']}/actuators/history?page=1&page_size=10", headers=auth_headers)
+    assert history.status_code == 200
+    assert "do-not-store-this-key" not in history.text
+    assert "hidden" not in history.text
+
+    event_types = {event.event_type for event in db_session.query(SecurityAuditEvent).all()}
+    assert {
+        "actuator.command.queued",
+        "actuator.command.executing",
+        "actuator.command.succeeded",
+        "actuator.command.failed",
+        "actuator.command.expired",
+        "device.actuator_state",
+    }.issubset(event_types)
+    assert all("do-not-store-this-key" not in (event.details or "") for event in db_session.query(SecurityAuditEvent).all())
+
+
 def test_staff_cannot_read_or_queue_actuator_controls(client, auth_headers, db_session):
     tank = create_tank(client, auth_headers, "Staff blocked actuator tank")
     register(client, auth_headers, tank["id"], "esp32-actuator-02")
@@ -159,6 +277,7 @@ def test_staff_cannot_read_or_queue_actuator_controls(client, auth_headers, db_s
     assert command.status_code == 403
     assert client.get(f"/tanks/{tank['id']}/actuators/status", headers=headers).status_code == 403
     assert client.get(f"/tanks/{tank['id']}/actuators/history", headers=headers).status_code == 403
+    assert client.get(f"/tanks/{tank['id']}/actuators/status").status_code == 401
 
 
 def test_command_is_fixed_to_device_tank_and_payload_limits_are_enforced(client, auth_headers):
