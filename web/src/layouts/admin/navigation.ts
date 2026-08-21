@@ -9,7 +9,6 @@ import {
   Router,
   SlidersHorizontal,
   UserRoundCog,
-  UsersRound,
 } from 'lucide-react';
 
 export type AdminNavigationItem = {
@@ -44,7 +43,6 @@ export const adminNavigation: AdminNavigationGroup[] = [
     items: [
       { to: '/admin/tanks', label: 'Tanks', icon: Droplets },
       { to: '/admin/fish', label: 'Fish species', icon: FishSymbol },
-      { to: '/admin/customers', label: 'Customers', icon: UsersRound },
       { to: '/admin/account', label: 'Account center', icon: UserRoundCog },
     ],
   },

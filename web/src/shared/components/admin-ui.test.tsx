@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { Drawer, StatusBadge } from './admin-ui';
+import { Drawer, LifecycleBadge, StatusBadge } from './admin-ui';
 
 const fleet: FleetTank[] = [
   {
@@ -68,14 +68,12 @@ describe('admin command center helpers', () => {
     expect(tankNameForAlert(alert, fleet)).toBe('Koi Pavilion');
   });
 
-  it('exposes all six water metrics', () => {
+  it('exposes only current-release water metrics', () => {
     expect(metricOptions.map((metric) => metric.key)).toEqual([
       'temperature',
       'ph',
       'turbidity',
-      'dissolved_oxygen',
       'tds',
-      'ammonia',
     ]);
   });
 });
@@ -84,6 +82,12 @@ describe('admin UI primitives', () => {
   it('announces status without relying on colour', () => {
     render(<StatusBadge value="offline" />);
     expect(screen.getByLabelText(/no recent sensor report/i)).toHaveTextContent('Offline');
+  });
+
+  it('uses account lifecycle language instead of fleet status labels', () => {
+    render(<LifecycleBadge status="setup_required" />);
+    expect(screen.getByLabelText('Password setup required')).toHaveTextContent('Password setup required');
+    expect(screen.queryByText('Warning')).not.toBeInTheDocument();
   });
 
   it('closes a drawer with Escape and restores focus', async () => {

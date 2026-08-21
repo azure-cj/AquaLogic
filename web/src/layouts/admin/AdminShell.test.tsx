@@ -108,10 +108,10 @@ describe('admin shell guards and navigation', () => {
       'Analytics',
       'Tanks',
       'Fish species',
-      'Customers',
       'Account center',
       'Actuators',
       'Thresholds',
+      'Devices',
     ]);
     expect(adminNavigationItemCount).toBeLessThanOrEqual(NAVIGATION_FLAT_ITEM_LIMIT);
   });

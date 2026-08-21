@@ -634,6 +634,10 @@
   color: var(--teal-700);
 }
 
+:root[data-theme='dark'] .species-care-status small {
+  color: var(--muted);
+}
+
 :root[data-theme='dark'] .threshold-card > header {
   background: var(--surface-soft);
 }

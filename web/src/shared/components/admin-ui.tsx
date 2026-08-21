@@ -33,6 +33,25 @@ export function StatusBadge({ value }: { value: string; }) {
   );
 }
 
+export type AccountLifecycleStatus = 'active' | 'setup_required' | 'inactive';
+
+const accountLifecycleLabels: Record<AccountLifecycleStatus, string> = {
+  active: 'Active',
+  setup_required: 'Password setup required',
+  inactive: 'Inactive',
+};
+
+export function LifecycleBadge({ status }: { status: AccountLifecycleStatus; }) {
+  const visualStatus = status === 'active' ? 'normal' : status === 'setup_required' ? 'warning' : 'offline';
+  const label = accountLifecycleLabels[status];
+  return (
+    <span className={`status-badge status-${visualStatus}`} aria-label={label}>
+      <span className="status-dot" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
 export function PageHeader({
   eyebrow,
   title,
