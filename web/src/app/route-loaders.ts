@@ -25,6 +25,7 @@ export const pageLoaders = {
   analytics: once(() => import('@/features/analytics/AnalyticsPage')),
   staff: once(() => import('@/features/staff/StaffPage')),
   thresholds: once(() => import('@/features/thresholds/ThresholdsPage')),
+  devices: once(() => import('@/features/devices/DevicesPage')),
   publicTank: once(() =>
     import('@/features/public-tank/PublicTankPage').then((module) => ({
       default: module.PublicTank,
@@ -46,6 +47,7 @@ const adminLoaders = {
   '/admin/analytics': pageLoaders.analytics,
   '/admin/staff': pageLoaders.staff,
   '/admin/settings/thresholds': pageLoaders.thresholds,
+  '/admin/devices': pageLoaders.devices,
 } as const;
 
 export function prefetchAdminRoute(path: string) {

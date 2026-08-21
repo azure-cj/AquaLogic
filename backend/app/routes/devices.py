@@ -35,7 +35,10 @@ from app.schemas.device import (
     CommandStatus,
     DeviceActuatorStatusRead,
     DeviceCreate,
+    DeviceKeyRotated,
+    DeviceRead,
     DeviceProvisioned,
+    DeviceUpdate,
     PendingActuatorCommand,
     COMMAND_EXPIRY_DEFAULT_SECONDS,
 )
@@ -169,6 +172,25 @@ def _device_is_online(device: RegisteredDevice, now: datetime | None = None) -> 
     return (now or utc_now()) - last_seen <= timedelta(seconds=DEVICE_ONLINE_WINDOW_SECONDS)
 
 
+def _device_status(device: RegisteredDevice, now: datetime | None = None) -> str:
+    if not device.is_active:
+        return "disabled"
+    return "online" if _device_is_online(device, now) else "offline"
+
+
+def _device_read(db: Session, device: RegisteredDevice, now: datetime | None = None) -> DeviceRead:
+    tank = db.get(Tank, device.tank_id)
+    return DeviceRead(
+        device_id=device.id,
+        tank_id=device.tank_id,
+        tank_name=tank.name if tank else "Unknown tank",
+        is_active=device.is_active,
+        created_at=_explicit_utc(device.created_at),
+        last_seen_at=_explicit_utc(device.last_seen_at),
+        status=_device_status(device, now),
+    )
+
+
 @router.post("/devices", response_model=DeviceProvisioned, status_code=status.HTTP_201_CREATED)
 def register_device(
     payload: DeviceCreate,
@@ -200,6 +222,88 @@ def register_device(
     return DeviceProvisioned(device_id=device.id, tank_id=device.tank_id, device_key=raw_key)
 
 
+@router.get("/devices", response_model=list[DeviceRead])
+def list_devices(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    now = utc_now()
+    devices = db.scalars(select(RegisteredDevice).order_by(RegisteredDevice.id)).all()
+    return [_device_read(db, device, now) for device in devices]
+
+
+@router.get("/devices/{device_id}", response_model=DeviceRead)
+def get_device(
+    device_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    device = db.get(RegisteredDevice, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    return _device_read(db, device, utc_now())
+
+
+@router.patch("/devices/{device_id}", response_model=DeviceRead)
+def update_device(
+    device_id: str,
+    payload: DeviceUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    device = db.get(RegisteredDevice, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    device.is_active = payload.is_active
+    event_type = "device.activate" if payload.is_active else "device.deactivate"
+    audit_event(
+        db,
+        request,
+        event_type,
+        "success",
+        actor_user_id=current_user.id,
+        target_type="device",
+        target_id=device.id,
+        details={"tank_id": device.tank_id},
+    )
+    db.commit()
+    db.refresh(device)
+    return _device_read(db, device, utc_now())
+
+
+@router.post("/devices/{device_id}/rotate-key", response_model=DeviceKeyRotated)
+def rotate_device_key(
+    device_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    device = db.get(RegisteredDevice, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    raw_key = opaque_token()
+    device.key_hash = hash_opaque_token(raw_key)
+    rotated_at = utc_now()
+    audit_event(
+        db,
+        request,
+        "device.key_rotate",
+        "success",
+        actor_user_id=current_user.id,
+        target_type="device",
+        target_id=device.id,
+        details={"tank_id": device.tank_id},
+    )
+    db.commit()
+    return DeviceKeyRotated(
+        device_id=device.id,
+        tank_id=device.tank_id,
+        device_key=raw_key,
+        rotated_at=rotated_at,
+    )
+
+
 @router.post("/device-ingestion/readings", response_model=SensorReadingRead, status_code=status.HTTP_201_CREATED)
 def ingest_device_reading(
     payload: DeviceReadingCreate,
@@ -213,7 +317,7 @@ def ingest_device_reading(
     if payload.observed_at is not None:
         observed_at = payload.observed_at
         values["timestamp"] = observed_at.replace(tzinfo=timezone.utc) if observed_at.tzinfo is None else observed_at
-    reading = ingest_reading(db, device.tank_id, values)
+    reading = ingest_reading(db, device.tank_id, values, device_id=device.id)
     audit_event(
         db,
         request,

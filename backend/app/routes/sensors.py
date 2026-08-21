@@ -33,7 +33,7 @@ def get_latest_sensor_reading(
     reading = db.scalar(
         select(SensorReading)
         .where(SensorReading.tank_id == tank_id)
-        .order_by(SensorReading.timestamp.desc())
+        .order_by(SensorReading.received_at.desc(), SensorReading.id.desc())
         .limit(1)
     )
     if reading is None:
@@ -62,7 +62,7 @@ def get_sensor_history(
     if end_date is not None:
         stmt = stmt.where(SensorReading.timestamp <= end_date)
 
-    readings = db.scalars(stmt.order_by(SensorReading.timestamp.desc()).limit(limit)).all()
+    readings = db.scalars(stmt.order_by(SensorReading.received_at.desc(), SensorReading.id.desc()).limit(limit)).all()
     return list(readings)
 
 
@@ -81,7 +81,7 @@ def create_sensor_reading(
     timestamp = values.pop("timestamp", None)
     if timestamp is not None:
         values["timestamp"] = timestamp
-    reading = ingest_reading(db, tank_id, values)
+    reading = ingest_reading(db, tank_id, values, device_id=None)
     audit_event(db, request, "sensor.write", "success", actor_user_id=current_user.id, target_type="tank", target_id=tank_id)
     db.commit()
     return reading

@@ -1,6 +1,25 @@
 import type { FleetStatus } from '@/shared/components/admin-ui';
 import type { Reading } from './client';
 
+export type DeviceStatus = 'online' | 'offline' | 'disabled';
+
+export type RegisteredDevice = {
+  device_id: string;
+  tank_id: number;
+  tank_name: string;
+  is_active: boolean;
+  created_at: string;
+  last_seen_at: string | null;
+  status: DeviceStatus;
+};
+
+export type DeviceKeyRotation = {
+  device_id: string;
+  tank_id: number;
+  device_key: string;
+  rotated_at: string;
+};
+
 export type Tank = {
   id: number;
   public_id: string;

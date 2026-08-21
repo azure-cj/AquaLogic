@@ -32,6 +32,29 @@ class DeviceProvisioned(BaseModel):
     device_key: str
 
 
+class DeviceRead(BaseModel):
+    device_id: str
+    tank_id: int
+    tank_name: str
+    is_active: bool
+    created_at: datetime
+    last_seen_at: datetime | None
+    status: Literal["online", "offline", "disabled"]
+
+
+class DeviceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: StrictBool
+
+
+class DeviceKeyRotated(BaseModel):
+    device_id: str
+    tank_id: int
+    device_key: str
+    rotated_at: datetime
+
+
 class LightTimerPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

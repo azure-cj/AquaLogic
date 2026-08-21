@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -8,6 +8,12 @@ class SensorReading(Base):
     __tablename__ = "sensor_readings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    device_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("registered_devices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     tank_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("tanks.id", ondelete="CASCADE"),
@@ -15,6 +21,12 @@ class SensorReading(Base):
         index=True,
     )
     timestamp: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    received_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,

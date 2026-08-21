@@ -54,6 +54,9 @@ vi.mock('@/features/staff/StaffPage', () => ({
 vi.mock('@/features/thresholds/ThresholdsPage', () => ({
   default: () => <div>Thresholds route</div>,
 }));
+vi.mock('@/features/devices/DevicesPage', () => ({
+  default: () => <div>Devices route</div>,
+}));
 vi.mock('@/features/public-tank/PublicTankPage', () => ({
   PublicTank: () => <div>Public tank route</div>,
 }));
@@ -72,6 +75,7 @@ const routes = [
   ['/admin/analytics', 'Analytics route'],
   ['/admin/staff', 'Staff route'],
   ['/admin/settings/thresholds', 'Thresholds route'],
+  ['/admin/devices', 'Devices route'],
   ['/admin/login', 'Login route'],
   ['/admin/change-password', 'Password route'],
   ['/admin/setup-password', 'Setup password route'],
@@ -94,6 +98,7 @@ describe('application router', () => {
       'analytics',
       'staff',
       'settings/thresholds',
+      'devices',
     ]);
   });
 

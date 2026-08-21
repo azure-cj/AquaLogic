@@ -19,6 +19,7 @@ const CustomersPage = lazy(pageLoaders.customers);
 const AnalyticsPage = lazy(pageLoaders.analytics);
 const StaffPage = lazy(pageLoaders.staff);
 const ThresholdsPage = lazy(pageLoaders.thresholds);
+const DevicesPage = lazy(pageLoaders.devices);
 const SecurityPage = lazy(pageLoaders.security);
 const PublicTankPage = lazy(pageLoaders.publicTank);
 
@@ -36,6 +37,7 @@ export const adminRoutePaths = [
   'analytics',
   'staff',
   'settings/thresholds',
+  'devices',
 ] as const;
 
 export function AppRouter() {
@@ -88,6 +90,7 @@ export function AppRouter() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="settings/thresholds" element={<ThresholdsPage />} />
+        <Route path="devices" element={<DevicesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>

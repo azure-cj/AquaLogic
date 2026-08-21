@@ -52,6 +52,7 @@ const pageTitles: Record<string, string> = {
   actuators: 'Actuator controls',
   staff: 'Staff & roles',
   settings: 'System thresholds',
+  devices: 'Device management',
 };
 
 export function AdminShell() {
@@ -129,7 +130,7 @@ export function AdminShell() {
   if (me.data!.must_change_password) return <Navigate to="/admin/change-password" replace />;
 
   const admin = me.data!.role === 'admin';
-  if (!admin && (location.pathname.startsWith('/admin/staff') || location.pathname.startsWith('/admin/settings/thresholds'))) {
+  if (!admin && (location.pathname.startsWith('/admin/staff') || location.pathname.startsWith('/admin/settings/thresholds') || location.pathname.startsWith('/admin/devices'))) {
     return <Navigate to="/admin/fleet" replace />;
   }
   const segment = location.pathname.split('/')[2] || 'fleet';

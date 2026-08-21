@@ -1,7 +1,9 @@
 export type Reading = {
   id: number;
+  device_id?: string | null;
   tank_id: number;
   timestamp: string;
+  received_at?: string;
   temperature: number;
   ph: number;
   turbidity: number;
@@ -17,6 +19,30 @@ export type User = {
   role: 'admin' | 'staff';
   is_active: boolean;
   must_change_password: boolean;
+  created_at?: string;
+  account_status?: 'active' | 'setup_required' | 'inactive';
+  password_changed_at?: string | null;
+  active_session_count?: number;
+  last_activity_at?: string | null;
+};
+
+export type AdminSession = {
+  id: string;
+  created_at: string;
+  last_seen_at?: string | null;
+  expires_at: string;
+  user_agent?: string | null;
+};
+
+export type SecurityAuditEvent = {
+  id: number;
+  event_type: string;
+  outcome: string;
+  request_id?: string | null;
+  actor_user_id?: number | null;
+  target_type?: string | null;
+  target_id?: string | null;
+  created_at: string;
 };
 
 export type AuthToken = {
