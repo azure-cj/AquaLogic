@@ -70,6 +70,7 @@ describe('public tank experience', () => {
 
     expect(await screen.findByRole('heading', { name: 'Display Tank A' })).toBeInTheDocument();
     expect(screen.getByText('Water conditions healthy')).toBeInTheDocument();
+    expect(screen.getByText('Observed just now')).toBeInTheDocument();
     expect(screen.queryByText('Oxygen level')).not.toBeInTheDocument();
     expect(screen.queryByText('Ammonia')).not.toBeInTheDocument();
     expect(screen.queryByText(/94%/)).not.toBeInTheDocument();

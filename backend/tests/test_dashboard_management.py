@@ -23,13 +23,13 @@ def _tank(client, headers, name="Dashboard tank"):
 def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_session):
     tank = _tank(client, auth_headers)
     base = datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=5)
-    reading = SensorReading(tank_id=tank["id"], timestamp=base, temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1)
+    reading = SensorReading(tank_id=tank["id"], timestamp=base, received_at=base, temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1)
     db_session.add(reading)
     db_session.flush()
     db_session.add_all([
-        SensorReading(tank_id=tank["id"], timestamp=base + timedelta(seconds=10), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
-        SensorReading(tank_id=tank["id"], timestamp=base + timedelta(seconds=35), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
-        SensorReading(tank_id=tank["id"], timestamp=base - timedelta(hours=25), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
+        SensorReading(tank_id=tank["id"], timestamp=base + timedelta(seconds=10), received_at=base + timedelta(seconds=10), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
+        SensorReading(tank_id=tank["id"], timestamp=base + timedelta(seconds=35), received_at=base + timedelta(seconds=35), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
+        SensorReading(tank_id=tank["id"], timestamp=base - timedelta(hours=25), received_at=base - timedelta(hours=25), temperature=25, ph=7, turbidity=2, dissolved_oxygen=6, tds=100, ammonia=.1),
     ])
     db_session.add(Alert(tank_id=tank["id"], reading_id=reading.id, parameter="ammonia", severity=AlertSeverity.critical, message="critical ammonia"))
     db_session.commit()
@@ -50,6 +50,7 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
     assert tank_uptime["expected_intervals"] == 24 * 120
     assert tank_uptime["status"] == "critical"
     assert payload["uptime_comparison"]["change"] > 0
+    assert datetime.fromisoformat(payload["alert_events"][0]["timestamp"].replace("Z", "+00:00")) >= base
 
     selected = client.get(
         f"/analytics/fleet?range=24h&tank_id={tank['id']}",
@@ -66,6 +67,31 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
     )
     assert custom.status_code == 200
     assert len(custom.json()["fleet_series"]) == 8
+
+
+def test_analytics_allows_deferred_device_metrics(client, auth_headers, db_session):
+    tank = _tank(client, auth_headers, "Bridge analytics tank")
+    db_session.add(
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
+            temperature=28.25,
+            ph=7.1,
+            turbidity=4.0,
+            tds=180.0,
+            dissolved_oxygen=None,
+            ammonia=None,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/analytics/fleet?range=24h", headers=auth_headers)
+
+    assert response.status_code == 200
+    points = response.json()["fleet_series"]
+    bridge_point = next(point for point in points if point["values"]["temperature"] == 28.25)
+    assert bridge_point["values"]["dissolved_oxygen"] is None
+    assert bridge_point["values"]["ammonia"] is None
 
 
 def test_admin_staff_lifecycle_and_threshold_validation(client, db_session):
@@ -146,3 +172,78 @@ def test_analytics_query_validation(client, auth_headers):
         "&start=2026-01-01T00:00:00Z&end=2026-03-01T00:00:00Z",
         headers=auth_headers,
     ).status_code == 422
+
+
+def test_analytics_uses_receipt_time_for_late_readings_and_reporting_gaps(
+    client, auth_headers, db_session
+):
+    tank = _tank(client, auth_headers, "Receipt-time analytics")
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    start = now - timedelta(hours=1)
+    end = now + timedelta(hours=1)
+    previous_start = start - (end - start)
+
+    db_session.add_all([
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=now - timedelta(days=2),
+            received_at=start + timedelta(minutes=15),
+            temperature=26,
+            ph=7,
+            turbidity=2,
+            dissolved_oxygen=None,
+            tds=100,
+            ammonia=None,
+        ),
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=now - timedelta(days=3),
+            received_at=start + timedelta(minutes=75),
+            temperature=27,
+            ph=7,
+            turbidity=2,
+            dissolved_oxygen=None,
+            tds=100,
+            ammonia=None,
+        ),
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=start + timedelta(minutes=30),
+            received_at=start - timedelta(days=2),
+            temperature=99,
+            ph=7,
+            turbidity=2,
+            dissolved_oxygen=None,
+            tds=100,
+            ammonia=None,
+        ),
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=now - timedelta(days=4),
+            received_at=previous_start + timedelta(minutes=15),
+            temperature=24,
+            ph=7,
+            turbidity=2,
+            dissolved_oxygen=None,
+            tds=100,
+            ammonia=None,
+        ),
+    ])
+    db_session.commit()
+
+    start_value = start.isoformat().replace("+00:00", "Z")
+    end_value = end.isoformat().replace("+00:00", "Z")
+    response = client.get(
+        "/analytics/fleet?range=custom&bucket=1h"
+        f"&start={start_value}&end={end_value}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    current_points = payload["fleet_series"]
+    assert [point["sample_count"] for point in current_points] == [1, 1]
+    assert payload["stats"]["temperature"]["average"] == 26.5
+    assert payload["stats"]["temperature"]["previous_average"] == 24.0
+    assert payload["uptime"][0]["reported_intervals"] == 2
+    assert payload["insights"]["reporting_gap_count"] == 0

@@ -133,12 +133,12 @@ const formatEstablished = (value: string) =>
 const timeAgo = (value?: string | null) => {
   if (!value) return 'No readings yet';
   const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
-  if (seconds < 60) return 'Updated just now';
+  if (seconds < 60) return 'Observed just now';
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `Updated ${minutes} min ago`;
+  if (minutes < 60) return `Observed ${minutes} min ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Updated ${hours} hr ago`;
-  return `Updated ${Math.round(hours / 24)} days ago`;
+  if (hours < 24) return `Observed ${hours} hr ago`;
+  return `Observed ${Math.round(hours / 24)} days ago`;
 };
 
 function FishPhoto({ fish }: { fish: PublicFish; }) {

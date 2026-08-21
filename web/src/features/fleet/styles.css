@@ -108,7 +108,7 @@
 .fleet-table .data-row {
   grid-template-columns:
     minmax(180px, 1.7fr) minmax(82px, 0.72fr) minmax(112px, 0.85fr) minmax(72px, 0.68fr)
-    minmax(50px, 0.48fr) minmax(70px, 0.7fr) minmax(120px, 1.05fr) 18px;
+    minmax(50px, 0.48fr) minmax(120px, 1.05fr) 18px;
 }
 
 .alert-feed {

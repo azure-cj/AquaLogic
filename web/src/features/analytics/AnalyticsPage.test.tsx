@@ -144,6 +144,8 @@ describe('fleet analytics', () => {
       'aria-selected',
       'true',
     );
+    expect(screen.queryByRole('tab', { name: 'Dissolved oxygen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Ammonia' })).not.toBeInTheDocument();
     const progress = await screen.findByRole('progressbar', {
       name: 'Tank A reporting uptime',
     });

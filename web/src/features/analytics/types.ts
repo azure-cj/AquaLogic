@@ -1,16 +1,23 @@
 export type AnalyticsRange = '24h' | '7d' | '30d' | 'custom';
 export type AnalyticsBucket = 'auto' | '15m' | '1h' | '6h' | '1d';
 
+export type MetricKey =
+  | 'temperature'
+  | 'ph'
+  | 'turbidity'
+  | 'dissolved_oxygen'
+  | 'tds'
+  | 'ammonia';
+
+// Ammonia and dissolved oxygen remain in the API/data contract, but are
+// intentionally excluded from the current web release because their scope is
+// deferred.
 export const metricOptions = [
   { key: 'temperature', label: 'Temperature', unit: '°C', color: '#0e9f97' },
   { key: 'ph', label: 'pH', unit: 'pH', color: '#4169a1' },
   { key: 'turbidity', label: 'Turbidity', unit: 'NTU', color: '#8a6a3d' },
-  { key: 'dissolved_oxygen', label: 'Dissolved oxygen', unit: 'mg/L', color: '#2877a5' },
   { key: 'tds', label: 'TDS', unit: 'ppm', color: '#7659a5' },
-  { key: 'ammonia', label: 'Ammonia', unit: 'ppm', color: '#dc5664' },
-] as const;
-
-export type MetricKey = (typeof metricOptions)[number]['key'];
+] as const satisfies ReadonlyArray<{ key: MetricKey; label: string; unit: string; color: string }>;
 export type MetricValues = Record<MetricKey, number | null>;
 
 export type AnalyticsPoint = {

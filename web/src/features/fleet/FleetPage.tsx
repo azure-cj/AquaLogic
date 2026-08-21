@@ -89,7 +89,6 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
           <span>Species Care</span>
           <span>Temperature</span>
           <span>pH</span>
-          <span>Ammonia</span>
           <span>Reporting</span>
           <span aria-hidden="true" />
         </div>
@@ -112,9 +111,6 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               {reading(tank.latest_reading?.temperature, '°C')}
             </span>
             <span className="metric-cell">{reading(tank.latest_reading?.ph, '', 1)}</span>
-            <span className="metric-cell">
-              {reading(tank.latest_reading?.ammonia, 'ppm', 2)}
-            </span>
             <span>
               <strong className={tank.status === 'offline' ? 'text-critical' : ''}>
                 {relativeTime(tank.last_reading_at)}
@@ -150,10 +146,6 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               <div>
                 <dt>pH</dt>
                 <dd>{reading(tank.latest_reading?.ph, '')}</dd>
-              </div>
-              <div>
-                <dt>NH₃</dt>
-                <dd>{reading(tank.latest_reading?.ammonia, 'ppm', 2)}</dd>
               </div>
             </dl>
             <small>Last report {relativeTime(tank.last_reading_at)}</small>

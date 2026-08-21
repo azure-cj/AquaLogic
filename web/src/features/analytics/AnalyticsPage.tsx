@@ -55,14 +55,15 @@ const ranges: AnalyticsRange[] = ['24h', '7d', '30d', 'custom'];
 const buckets: AnalyticsBucket[] = ['auto', '15m', '1h', '6h', '1d'];
 const metrics = metricOptions.map((option) => option.key);
 const tankColors = ['#4169a1', '#8a6a3d', '#7659a5'];
+type VisibleMetricKey = (typeof metricOptions)[number]['key'];
 
 const localInputValue = (date: Date) => {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 };
 
-const validMetric = (value: string | null): value is MetricKey =>
-  metrics.includes(value as MetricKey);
+const validMetric = (value: string | null): value is VisibleMetricKey =>
+  metrics.includes(value as VisibleMetricKey);
 
 const boundLabel = (
   minimum: number | null,

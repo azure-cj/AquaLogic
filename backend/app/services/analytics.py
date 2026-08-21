@@ -22,6 +22,7 @@ def _empty_accumulator() -> dict[str, Any]:
         "count": 0,
         "contributors": set(),
         "sums": {parameter: 0.0 for parameter in PARAMETERS},
+        "parameter_counts": {parameter: 0 for parameter in PARAMETERS},
     }
 
 
@@ -36,6 +37,15 @@ def _add_stat(stat: dict[str, float | int | None], value: float) -> None:
     stat["maximum"] = value if stat["maximum"] is None else max(float(stat["maximum"]), value)
 
 
+def _add_values(accumulator: dict[str, Any], values: dict[str, float | None]) -> None:
+    """Accumulate only the metrics that were actually installed/reported."""
+    for parameter, value in values.items():
+        if value is None:
+            continue
+        accumulator["sums"][parameter] += value
+        accumulator["parameter_counts"][parameter] += 1
+
+
 def _point_series(
     accumulators: dict[int, dict[str, Any]],
     start: datetime,
@@ -45,17 +55,20 @@ def _point_series(
     result = []
     for index in range(bucket_count):
         accumulator = accumulators.get(index)
-        count = int(accumulator["count"]) if accumulator else 0
         result.append(
             {
                 "timestamp": start + timedelta(seconds=index * bucket_seconds),
                 "values": {
-                    parameter: round(float(accumulator["sums"][parameter]) / count, 4)
-                    if accumulator and count
+                    parameter: round(
+                        float(accumulator["sums"][parameter])
+                        / int(accumulator["parameter_counts"][parameter]),
+                        4,
+                    )
+                    if accumulator and accumulator["parameter_counts"][parameter]
                     else None
                     for parameter in PARAMETERS
                 },
-                "sample_count": count,
+                "sample_count": int(accumulator["count"]) if accumulator else 0,
                 "contributor_count": len(accumulator["contributors"]) if accumulator else 0,
             }
         )
@@ -181,22 +194,25 @@ def build_fleet_analytics(
 
     columns = [
         SensorReading.tank_id,
-        SensorReading.timestamp,
+        SensorReading.received_at,
         *[getattr(SensorReading, parameter) for parameter in PARAMETERS],
     ]
     rows = db.execute(
         select(*columns)
         .where(
-            SensorReading.timestamp >= previous_start,
-            SensorReading.timestamp < end,
+            SensorReading.received_at >= previous_start,
+            SensorReading.received_at < end,
         )
-        .order_by(SensorReading.timestamp)
+        .order_by(SensorReading.received_at)
         .execution_options(yield_per=5_000)
     )
     for row in rows:
         tank_id = int(row[0])
         stamp = _aware(row[1])
-        values = {parameter: float(row[index + 2]) for index, parameter in enumerate(PARAMETERS)}
+        values = {
+            parameter: float(row[index + 2]) if row[index + 2] is not None else None
+            for index, parameter in enumerate(PARAMETERS)
+        }
         is_current = stamp >= start
         period_start = start if is_current else previous_start
         index = int((stamp - period_start).total_seconds() // bucket_seconds)
@@ -206,8 +222,10 @@ def build_fleet_analytics(
         accumulator = target.setdefault(index, _empty_accumulator())
         accumulator["count"] += 1
         accumulator["contributors"].add(tank_id)
+        _add_values(accumulator, values)
         for parameter, value in values.items():
-            accumulator["sums"][parameter] += value
+            if value is None:
+                continue
             _add_stat(
                 current_stats[parameter] if is_current else previous_stats[parameter],
                 value,
@@ -222,14 +240,12 @@ def build_fleet_analytics(
             )
             diagnostic_accumulator["count"] += 1
             diagnostic_accumulator["contributors"].add(tank_id)
-            for parameter, value in values.items():
-                diagnostic_accumulator["sums"][parameter] += value
+            _add_values(diagnostic_accumulator, values)
             if tank_id in selected:
                 tank_accumulator = tank_current[tank_id].setdefault(index, _empty_accumulator())
                 tank_accumulator["count"] += 1
                 tank_accumulator["contributors"].add(tank_id)
-                for parameter, value in values.items():
-                    tank_accumulator["sums"][parameter] += value
+                _add_values(tank_accumulator, values)
         else:
             previous_intervals[tank_id].add(interval)
 
@@ -359,11 +375,15 @@ def build_fleet_analytics(
                 fleet_accumulator = fleet_current.get(index)
                 if not fleet_accumulator:
                     continue
+                tank_count = tank_accumulator["parameter_counts"][parameter]
+                fleet_count = fleet_accumulator["parameter_counts"][parameter]
+                if not tank_count or not fleet_count:
+                    continue
                 tank_value = (
-                    tank_accumulator["sums"][parameter] / tank_accumulator["count"]
+                    tank_accumulator["sums"][parameter] / tank_count
                 )
                 fleet_value = (
-                    fleet_accumulator["sums"][parameter] / fleet_accumulator["count"]
+                    fleet_accumulator["sums"][parameter] / fleet_count
                 )
                 total += abs(tank_value - fleet_value)
                 comparisons += 1

@@ -145,9 +145,11 @@ def seed_dashboard_demo(
                     values["ammonia"] = 0.35
                 elif state == "critical":
                     values["ammonia"] = 0.7
+            timestamp = start + timedelta(seconds=sample_index * interval_seconds)
             batch.append({
                 "tank_id": tank.id,
-                "timestamp": start + timedelta(seconds=sample_index * interval_seconds),
+                "timestamp": timestamp,
+                "received_at": timestamp,
                 **values,
                 "is_mock": True,
             })
