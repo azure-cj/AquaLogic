@@ -12,7 +12,7 @@ def _tank(client, headers, name="Operations Tank"):
 
 def _reading(tank_id, timestamp):
     return SensorReading(
-        tank_id=tank_id, timestamp=timestamp, temperature=25, ph=7.2, turbidity=2,
+        tank_id=tank_id, timestamp=timestamp, received_at=timestamp, temperature=25, ph=7.2, turbidity=2,
         dissolved_oxygen=6, tds=160, ammonia=.1,
     )
 
