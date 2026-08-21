@@ -36,6 +36,7 @@ class Alert(Base):
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     resolved_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolution_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -25,7 +25,7 @@ def get_species_suitability(
     reading = db.scalar(
         select(SensorReading)
         .where(SensorReading.tank_id == tank_id)
-        .order_by(SensorReading.timestamp.desc())
+        .order_by(SensorReading.received_at.desc(), SensorReading.id.desc())
         .limit(1)
     )
     return evaluate_tank_species_suitability(tank, reading)

@@ -64,6 +64,7 @@ export type Alert = {
   is_resolved: boolean;
   created_at: string;
   resolved_at?: string | null;
+  resolution_source?: 'operator' | 'system' | null;
 };
 
 export type Customer = {

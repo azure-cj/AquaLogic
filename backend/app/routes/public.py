@@ -23,7 +23,7 @@ def get_public_tank_view(
     latest_reading = db.scalar(
         select(SensorReading)
         .where(SensorReading.tank_id == tank.id)
-        .order_by(SensorReading.timestamp.desc())
+        .order_by(SensorReading.received_at.desc(), SensorReading.id.desc())
         .limit(1)
     )
 

@@ -21,8 +21,8 @@ def fleet(db: Session = Depends(get_db), _: User = Depends(require_staff)):
     result = []
     now = datetime.now(timezone.utc)
     for tank in tanks:
-        reading = db.scalar(select(SensorReading).where(SensorReading.tank_id == tank.id).order_by(SensorReading.timestamp.desc()).limit(1))
-        stamp = reading.timestamp if reading else None
+        reading = db.scalar(select(SensorReading).where(SensorReading.tank_id == tank.id).order_by(SensorReading.received_at.desc(), SensorReading.id.desc()).limit(1))
+        stamp = reading.received_at if reading else None
         if stamp and stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
         unresolved = list(db.scalars(select(Alert).where(Alert.tank_id == tank.id, Alert.is_resolved.is_(False))).all())
         care = evaluate_tank_species_suitability(tank, reading, evaluated_at=now)

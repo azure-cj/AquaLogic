@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -17,6 +18,7 @@ class AlertRead(BaseModel):
     is_resolved: bool
     resolved_at: datetime | None = None
     resolved_by_user_id: int | None = None
+    resolution_source: Literal["operator", "system"] | None = None
     created_at: datetime
 
     @field_validator("created_at", "resolved_at", mode="after")

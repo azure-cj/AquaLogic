@@ -20,6 +20,8 @@ import {
 } from 'react';
 import './styles.css';
 
+const VISIBLE_THRESHOLD_PARAMETERS = new Set(['temperature', 'ph', 'turbidity', 'tds']);
+
 export function Thresholds() {
   const client = useQueryClient();
   const query = useQuery({
@@ -36,6 +38,17 @@ export function Thresholds() {
     const form = new FormData(event.currentTarget);
     const numberValue = (name: string) =>
       form.get(name) === '' ? null : Number(form.get(name));
+    const bounds = [
+      numberValue('critical_min'),
+      numberValue('warning_min'),
+      numberValue('warning_max'),
+      numberValue('critical_max'),
+    ].filter((value): value is number => value !== null);
+    if (bounds.some((value, index) => index > 0 && bounds[index - 1] >= value)) {
+      setError('Bounds must be strictly ordered from critical low to critical high.');
+      setSaving('');
+      return;
+    }
     try {
       await api(`/thresholds/${threshold.parameter}`, {
         method: 'PUT',
@@ -61,7 +74,7 @@ export function Thresholds() {
       <PageHeader
         eyebrow="System configuration"
         title="Global thresholds"
-        description="Changes apply to the next sensor reading across all tanks."
+        description="Changes apply to the next supported sensor reading across all tanks."
       />
       {notice && <Notice>{notice}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
@@ -75,7 +88,7 @@ export function Thresholds() {
         </Panel>
       ) : (
         <div className="threshold-list">
-          {query.data?.map((threshold) => (
+          {query.data?.filter((threshold) => VISIBLE_THRESHOLD_PARAMETERS.has(threshold.parameter)).map((threshold) => (
             <form
               className="threshold-card"
               key={threshold.parameter}

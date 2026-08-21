@@ -13,13 +13,17 @@ class ThresholdBase(BaseModel):
 
     @model_validator(mode="after")
     def ordered_bounds(self):
-        pairs = (
-            (self.critical_min, self.warning_min),
-            (self.warning_min, self.warning_max),
-            (self.warning_max, self.critical_max),
+        bounds = (
+            self.critical_min,
+            self.warning_min,
+            self.warning_max,
+            self.critical_max,
         )
-        if any(left is not None and right is not None and left > right for left, right in pairs):
-            raise ValueError("Bounds must follow critical low â‰¤ warning low â‰¤ warning high â‰¤ critical high")
+        present = [value for value in bounds if value is not None]
+        if any(left >= right for left, right in zip(present, present[1:])):
+            raise ValueError(
+                "Bounds must be strictly ordered: critical low < warning low < warning high < critical high"
+            )
         return self
 
 

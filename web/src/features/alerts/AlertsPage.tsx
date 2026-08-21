@@ -27,6 +27,14 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import './styles.css';
 
+const currentReleaseAlertParameters = new Set<string>(metricOptions.map((metric) => metric.key));
+
+export function resolutionLabel(source: Alert['resolution_source']): string {
+  if (source === 'system') return 'Automatically resolved';
+  if (source === 'operator') return 'Resolved by operator';
+  return 'Resolved';
+}
+
 export function Alerts() {
   const client = useQueryClient();
   const [urlParams, setUrlParams] = useSearchParams();
@@ -68,7 +76,9 @@ export function Alerts() {
       client.invalidateQueries({ queryKey: ['alerts'] });
     },
   });
-  const visibleAlerts = alerts.data ?? [];
+  const visibleAlerts = (alerts.data ?? []).filter((alert) =>
+    currentReleaseAlertParameters.has(alert.parameter),
+  );
   const clear = () => {
     setSeverity('');
     setParameter('');
@@ -174,7 +184,7 @@ export function Alerts() {
                   {alert.is_resolved ? (
                     <>
                       <span className="resolved-label">
-                        <Check size={14} /> Resolved
+                        <Check size={14} /> {resolutionLabel(alert.resolution_source)}
                       </span>
                       <small>{formatDate(alert.resolved_at)}</small>
                     </>

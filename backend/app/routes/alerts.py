@@ -60,6 +60,7 @@ def resolve_alert(
         alert.is_resolved = True
         alert.resolved_at = datetime.now(timezone.utc)
         alert.resolved_by_user_id = current_user.id
+        alert.resolution_source = "operator"
         audit_event(db, request, "alert.resolve", "success", actor_user_id=current_user.id, target_type="alert", target_id=alert.id)
         db.commit()
         db.refresh(alert)
