@@ -129,6 +129,19 @@ Last reviewed: 2026-08-21
   and compatibility notes remain informational with pairwise compatibility
   deferred.
 
+### Documentation
+
+- Phase 04 operations hardening is implemented: fleet analytics uses server
+  `received_at` for operational bucketing, uptime, and reporting gaps while
+  preserving observation timestamps for history; the public tank page labels
+  its observation time as “Observed”. Fleet, tank, alert, analytics, and public
+  contracts remain backward-compatible.
+- Phase 05 equipment-control documentation is reconciled with the current
+  actuator routes, bridge translator, web controls, and focused regression
+  tests. The docs now distinguish device-resident UV/LED/feeder schedules from
+  backend scheduling, record exact command expiry and no-blind-retry behavior,
+  and keep Pump A/B maintenance separate from automatic chemical dosing.
+
 ### Mobile
 
 - Flutter Android-first dashboard prototype with home, tanks, sensor cards,
@@ -156,9 +169,11 @@ Last reviewed: 2026-08-21
 
 - Backend client integration for the Flutter app.
 - Additional sensor hardware and production-grade actuator safety controls;
-  pump schedules and pH auto-dose remain deferred.
+  pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
 - Raspberry Pi deployment and hardware safety controls.
-- Schedules for feeding, lighting, filtration, dosing, and water replacement.
+- Timezone-aware schedule management, device-clock synchronization, and
+  schedule-event history for device-resident feeding and lighting schedules.
+- Schedules for filtration, dosing, and water replacement.
 - Pagination and database-level analytics for larger datasets.
 
 ## Known limitations
@@ -187,18 +202,20 @@ Last reviewed: 2026-08-21
 
 ## Validation checkpoint — 2026-08-21
 
-- Backend Phase 01, Phase 02, and Phase 06 regression suite: `.venv\Scripts\python.exe -m
+- Backend Phase 01, Phase 02, Phase 04, and Phase 06 regression suite: `.venv\Scripts\python.exe -m
   pytest -q tests/test_permissions.py tests/test_data_integrity.py
   tests/test_backup_recovery.py tests/test_security_hardening.py
   tests/test_account_lifecycle.py tests/test_device_ingestion.py
-  tests/test_monitoring_engine.py` passed alongside the complete backend suite
-  (94 tests).
+  tests/test_monitoring_engine.py tests/test_dashboard_management.py` passed
+  alongside the complete backend suite
+  (95 tests).
 - Validation includes staff/admin/public/device authorization boundaries,
   authentication revocation, SQLite foreign-key behavior, paired backup
   manifest checksums, isolated restore, migration, media preservation, and
   restored-session invalidation, receipt-time monitoring, threshold boundary
-  behavior, and alert lifecycle transitions.
-- Backend complete suite: `pytest -q` passed with 94 tests; the existing
+  behavior, alert lifecycle transitions, receipt-time analytics, and public
+  timestamp wording.
+- Backend complete suite: `pytest -q` passed with 95 tests; the existing
   database and a fresh temporary database reached `0010_alert_resolution_source`;
   `pip-audit -r requirements.txt`
   reported no known vulnerabilities.

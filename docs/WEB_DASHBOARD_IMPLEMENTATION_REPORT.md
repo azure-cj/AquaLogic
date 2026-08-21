@@ -1,6 +1,6 @@
 # AquaLogic web dashboard implementation report
 
-Last updated: July 29, 2026
+Last updated: August 18, 2026
 
 ## Current checkpoint
 
@@ -14,7 +14,7 @@ This checkpoint covers local implementation and validation only. No Vercel, Rend
 
 - Mobile-first `/tank/:publicId` experience with no authentication requirement.
 - Public tank identity, location, habitat details, water type, volume, establishment date, and optional hero image.
-- Current water status and parameter-level status wording for temperature, pH, turbidity, dissolved oxygen, TDS, and ammonia.
+- Current water status and parameter-level status wording for the current-release metrics: temperature, pH, turbidity, and TDS. Deferred ammonia and dissolved oxygen remain outside the public UI.
 - Offline, no-reading, private/not-found, no-fish, and missing-image states.
 - Fish species cards, feeding information, visitor guidance, care notes, FAQ content, and accessible in-page navigation.
 - UUID-based public URLs suitable for tank QR labels.
@@ -28,9 +28,13 @@ This checkpoint covers local implementation and validation only. No Vercel, Rend
 - Operational Command Center fleet overview with 30-second refresh, status filtering, tank readings, active alert totals, recent alerts, and reporting uptime.
 - Reporting uptime ranges for 24 hours, 7 days, and 30 days.
 - Alert history with severity, parameter, state, date, and tank filters plus resolution feedback.
-- Tank management with customer assignment, fish assignment/removal, public preview, URL copying, QR preview/download/print, and deletion controls.
-- Fish species and customer CRUD workflows using accessible side panels and confirmation dialogs.
-- Analytics for temperature, pH, turbidity, dissolved oxygen, TDS, ammonia, alert frequency, and per-tank reporting uptime.
+- Tank management with focused identity/public-profile editing, fish assignment/removal, public preview, URL copying, QR preview/download/print, hero image URL or admin upload support, visibility, and deletion controls. Customer assignment remains an internal backend relationship while the demo-facing customer workflow is being redesigned.
+- Fish species directory with grouped/compact views, explicit care-group/diet/
+  usage filters, accessible details and edit drawers, supported preferred water
+  range editing, hosted or uploaded JPG/PNG/WebP species photos,
+  assigned-tank links, and assignment-aware deletion controls.
+  Customer CRUD remains outside the demo-facing navigation.
+- Analytics for temperature, pH, turbidity, and TDS, plus alert frequency and per-tank reporting uptime. Ammonia and dissolved oxygen remain deferred from the web release.
 - Staff creation, role/status changes, temporary password reset, and one-time password copying.
 - Per-parameter threshold configuration with units, enabled state, validation feedback, and independent save progress.
 - Manila-local dates, relative operational times, keyboard-accessible dialogs and drawers, visible focus states, responsive layouts, and non-color status labels.
@@ -43,6 +47,10 @@ This checkpoint covers local implementation and validation only. No Vercel, Rend
 - Reporting uptime now counts unique 30-second reporting intervals rather than raw reading rows.
 - Analytics returns current and previous equivalent-period uptime so the web can display a genuine increase or decrease.
 - Production CORS rejects wildcard configuration.
+- Admin hero uploads validate image type and file signature, enforce a 5 MB limit, and use configurable local media storage; persistent volume or object storage is still required for durable production uploads.
+- Admin fish-photo uploads use the same signed-image checks, a configurable 5 MB
+  limit, and `/api/media/fish/...` storage; replacing a local species photo
+  removes the previous local file after the database update succeeds.
 - Demo ingestion requires both the global demo flag and the designated-instance flag.
 - Alembic migrations:
   - `0001_initial.py`

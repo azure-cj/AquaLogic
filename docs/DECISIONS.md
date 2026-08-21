@@ -400,6 +400,81 @@ required. Compatibility notes remain authenticated staff reference data,
 pairwise compatibility remains deferred, and assignment history remains
 available through audit events only.
 
+## 2026-08-21 — Reconcile Phase 04 operations boundaries
+
+**Decision:** Keep Phase 04 as five related operations specifications covering
+Fleet Overview, Tank Workspace, Alert History, Analytics, and Public Tank
+Pages. Treat the current implementation as authoritative, keep analytics
+user-facing metrics limited to temperature, pH, turbidity, and TDS, and preserve
+public tank pages as read-only privacy-safe projections. Record server receipt
+time as the approved future boundary for analytics bucketing, uptime, and gap
+detection while retaining observation time for historical context. Keep
+pagination, real-time streaming, external notifications, predictive analytics,
+and customer-facing fleet workflows deferred. Rename the public timestamp label
+from “Updated” to “Observed” in a future web polish pass without adding public
+receipt metadata.
+
+**Reason:** The operations UI and APIs are already implemented, but the Phase 04
+deep specs contained placeholders and did not consistently distinguish current
+behavior from later hardening. Receipt-time freshness is already authoritative
+for fleet and tank operations, while analytics still uses observation time. The
+public contract must remain narrower than authenticated operations data.
+
+**Consequences:** The Phase 04 documents now describe current routes, states,
+permissions, filters, calculations, and privacy boundaries. No executable code,
+API route, schema, migration, or UI behavior changes in this documentation pass.
+Receipt-time analytics and the public “Observed” wording remain explicit future
+work items.
+
+## 2026-08-21 — Implement receipt-time Phase 04 operations hardening
+
+**Decision:** Use server `received_at` for analytics filtering, ordering,
+bucket placement, uptime intervals, and reporting-gap detection. Retain reading
+`timestamp` for historical and hardware-clock context. Preserve the existing
+analytics response shape, including nullable deferred dissolved-oxygen and
+ammonia compatibility fields. Label the public observation timestamp “Observed”
+without exposing public receipt metadata.
+
+**Reason:** Fleet and tank operations already use receipt time for freshness and
+latest-reading selection. Analytics must use the same operational boundary so
+late observations cannot distort reporting health or trend windows. The public
+page's timestamp is observation time, so “Observed” is more precise than
+“Updated”.
+
+**Consequences:** No route, schema, migration, role, or dependency changes are
+required. Existing analytics controls, threshold overlays, alert event timing,
+CSV export, and deferred metric compatibility remain intact. Regression tests
+now cover late observations, receipt-time buckets, uptime, and gaps. Pagination,
+WebSockets, external notifications, predictive analytics, and database-level
+aggregation remain deferred.
+
+## 2026-08-21 — Reconcile Phase 05 equipment-control documentation
+
+**Decision:** Treat the current actuator implementation as the Phase 05
+authority. Keep browser actuator controls administrator-only, keep bridge access
+device-key-only with fixed device-to-tank mapping, and document UV, normal LED,
+and feeder schedules as device-resident configuration. AquaLogic validates and
+queues one schedule command, the bridge forwards it once, and the ESP32 owns
+future local execution. Record the exact 120-second normal-command and
+20-second pump-command default expiries, their 300/30-second maxima, and the
+no-blind-retry command safety rule. Keep Pump A/B as online-required,
+maintenance-only, empty-syringe/water-only checks.
+
+**Reason:** The backend, bridge, and web controls already implement these
+boundaries, but several Phase 05 deep specs were placeholders or left command
+semantics unresolved. Device-resident schedule execution matches the existing
+ESP32 routes without inventing a backend scheduler. Treating ambiguous physical
+requests as non-retryable prevents duplicate physical actions.
+
+**Consequences:** The Phase 05 documents now distinguish command acceptance from
+future physical state and schedule execution. Manual retry means creating a new
+command only after inspecting the equipment; there is no retry endpoint or
+automatic hardware retry. Last-known actuator state remains non-authoritative
+when the bridge is stale or offline. Audit retention, archive/export behavior,
+and system attribution for future scheduler-generated commands remain deferred.
+Production fail-safe hardware behavior, timezone/device-clock management, and
+future scheduler workers require separate design and validation.
+
 ## Adding a decision
 
 Use this format:

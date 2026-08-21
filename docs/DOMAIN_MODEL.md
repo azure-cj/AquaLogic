@@ -17,8 +17,8 @@ Last reviewed: 2026-08-21
 | ThresholdRevision | Append-only snapshot of a threshold configuration and its effective timestamp | Supplies historically correct analytics bands |
 | Alert | Persisted warning or critical condition | Belongs to a tank and optionally a reading; can be resolved by an operator or the monitoring engine |
 | RegisteredDevice | Device-key identity fixed to exactly one tank | Authenticates the bridge, tracks last seen time, and supports admin activation/key rotation |
-| ActuatorCommand | Admin audit and lifecycle record for one physical UV, LED, or feeder command | Belongs to one registered device/tank and optionally an actor user |
-| ActuatorState | Latest validated local state for one actuator | Unique per registered device and actuator |
+| ActuatorCommand | Admin audit and lifecycle record for one physical UV, LED, feeder, or guarded pump-maintenance command | Belongs to one registered device/tank and optionally an actor user |
+| ActuatorState | Latest validated local state for one actuator | Unique per registered device and actuator; may be stale when the bridge is unavailable |
 | ActuatorStateHistory | Append-only bridge state report | Belongs to one device/tank/actuator and may reference a command |
 
 Species-care suitability is intentionally derived rather than persisted. For
@@ -77,6 +77,33 @@ alert; a missing value does not. Alert responses expose nullable
 `resolution_source` (`operator` or `system`). Automatic resolutions are also
 recorded as administrator-only `alert.auto_resolve` audit events.
 
+## Operations and analytics
+
+Fleet Overview is a staff/admin read-only projection of tank health, reporting
+age, active alert counts, Species Care context, recent unresolved alerts, and
+reporting uptime. Tank Workspace combines tank metadata, latest operational
+reading, alert context, advisory Species Care, and authorized tank actions.
+Neither view creates a separate history store.
+
+Fleet analytics is a staff/admin read-only projection over temperature, pH,
+turbidity, and TDS for supported web workflows. It preserves nullable timelines,
+historical threshold revisions, alert events, previous-period comparisons, and
+reporting diagnostics. Analytics groups readings, uptime intervals, and gaps by
+server `received_at`; observation time remains historical context.
+
+Public tank pages are read-only projections selected by public ID and public
+visibility. They expose customer-safe tank metadata, the reduced species
+projection, and active public sensor fields only. They do not expose alert
+history, threshold configuration, assignment metadata, device data, or receipt
+metadata.
+
+Actuator schedules are device-resident configuration rather than backend
+scheduler jobs. A schedule command is validated, queued, claimed by the fixed
+bridge, and forwarded once to the ESP32. The device owns future execution;
+AquaLogic stores the configuration command and latest reported state but does
+not create a command for each autonomous event. Last-known actuator state does
+not guarantee current physical state when the bridge is stale or offline.
+
 ## Invariants to preserve
 
 - Tank names are unique.
@@ -112,6 +139,9 @@ recorded as administrator-only `alert.auto_resolve` audit events.
 - Actuator actions are limited to UV, normal LED, feeder, and the explicit
   manual-test-only `pump_a`/`pump_b` contracts; pump schedules, pH auto-dose,
   and sensor-driven dosing are not domain actions.
+- Normal actuator commands use a 120-second default expiry with a 300-second
+  maximum; pump maintenance commands use a 20-second default with a
+  30-second maximum. Ambiguous physical requests are not automatically retried.
 - Every successful threshold update appends a revision in the same transaction;
   revisions are never edited in place.
 - Schema changes are represented by migrations, not only by local SQLite table

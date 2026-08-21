@@ -54,8 +54,8 @@ minutes. Password changes and resets revoke existing sessions.
 | PATCH | `/devices/{device_id}` | Admin-only activation or deactivation through `{ "is_active": boolean }` |
 | POST | `/devices/{device_id}/rotate-key` | Admin-only one-time replacement key; invalidates the previous key |
 | POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
-| POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, or feeder command for the tank's registered bridge device |
-| GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, and feeder state |
+| POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, feeder, or guarded pump-maintenance command for the tank's registered bridge device |
+| GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, feeder, and pump state |
 | GET | `/tanks/{tank_id}/actuators/history` | Admin-only; read paginated command audit history with actor, timestamps, status, result, and error |
 
 The device-key bridge routes are not browser routes:
@@ -148,6 +148,13 @@ use a hosted species-photo URL through the existing `photo_url` field.
   device/tank mapping, a validated payload, and a short expiry. Lifecycle
   status is `queued`, `executing`, `succeeded`, `failed`, or `expired`.
 
+- Normal UV, LED, and feeder commands default to a 120-second queue expiry and
+  accept at most 300 seconds. Pump maintenance commands default to 20 seconds
+  and may not exceed 30 seconds. A queued command must be claimed by the
+  registered bridge before any physical request; expired commands are never
+  delivered. There is no automatic hardware retry or retry endpoint. An
+  operator must inspect the equipment before creating a new command.
+
 - `GET /tanks/{tank_id}/actuators/history` accepts `page` (default `1`),
   `page_size` (default `10`, maximum `50`), and optional exact-match
   `actuator` (`uv`, `led`, `feeder`, `pump_a`, or `pump_b`) and `status` (`queued`, `executing`,
@@ -182,6 +189,13 @@ use a hosted species-photo URL through the existing `photo_url` field.
   while the fixed bridge is offline, so they are never silently left in the
   queue. Pump schedules, pH auto-dose, and sensor-driven dosing remain out of
   scope.
+
+- UV, LED, and feeder schedules are device-resident configuration. AquaLogic
+  validates and queues one schedule command, the bridge forwards it once, and
+  the ESP32 stores and executes it locally. A successful schedule command means
+  the device accepted the configuration request; it does not confirm every
+  future scheduled event. The current `HH:MM` contract has no timezone,
+  daylight-saving, or device-clock synchronization fields.
 
 - The received firmware's private pump routes are `/syringeA/status`,
   `/syringeA/dispense`, `/syringeA/stop`, `/syringeA/retract`, and the matching
@@ -250,5 +264,11 @@ use a hosted species-photo URL through the existing `photo_url` field.
   nullable timelines, fleet and selected-tank series, previous-period
   statistics, alert events, effective threshold segments, and classified
   reporting uptime.
+- Analytics aggregation places readings, reporting intervals, and gaps by server
+  `received_at`. Observation `timestamp` remains available for historical and
+  hardware-clock context, and late observations are ordered operationally by
+  receipt time.
+- Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
+  is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current
   `backend/app/websockets/sensor_stream.py` is only a placeholder.

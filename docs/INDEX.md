@@ -48,6 +48,14 @@ choose only the context relevant to the task.
   current species profiles, advisory water suitability, notes-only compatibility,
   and tank species assignments, including the implemented public projection and
   deferred compatibility scope.
+- [`deep-spec/phase-04-operations/`](deep-spec/phase-04-operations/):
+  fleet overview, tank workspace, alert history, operational analytics, and
+  privacy-safe public tank pages, including the approved receipt-time analytics
+  hardening target.
+- [`deep-spec/phase-05-equipment-control/`](deep-spec/phase-05-equipment-control/):
+  registered equipment connections, UV/LED/feeder controls, device-resident
+  schedules, guarded pump maintenance, command lifecycle, and actuator audit
+  history.
 
 ## Existing plans and reports
 

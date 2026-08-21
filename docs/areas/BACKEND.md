@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-21
 
 ## Read first
 
@@ -19,13 +19,22 @@ Last reviewed: 2026-08-17
 - `backend/app/schemas/`: API request/response validation.
 - `backend/app/routes/`: HTTP route modules.
 - `backend/app/services/decision_engine.py`: sensor status and alert rules.
+  Threshold comparisons are strict at configured boundaries; active alerts can
+  escalate, downgrade, and resolve automatically on the next fresh normal
+  value for the same parameter.
 - `backend/app/services/species_suitability.py`: derived species preference
   checks; keep this policy separate from threshold and alert behavior.
 - `backend/app/routes/tanks.py`: tank detail, configuration, assignments, and
   the compact `/operations` snapshot contract.
-- `backend/app/routes/devices.py`: one-time admin provisioning and device-key
-  bridge ingestion, with server-side tank mapping, actuator command claiming,
-  final reporting, and actuator-state reporting.
+- `backend/app/routes/devices.py`: one-time admin provisioning, sanitized
+  administrator device lifecycle management, device-key bridge ingestion, with
+  server-side tank mapping, actuator command claiming, final reporting, and
+  actuator-state reporting.
+- `backend/app/routes/management.py` and `backend/app/routes/security.py`:
+  administrator account lifecycle summaries, sanitized session management,
+  and filtered security audit access.
+- `backend/app/routes/fish.py`: fish species directory and admin-only species
+  photo upload storage under the configured media root.
 - `backend/app/models/device.py`: registered devices, actuator command ledger,
   current actuator state, and append-only actuator state history.
 - `backend/app/schemas/device.py`: strict UV, normal LED, feeder, and guarded
@@ -34,10 +43,18 @@ Last reviewed: 2026-08-17
   limits.
 - `backend/alembic/versions/0008_actuator_controls.py`: actuator command/state
   schema migration.
+- `backend/alembic/versions/0009_domain_foundation.py`: sensor reading source
+  device and server receipt timestamp migration with SQLite-safe backfill.
+- `backend/alembic/versions/0010_alert_resolution_source.py`: additive alert
+  operator/system resolution metadata migration.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.
 - `backend/alembic/versions/`: schema migrations.
+- `backend/scripts/backup_local.py`: standard-library-only paired SQLite/media
+  backup bundle creation.
+- `backend/scripts/restore_local.py`: checksum-validated, isolated-only restore
+  with migration, integrity checks, and restored-session invalidation.
 - `backend/tests/`: endpoint and behavior coverage.
 
 ## Conventions
@@ -53,6 +70,10 @@ Last reviewed: 2026-08-17
   command may have executed.
 - Add regression tests for auth, visibility, threshold, alert, and data-integrity
   behavior.
+- Alert freshness is based on server `received_at` with a 90-second window.
+  Missing values are unavailable; a fresh reading uses the worst present,
+  enabled severity and becomes offline when no usable value exists. External
+  notification delivery is deferred; in-app alerts are the current surface.
 - Runtime packages belong in `requirements.txt`; pytest, HTTP clients, and
   audit tooling belong in `requirements-dev.txt`.
 
@@ -65,6 +86,10 @@ alembic upgrade head
 pip-audit
 ```
 
+Local recovery checks use the operator scripts documented in
+[`../WORKFLOWS.md`](../WORKFLOWS.md). They accept file-backed SQLite only;
+production PostgreSQL backups remain provider-managed.
+
 Actuator-specific backend checks include:
 
 ```powershell
@@ -76,7 +101,9 @@ alembic upgrade head
 The actuator API stores validated payloads and results as JSON, never device
 keys or Wi-Fi credentials. The existing generic actuator tables also store the
 manual-test pump lifecycle; no extra migration is needed for this JSON-backed
-extension. Command history is paginated with a bounded
+extension. UV, LED, and feeder schedules are validated configuration commands
+forwarded once to the ESP32, which owns local execution; AquaLogic does not run
+a scheduler or create one command per autonomous event. Command history is paginated with a bounded
 `page_size` and optional actuator/status filters so the admin audit view cannot
 grow into an unbounded response. Each history response also includes lifecycle
 counts for the fixed device/tank, independent of the active row filters, so the
@@ -84,7 +111,9 @@ dashboard can distinguish the current filtered view from overall command
 activity. A stale/offline bridge exposes last-known state and does not claim
 that the physical actuator is off. Pump commands are rejected rather than
 queued while the fixed bridge is offline, and backend authorization remains
-admin-only.
+admin-only. Normal commands default to 120-second expiry with a 300-second
+maximum; pump commands default to 20 seconds with a 30-second maximum. Hardware
+requests are never automatically retried after an ambiguous result.
 
 The current database defaults to `backend/aqualogic.db` when the backend is run
 from its directory. It is local state, not a source artifact.

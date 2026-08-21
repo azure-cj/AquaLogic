@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-21
 
 ## Read first
 
@@ -14,7 +14,7 @@ Last reviewed: 2026-08-17
 
 - `web/src/app/`: composition, providers, router, lazy route loaders.
 - `web/src/features/`: auth, fleet, alerts, tanks, fish, customers, analytics,
-  staff, thresholds, and public tank features.
+  staff, devices, thresholds, and public tank features.
 - `web/src/features/tanks/ActuatorControlPanel.tsx`: admin-only UV, normal LED,
   feeder, and guarded Pump A/B manual-test controls, bridge freshness,
   last-known state, confirmations, and command audit history.
@@ -38,15 +38,56 @@ Last reviewed: 2026-08-17
 - `/admin/login`, `/admin/setup-password`, `/admin/change-password`, and
   `/admin/account`, `/admin/security`: authentication, password, and
   session-management flows. Account center is the authenticated hub for
-  personal security and administrator-only staff access management.
+  personal security and administrator-only staff access management. Administrators
+  can filter the audit feed by account, event, outcome, and date range; staff see
+  only their personal sessions and no audit history. The account overview keeps
+  the role-capability explanation in an accessible click/hover/focus popover so
+  the page remains compact without hiding the information.
 - `/admin/staff`: administrator-only staff and role management; it remains a
-  stable direct route from the Account center.
+  stable direct route from the Account center. The workspace presents derived
+  lifecycle status, activity, session counts, confirmation-gated actions, and a
+  keyboard-accessible detail drawer with overview, access, sessions, and audit
+  activity sections. The drawer initially renders five sessions and five
+  meaningful activity items, groups routine refreshes, and provides progressive
+  load-more/show-fewer controls. These controls reveal bounded client responses;
+  they are not server-side pagination.
 - `/admin/actuators`: administrator-only tank chooser for the focused actuator
   control route.
+- `/admin/devices`: administrator-only registered-device workspace with derived
+  status, fixed tank mapping, activation controls, and confirmation-gated
+  one-time key rotation. The browser never persists device keys.
+- Threshold and alert surfaces use strict threshold-boundary behavior, display
+  disabled parameters as unavailable, and label resolved alerts as
+  operator-resolved or automatically resolved when the additive API metadata is
+  present. The current notification surface is in-app only; external delivery
+  controls are deferred.
 - `/admin/*`: authenticated staff/admin experience.
 
 Backend authorization remains authoritative. Do not rely on route visibility as a
 security boundary.
+
+The shared API client aborts requests that receive no response for 10 seconds,
+so a stopped local API moves the session check to the normal login/error state
+instead of leaving the application on an indefinite loading screen.
+
+The administrator tank editor is intentionally focused on tank identity, public
+profile content, hero imagery, visibility, and QR-page content. Customer
+assignment remains a backend relationship but is not exposed in the demo-facing
+tank form while the customer workflow is being redesigned. Hero images may use
+an allowlisted HTTPS URL or, for an existing tank, an admin-only JPG/PNG/WebP
+upload up to 5 MB. Uploads are served through the application media path; local
+disk is a demo/local-first store and requires persistent storage or an object
+storage adapter for production durability.
+
+The fish species directory satisfies the current fish-information requirements:
+authenticated directory responses expose supported preferred temperature, pH,
+and TDS ranges plus safe assigned-tank summaries; the UI provides explicit
+care-group, diet, and usage filters, a read-only details drawer, an admin edit
+form for those ranges, and a species-photo editor with hosted URL or local
+JPG/PNG/WebP upload support. Species Care compares assigned species with the
+tank's latest supported reading and labels suitable, needs-attention, and
+insufficient-data states. Ammonia and dissolved oxygen remain deferred and are
+not rendered as current-release species checks.
 
 `/admin/tanks/:tankId` is the staff tank workspace. It independently polls
 operations and Species Care, owns assignment management, and uses the shared
@@ -68,9 +109,12 @@ entry beside **Thresholds**. Its chooser lists tanks from the authenticated
 tank directory and links to the selected tank’s focused control route; it does
 not select a device or bypass the backend’s fixed device-to-tank mapping.
 
-The tank workspace labels missing dissolved oxygen and ammonia values as **Not
-installed** and uses the operations response freshness state for stale/offline
-bridge readings.
+Ammonia and dissolved oxygen are deferred from the current software release
+and are hidden from the thresholds UI, along with other demo-facing controls.
+They remain nullable in API responses for future integration, but are not
+rendered in the tank workspace, fleet view, public tank page, analytics
+selectors, or Species Care checks. The web does not create UI charts or alerts
+for those deferred values.
 
 The full actuator control center renders actuator controls only after the
 authenticated user is known to be an admin. It polls the admin-only actuator
@@ -105,6 +149,12 @@ seconds or milliseconds dose input.
 The web client never receives an ESP32 URL or device key. It queues commands at
 the AquaLogic backend, which hands them to the existing local-only bridge.
 
+UV, normal LED, and feeder schedule forms configure device-resident schedules;
+the web client does not run a scheduler or display each future autonomous event
+as a separate command. A successful request means the device accepted the
+configuration command, while a stale bridge report remains last-known context
+and does not guarantee the physical actuator is off.
+
 The public tank route bundles its DM Sans, Source Sans 3, and Libre Baskerville
 faces locally through Fontsource. Keep those font variables scoped beneath
 `.visitor-shell` so the staff dashboard retains its Geist typography.
@@ -130,7 +180,11 @@ device summaries, keeps raw user-agent strings behind technical details,
 requires an explicit confirmation before revoking another session, and expands
 the password-confirmed sign-out-everywhere form only after intent. The
 administrator audit feed groups routine refresh events so account-changing
-events remain scannable.
+events remain scannable. Administrators can filter it by account, event,
+outcome, and date range; bridge telemetry is also grouped in the default feed.
+Staff never receive the administrator-only audit feed. Signed-in device cards
+show both activity and expiry context so an operator can distinguish a recently
+used session from one nearing expiry.
 
 ## Common checks
 

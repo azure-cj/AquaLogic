@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-21
 
 ## First-time setup
 
@@ -44,6 +44,13 @@ This starts the API at `http://127.0.0.1:8000` and the Vite web app at
 It keeps the seeded fleet fresh with representative normal, warning, critical,
 and offline states. API documentation is available at `http://127.0.0.1:8000/docs`.
 
+For a temporary classroom demo from another laptop, double-click
+`start-classroom-demo.bat`. It starts the local API and web app, waits for the
+Vite server, checks that `ngrok` is installed, and exposes port `5173` through
+an HTTPS ngrok URL. Keep all opened terminal windows running and prevent the
+host computer from sleeping while presenting. This is a temporary tunnel, not
+a production deployment.
+
 For manual control, run the backend and web commands in separate terminals:
 
 ```powershell
@@ -56,6 +63,26 @@ python -m uvicorn app.main:app --reload
 cd web
 npm run dev
 ```
+
+When staff setup or password-reset links are generated, the backend uses
+`PUBLIC_BASE_URL` as the browser URL. Keep the local default
+`http://localhost:5173` when the recipient is using the same computer; for a
+temporary classroom demo, set it to the active HTTPS web/tunnel URL before
+creating the account link. Setup links are single-use and expire after 30
+minutes, so generate a fresh link if an older one was opened or reset.
+
+For the temporary ESP32 sensor/actuator bridge, follow
+[`ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`](ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md).
+Use the nested repository's owner/tester launcher files or run:
+
+```powershell
+python bridge\esp32_bridge.py --config bridge\bridge-config.json --once
+python bridge\esp32_bridge.py --config bridge\bridge-config.json
+```
+
+The bridge configuration is local and untracked. The ESP32 URL must remain a
+private local `/data` address; a temporary tunnel may carry only dashboard/API
+traffic. The browser and backend never call the ESP32 directly.
 
 ## Validation workflow
 
@@ -86,6 +113,50 @@ flutter test
 For changes that affect public/admin behavior, also run the browser smoke or
 visual regression workflow and preserve only intentional evidence under
 `docs/browser-artifacts/`.
+
+## Local backup and isolated restore
+
+Local recovery is supported for file-backed SQLite only. From `backend/`, create
+a paired database/media bundle outside the repository or under the ignored
+`backend/backups/` directory:
+
+```powershell
+cd backend
+python -m scripts.backup_local `
+  --output-dir .\backups `
+  [--database-url sqlite:///C:/path/to/aqualogic.db] `
+  [--media-root C:\path\to\media]
+```
+
+The bundle contains `aqualogic.db`, `media/`, and a checksummed `manifest.json`.
+It never packages environment files, JWT secrets, credentials, device keys, or
+bridge configuration.
+
+Restore only into a new, isolated directory:
+
+```powershell
+cd backend
+python -m scripts.restore_local `
+  --bundle .\backups\aqualogic-backup-<UTC timestamp>.tar.gz `
+  --target-dir ..\restore\aqualogic-<UTC timestamp>
+```
+
+The restore command rejects an existing target, validates archive paths and
+checksums, applies Alembic migrations, runs SQLite integrity checks, and
+revokes every restored session while incrementing every restored user's token
+version. There is no live-restore flag or HTTP restore endpoint. Start a
+separate validation process with the restored database and media paths only
+after the command completes.
+
+Validate an isolated restore with `/health`, administrator login, staff read
+access, administrator-only access, public tank privacy, restored media URLs,
+and restored device/actuator mappings. Production recovery must not run demo
+seeding or demo sensor generation.
+
+Production PostgreSQL backups and point-in-time recovery remain the deployment
+or database-provider responsibility. Production media storage must have a
+compatible retention and recovery plan; the application does not duplicate
+provider-native PostgreSQL backup automation.
 
 ## Database changes
 
