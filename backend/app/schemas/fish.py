@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def validate_preferred_range_order(values: dict) -> dict:
@@ -26,7 +26,6 @@ class FishSpeciesBase(BaseModel):
     ideal_temp_max: float | None = None
     ideal_ph_min: float | None = None
     ideal_ph_max: float | None = None
-    ideal_do_min: float | None = None
     ideal_tds_min: float | None = None
     ideal_tds_max: float | None = None
     diet: str | None = None
@@ -52,7 +51,6 @@ class FishSpeciesUpdate(BaseModel):
     ideal_temp_max: float | None = None
     ideal_ph_min: float | None = None
     ideal_ph_max: float | None = None
-    ideal_do_min: float | None = None
     ideal_tds_min: float | None = None
     ideal_tds_max: float | None = None
     diet: str | None = None
@@ -67,6 +65,39 @@ class FishSpeciesRead(FishSpeciesBase):
     tank_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicFishSpeciesRead(BaseModel):
+    """Customer-safe species projection for public tank displays."""
+
+    common_name: str
+    scientific_name: str
+    photo_url: str | None = None
+    category: str
+    description: str | None = None
+    diet: str | None = None
+    care_tips: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssignedTankRead(BaseModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FishSpeciesDirectoryRead(FishSpeciesRead):
+    """Authenticated directory response with safe assignment summaries."""
+
+    assigned_tanks: list[AssignedTankRead] = Field(default_factory=list)
+
+
+class FishImageUploadRead(BaseModel):
+    photo_url: str
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+    size_bytes: int
 
 
 class FishAssignmentRequest(BaseModel):

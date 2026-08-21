@@ -46,6 +46,12 @@ export type Fish = {
   common_name: string;
   scientific_name: string;
   category: string;
+  ideal_temp_min?: number | null;
+  ideal_temp_max?: number | null;
+  ideal_ph_min?: number | null;
+  ideal_ph_max?: number | null;
+  ideal_tds_min?: number | null;
+  ideal_tds_max?: number | null;
   photo_url?: string | null;
   description?: string | null;
   diet_type?: 'Carnivore' | 'Omnivore' | 'Herbivore' | null;
@@ -53,6 +59,7 @@ export type Fish = {
   compatibility_notes?: string | null;
   care_tips?: string | null;
   tank_count: number;
+  assigned_tanks?: Array<{ id: number; name: string }>;
 };
 
 export type Alert = {
@@ -214,7 +221,7 @@ export type SpeciesSuitabilityReason =
   | 'invalid_species_range';
 
 export type SpeciesSuitabilityCheck = {
-  parameter: 'temperature' | 'ph' | 'dissolved_oxygen' | 'tds';
+  parameter: 'temperature' | 'ph' | 'tds';
   status: SpeciesSuitabilityStatus;
   configured: boolean;
   reason: SpeciesSuitabilityReason;

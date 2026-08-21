@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-21
 
 ## Completed and working locally
 
@@ -22,11 +22,16 @@ Last reviewed: 2026-08-17
   history, representative normal/warning/critical/offline fleet states, alert
   history, and populated public-tank details.
 - Backend behavior covered by pytest tests.
-- Fish species expose care groups, categorical diets, and tank usage counts;
-  assigned species are protected from deletion.
+- Fish species expose care groups, categorical diets, supported preferred water
+  ranges, assigned-tank summaries, tank usage counts, explicit directory
+  filters, and a readable details drawer; assigned species are protected from
+  deletion.
 - Staff tank drawers show dynamic species-care suitability against the latest
   fresh reading. Results are not persisted alerts, and preferred range changes
   and assignment changes take effect immediately.
+- Tank create/edit now uses a focused public-profile form with URL or validated
+  admin hero-image upload support; customer assignment remains an internal
+  relationship while its demo workflow is being redesigned.
 - Authentication now uses Argon2id passwords, a claim-complete 15-minute JWT,
   revocable rotating refresh sessions, one-time setup links, database-backed
   login throttling, audit events, strict production configuration, and
@@ -45,6 +50,29 @@ Last reviewed: 2026-08-17
   The bridge preserves sensor polling, uses only the registered device key,
   keeps pump testing default-off, and never retries a potentially executed
   hardware call.
+- Phase 06 access hardening is implemented: staff/admin/public/device permission
+  boundaries, authentication lifecycle revocation, setup-link replay/expiry,
+  last-administrator protection, security headers, cookie flags, throttling, and
+  administrator-only security audit access are regression-tested.
+- SQLite foreign-key enforcement is enabled for application and test engines;
+  cascade, nullable-reference, uniqueness, assignment-protection, and rollback
+  behavior are covered by integrity tests.
+- Local recovery tooling is implemented under `backend/scripts/`: paired
+  SQLite-plus-media bundles include versioned manifests and checksums, while
+  restores are isolated-only, migration-aware, integrity-checked, and revoke
+  restored sessions. Production PostgreSQL backup ownership remains with the
+  deployment/database provider.
+- Account lifecycle hardening is implemented: administrator user summaries
+  derive account status, password state, active session counts, and latest
+  activity; administrator-only user detail/session/revoke endpoints expose no
+  raw secrets; and the audit feed supports account, event, outcome, and time
+  filters.
+- Phase 02 monitoring-engine hardening is implemented: strict threshold ordering
+  and boundary semantics, prospective threshold revisions, receipt-time
+  freshness, worst-available tank status derivation, automatic alert
+  escalation/downgrade/resolution, operator/system resolution metadata, and
+  audited threshold-disable resolution. External notification delivery remains
+  deferred.
 
 ### Web
 
@@ -70,10 +98,36 @@ Last reviewed: 2026-08-17
 - Local typecheck, tests, and production build have been recorded as passing in
   `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`.
 - Fish species use a grouped directory by default with a remembered compact-list
-  alternative, diet badges, thumbnails, filters, and assignment-aware actions.
+  alternative, diet badges, hosted or uploaded JPG/PNG/WebP thumbnails,
+  care-group/diet/usage filters, readable details, preferred-range editing,
+  assigned-tank links, and assignment-aware actions.
 - Analytics support URL-persisted range/resolution/tank/metric controls,
   threshold and alert overlays, synchronized parameter previews, aligned
   comparison charts, operational insights, deep links, and filtered CSV export.
+- Account Center now explains personal identity, password state, role access,
+  and administrator team metrics. Its role-capability explanation is kept in an
+  accessible header popover. Staff & roles is an administrator-only lifecycle
+  workspace with searchable/filterable status, activity and session metadata,
+  confirmation-gated actions, and a detail drawer for access, sessions, and
+  per-user audit activity. The drawer groups routine refreshes and progressively
+  reveals bounded history with load-more/show-fewer controls.
+- Phase 01 domain foundation hardening is implemented: administrator device
+  lifecycle management, sanitized device inventory, one-time key rotation,
+  reading source-device and server receipt provenance, shared manual/device
+  bounds validation, receipt-time freshness, and the administrator Devices
+  workspace. Multiple active devices per tank remain supported; stable sample
+  IDs and dissolved-oxygen/ammonia hardware integration remain deferred.
+- Phase 02 web hardening is implemented: threshold forms provide strict-order
+  feedback, deferred parameters remain hidden, and alert history identifies
+  automatic versus operator resolution while retaining the in-app-only
+  notification surface.
+- Phase 03 species-care contract hardening is implemented: suitability evaluates
+  only temperature, pH, and TDS using receipt-time freshness, the public tank
+  response uses a reduced species and sensor projection, and legacy dissolved
+  oxygen/ammonia fields remain database-only compatibility data for these
+  workflows. Species assignment remains staff/admin-accessible, audit logged,
+  and compatibility notes remain informational with pairwise compatibility
+  deferred.
 
 ### Mobile
 
@@ -130,6 +184,31 @@ Last reviewed: 2026-08-17
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-08-21
+
+- Backend Phase 01, Phase 02, and Phase 06 regression suite: `.venv\Scripts\python.exe -m
+  pytest -q tests/test_permissions.py tests/test_data_integrity.py
+  tests/test_backup_recovery.py tests/test_security_hardening.py
+  tests/test_account_lifecycle.py tests/test_device_ingestion.py
+  tests/test_monitoring_engine.py` passed alongside the complete backend suite
+  (94 tests).
+- Validation includes staff/admin/public/device authorization boundaries,
+  authentication revocation, SQLite foreign-key behavior, paired backup
+  manifest checksums, isolated restore, migration, media preservation, and
+  restored-session invalidation, receipt-time monitoring, threshold boundary
+  behavior, and alert lifecycle transitions.
+- Backend complete suite: `pytest -q` passed with 94 tests; the existing
+  database and a fresh temporary database reached `0010_alert_resolution_source`;
+  `pip-audit -r requirements.txt`
+  reported no known vulnerabilities.
+- Web: `npm run typecheck`, `npm test` (88 tests across 21 files), and
+  `npm run build` passed. The latest UI polish covered the account capability
+  popover, drawer history limits, lifecycle wording, session expiry context,
+  bridge telemetry grouping, Account Center spacing, threshold validation
+  feedback, and alert resolution-source labels. The browser smoke reached the
+  login surface and confirmed unauthenticated session bootstrap is rejected;
+  authenticated browser flows remain covered by the backend regression suite.
 
 ## Validation checkpoint — 2026-08-17
 

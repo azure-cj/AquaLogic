@@ -33,11 +33,15 @@ def _create_fish(client, headers):
         json={
             "common_name": "Neon Tetra",
             "scientific_name": "Paracheirodon innesi",
+            "photo_url": "https://images.unsplash.com/neon-tetra.webp",
+            "category": "Community",
+            "description": "A peaceful schooling fish.",
+            "diet": "Fine flakes and micro pellets.",
+            "care_tips": "Keep in a planted group.",
             "ideal_temp_min": 22.0,
             "ideal_temp_max": 26.0,
             "ideal_ph_min": 6.0,
             "ideal_ph_max": 7.0,
-            "ideal_do_min": 5.0,
             "ideal_tds_min": 50.0,
             "ideal_tds_max": 180.0,
         },
@@ -91,13 +95,20 @@ def test_sensor_endpoints_and_public_view(client, auth_headers, db_session):
     assert public_payload["water_type"] == "freshwater"
     assert public_payload["volume_liters"] == 180
     assert len(public_payload["fish_species"]) == 1
+    assert set(public_payload["fish_species"][0]) == {
+        "common_name", "scientific_name", "photo_url", "category", "description", "diet", "care_tips",
+    }
+    assert "id" not in public_payload["fish_species"][0]
+    assert "ideal_temp_min" not in public_payload["fish_species"][0]
+    assert "compatibility_notes" not in public_payload["fish_species"][0]
     assert public_payload["latest_reading"]["temperature"] == 25.5
+    assert set(public_payload["latest_reading"]) == {"timestamp", "temperature", "ph", "turbidity", "tds"}
     assert "id" not in public_payload["latest_reading"]
     assert "tank_id" not in public_payload["latest_reading"]
     assert "is_mock" not in public_payload["latest_reading"]
     assert public_payload["status"] == "normal"
+    assert set(public_payload["parameter_statuses"]) == {"temperature", "ph", "turbidity", "tds"}
     assert public_payload["parameter_statuses"]["temperature"] == "normal"
-    assert public_payload["parameter_statuses"]["ammonia"] == "normal"
 
 
 def test_public_view_reports_stale_readings_without_leaking_private_ids(
@@ -108,7 +119,8 @@ def test_public_view_reports_stale_readings_without_leaking_private_ids(
     db_session.add(
         SensorReading(
             tank_id=tank["id"],
-            timestamp=datetime.now(timezone.utc) - timedelta(minutes=10),
+            timestamp=(stale_at := datetime.now(timezone.utc) - timedelta(minutes=10)),
+            received_at=stale_at,
             temperature=25.0,
             ph=7.1,
             turbidity=2.0,
@@ -134,6 +146,32 @@ def test_public_view_without_readings_uses_unavailable_metric_states(client, aut
     assert response.json()["status"] == "offline"
     assert "latest_reading" not in response.json()
     assert set(response.json()["parameter_statuses"].values()) == {"unavailable"}
+
+
+def test_public_view_ignores_deferred_device_metrics(client, auth_headers, db_session):
+    ensure_default_thresholds(db_session)
+    tank = _create_tank(client, auth_headers, name="Bridge Public Display")
+    db_session.add(
+        SensorReading(
+            tank_id=tank["id"],
+            timestamp=datetime.now(timezone.utc),
+                temperature=25.0,
+            ph=7.1,
+            turbidity=4.0,
+            tds=180.0,
+            dissolved_oxygen=0.1,
+            ammonia=100.0,
+        )
+    )
+    db_session.commit()
+
+    response = client.get(f"/public/tanks/{tank['public_id']}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "normal"
+    assert "dissolved_oxygen" not in response.json()["latest_reading"]
+    assert "ammonia" not in response.json()["latest_reading"]
+    assert set(response.json()["parameter_statuses"]) == {"temperature", "ph", "turbidity", "tds"}
 
 
 @pytest.mark.parametrize(

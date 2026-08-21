@@ -536,23 +536,17 @@
   font-size: 0.67rem;
 }
 
-.visitor-fish-ranges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.visitor-fish-ranges b {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 5px;
-  border-radius: 5px;
-  color: #466975;
-  background: #e7f3f5;
-  font-size: 0.57rem;
-  font-weight: 750;
+.visitor-fish-category {
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #47717b;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .visitor-fish-card summary > em {

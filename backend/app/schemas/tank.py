@@ -2,13 +2,17 @@ from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+import re
 from urllib.parse import urlparse
 
 from app.config import settings
 
-from .fish import FishSpeciesRead
+from .fish import FishSpeciesRead, PublicFishSpeciesRead
 from .sensor import SensorReadingPublic
 from .dashboard import CustomerSummary
+
+
+LOCAL_HERO_IMAGE_PATTERN = re.compile(r"^/api/media/tanks/[a-f0-9]{32}\.(?:jpg|png|webp)$")
 
 
 class TankBase(BaseModel):
@@ -33,6 +37,8 @@ class TankBase(BaseModel):
         if value is None:
             return value
         parsed = urlparse(value)
+        if parsed.scheme == "" and parsed.netloc == "" and LOCAL_HERO_IMAGE_PATTERN.fullmatch(parsed.path):
+            return value
         if parsed.scheme != "https" or not parsed.hostname or parsed.hostname not in settings.public_image_hosts:
             raise ValueError("Hero images must use HTTPS and an allowed image host")
         return value
@@ -64,6 +70,12 @@ class TankUpdate(BaseModel):
         return TankBase.validate_public_image_url(value)
 
 
+class HeroImageUploadRead(BaseModel):
+    hero_image_url: str
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+    size_bytes: int
+
+
 class TankRead(TankBase):
     id: int
     public_id: str
@@ -87,7 +99,7 @@ class TankPublicRead(BaseModel):
     volume_liters: int | None = None
     established_on: date | None = None
     hero_image_url: str | None = None
-    fish_species: list[FishSpeciesRead] = Field(default_factory=list)
+    fish_species: list[PublicFishSpeciesRead] = Field(default_factory=list)
     latest_reading: SensorReadingPublic | None = None
     status: str
     parameter_statuses: dict[str, str] = Field(default_factory=dict)

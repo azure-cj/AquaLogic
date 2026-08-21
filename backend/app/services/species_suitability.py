@@ -8,14 +8,12 @@ from app.services.reading_freshness import is_reading_current
 PARAMETERS = (
     "temperature",
     "ph",
-    "dissolved_oxygen",
     "tds",
 )
 
 PARAMETER_METADATA = {
     "temperature": {"unit": "°C", "minimum": "ideal_temp_min", "maximum": "ideal_temp_max", "label": "Temperature"},
     "ph": {"unit": "pH", "minimum": "ideal_ph_min", "maximum": "ideal_ph_max", "label": "pH"},
-    "dissolved_oxygen": {"unit": "mg/L", "minimum": "ideal_do_min", "maximum": None, "label": "Dissolved oxygen"},
     "tds": {"unit": "ppm", "minimum": "ideal_tds_min", "maximum": "ideal_tds_max", "label": "TDS"},
 }
 
@@ -95,7 +93,7 @@ def evaluate_check(
     if reading is None:
         reason = "no_current_reading"
         return {**base, "status": "unavailable", "reason": reason, "message": _message(species.common_name, parameter, current_value, minimum, maximum, reason)}
-    if not is_reading_current(reading.timestamp, evaluated_at=evaluated_at):
+    if not is_reading_current(reading.timestamp, received_at=getattr(reading, "received_at", None), evaluated_at=evaluated_at):
         reason = "stale_reading"
         return {**base, "status": "unavailable", "reason": reason, "message": _message(species.common_name, parameter, current_value, minimum, maximum, reason)}
     if current_value is None:
@@ -150,7 +148,7 @@ def evaluate_tank_species_suitability(
         status, summary_reason = "unavailable", None
     else:
         status, summary_reason = "suitable", None
-    freshness = "current" if reading is not None and is_reading_current(reading.timestamp, evaluated_at=now) else "stale"
+    freshness = "current" if reading is not None and is_reading_current(reading.timestamp, received_at=getattr(reading, "received_at", None), evaluated_at=now) else "stale"
     return {
         "tank_id": tank.id,
         "status": status,

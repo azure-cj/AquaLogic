@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-21
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -35,10 +35,12 @@ minutes. Password changes and resets revoke existing sessions.
 | --- | --- | --- |
 | GET/POST | `/tanks` | Staff list; admin creates |
 | GET/PUT/DELETE | `/tanks/{tank_id}` | Staff reads; admin updates or deletes |
+| POST | `/tanks/{tank_id}/hero-image` | Admin-only; upload a JPG, PNG, or WebP hero image up to 5 MB |
 | GET | `/tanks/{tank_id}/species-suitability` | Derive staff-only species-care suitability from the latest reading |
 | POST/DELETE | `/tanks/{tank_id}/fish` and `/tanks/{tank_id}/fish/{fish_id}` | Manage tank/species assignments |
 | GET/POST | `/fish` | Staff lists; admin creates |
 | GET/PUT/DELETE | `/fish/{fish_id}` | Staff reads; admin updates or deletes |
+| POST | `/fish/{fish_id}/photo-image` | Admin-only; upload a JPG, PNG, or WebP species photo up to 5 MB |
 | GET | `/tanks/{tank_id}/sensors` | Read latest sensor data |
 | GET | `/tanks/{tank_id}/sensors/history` | Read bounded sensor history |
 | POST | `/tanks/{tank_id}/sensors` | Admin-only manual sensor submission |
@@ -47,6 +49,10 @@ minutes. Password changes and resets revoke existing sessions.
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
 | PUT | `/alerts/{alert_id}/resolve` | Resolve an alert |
 | POST | `/devices` | Admin-only one-time device provisioning; returns a key once and fixes the device to one tank |
+| GET | `/devices` | Admin-only sanitized device inventory with derived online/offline/disabled status |
+| GET | `/devices/{device_id}` | Admin-only sanitized device detail |
+| PATCH | `/devices/{device_id}` | Admin-only activation or deactivation through `{ "is_active": boolean }` |
+| POST | `/devices/{device_id}/rotate-key` | Admin-only one-time replacement key; invalidates the previous key |
 | POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
 | POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, or feeder command for the tank's registered bridge device |
 | GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, and feeder state |
@@ -72,11 +78,22 @@ The device-key bridge routes are not browser routes:
 | PUT | `/thresholds/{parameter}` | Admin | Update one parameter threshold |
 | GET/POST | `/customers` | Staff reads; admin creates |
 | PUT/DELETE | `/customers/{customer_id}` | Admin | Update or delete customers |
-| GET | `/users` | Admin | List staff users |
+| GET | `/users` | Admin | List staff users with derived lifecycle status, password-change timestamp, active-session count, and latest activity |
+| GET | `/users/{user_id}` | Admin | Read one user's lifecycle summary |
+| GET | `/users/{user_id}/sessions` | Admin | Read sanitized active sessions for one user; exposes no IP hashes, refresh tokens, or token hashes |
+| POST | `/users/{user_id}/revoke-sessions` | Admin | Revoke every session for another user, increment token version, and record an audit event |
 | PUT | `/users/{user_id}` | Admin | Update role or active state |
 | POST | `/users` | Admin | Create a user and return a one-time setup URL |
 | POST | `/users/{user_id}/reset-password` | Admin | Disable the password/sessions and issue a setup URL |
-| GET | `/security/audit-events` | Admin | Read up to 100 newest security audit events before an optional ID |
+| GET | `/security/audit-events` | Admin | Read up to 100 newest security audit events before an optional ID; optionally filter by user, event type, outcome, and time range |
+
+The administrator `/users` and `/users/{user_id}` responses add these derived
+fields without a database migration: `account_status` (`active`,
+`setup_required`, or `inactive`), `password_changed_at`,
+`active_session_count`, and `last_activity_at`. The audit `user_id` filter
+matches events performed by that user or events targeting that user account.
+Administrator session revocation cannot target the administrator's own account;
+the personal `/auth/logout-all` flow remains the self-service operation.
 
 ## Public route
 
@@ -91,6 +108,22 @@ It exposes only `display_location`, not the internal location; excludes tank
 code and feeding schedule; rounds readings; and rounds observation timestamps to
 the minute. Public image URLs require HTTPS and a configured host allowlist.
 
+Public `fish_species` entries contain only `common_name`, `scientific_name`,
+`photo_url`, `category`, `description`, `diet`, and `care_tips`. They omit
+internal IDs, preferred ranges, `ideal_do_min`, compatibility notes, assignment
+metadata, and suitability metadata. Public readings contain only `timestamp`,
+`temperature`, `ph`, `turbidity`, and `tds`; public parameter statuses and
+overall status use those same four active parameters. Dissolved oxygen and
+ammonia remain database compatibility fields and cannot affect the public
+projection or status.
+
+Admin hero and species-photo uploads are stored under the configured
+`MEDIA_ROOT` and returned as same-application `/api/media/tanks/...` or
+`/api/media/fish/...` URLs. Local disk storage is suitable for the local-first
+demo; production deployment needs a persistent volume or object-storage
+adapter before uploaded images are considered durable. The browser may still
+use a hosted species-photo URL through the existing `photo_url` field.
+
 ## Operational endpoints and notes
 
 - Bridge ingestion uses `X-Device-Key`, never a browser JWT, staff password, or
@@ -98,6 +131,16 @@ the minute. Public image URLs require HTTPS and a configured host allowlist.
   ingestion is audit logged. The v1 payload accepts only `temperature`, `ph`,
   `turbidity`, `tds`, and optional `observed_at`; dissolved oxygen and ammonia
   persist as unavailable nulls and cannot create normal statuses or alerts.
+  Accepted installed ranges are temperature `-10..60`, pH `0..14`, turbidity
+  `0..3000`, and TDS `0..5000`. Reading responses include nullable `device_id`
+  and server-generated `received_at`; manual readings have no source device.
+  Freshness uses `received_at`, while `timestamp` remains the observation time.
+
+- Device list/detail responses expose only the device ID, fixed tank mapping,
+  activation state, created time, last-seen time, and derived status. They never
+  expose a raw key or key hash. Deactivation immediately rejects device-key
+  ingestion and actuator routes. Multiple active devices per tank remain
+  supported, with explicit selection required where an operation needs one.
 
 - Actuator command APIs are admin-only. Staff actuator command, state, and
   history requests receive `403`; the web UI does not fetch those endpoints for
@@ -152,23 +195,45 @@ the minute. Public image URLs require HTTPS and a configured host allowlist.
   dashboard/API test infrastructure only; the ESP32 stays on the tester's
   private local Wi-Fi and is never publicly exposed.
 
+- Alert responses include nullable `resolution_source`: `operator` for a
+  manual Resolve action, `system` for automatic resolution, and `null` for
+  unresolved or legacy records with unknown history. Automatic resolution is
+  triggered by a fresh normal reading for the same parameter or by the first
+  usable reading after that parameter's threshold is disabled. It records an
+  administrator-only `alert.auto_resolve` audit event; there is no separate
+  notification-delivery API.
+
+- Threshold updates are administrator-only, require strict ordering of supplied
+  bounds, and apply prospectively to the next valid reading. Exact warning and
+  critical boundaries remain Normal. Disabled thresholds expose the parameter
+  as unavailable and create no new alerts.
+
 - `GET /health` is the deployment health check.
 - CORS is configured from `CORS_ORIGINS`; production rejects wildcard CORS.
 - Demo ingestion requires both `DEMO_SENSOR_ENABLED` and
   `DEMO_SENSOR_INSTANCE` to be enabled.
 - Pagination is not yet available on the main list endpoints and is a known
   scaling limitation.
-- Fish species responses include `category`, categorical `diet_type`, and the
-  derived `tank_count`. Deleting a species with active tank assignments returns
-  `409 Conflict`; assignments must be removed first.
+- Authenticated `GET /fish` and `GET /fish/{id}` responses include species care
+  ranges (`ideal_temp_*`, `ideal_ph_*`, and `ideal_tds_*`), `category`,
+  categorical `diet_type`, the derived `tank_count`, and safe `assigned_tanks`
+  summaries containing only tank IDs and names. The public tank response uses a
+  dedicated reduced species projection containing only common and scientific
+  names, photo, care group, description, diet details, and care tips; it omits
+  preferred ranges, compatibility notes, tank counts, assigned tanks, and
+  suitability metadata. Deleting a species with
+  active tank assignments returns `409 Conflict`; assignments must be removed
+  first.
 - `GET /tanks/{tank_id}/species-suitability` returns derived `suitable`,
   `attention`, or `unavailable` results for assigned species. It evaluates
-  temperature, pH, dissolved oxygen, and TDS against fish preferred ranges and
-  the latest reading only; it does not create alerts or use operational
-  thresholds. The response includes per-parameter reasons, range values, a
-  reading freshness reference, and `no_species_assigned` for empty tanks.
-  Preferred temperature, pH, and TDS minimums cannot exceed their maximums on
-  fish create or update requests.
+  temperature, pH, and TDS against fish preferred ranges and selects the latest
+  reading by server receipt time. It evaluates only temperature, pH, and TDS;
+  legacy dissolved-oxygen storage is excluded. Suitability does not create
+  alerts or use operational thresholds.
+  The response includes per-parameter reasons, range values, a reading freshness
+  reference, and `no_species_assigned` for empty tanks. Preferred temperature,
+  pH, and TDS minimums may be omitted or equal to their maximums, but cannot
+  exceed them.
 - `GET /tanks/{tank_id}/operations` returns one internally consistent, UTC
   evaluated operational snapshot: latest reading (or `null`), six
   threshold-backed parameter statuses, and unresolved persisted alerts newest

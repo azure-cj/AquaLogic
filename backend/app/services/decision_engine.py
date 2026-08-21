@@ -8,6 +8,7 @@ from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
+PUBLIC_PARAMETERS = ("temperature", "ph", "turbidity", "tds")
 DEFAULT_THRESHOLDS = {
     "temperature": ("°C", 20, 28, 18, 30), "ph": ("pH", 6.5, 7.8, 6.0, 8.5),
     "turbidity": ("NTU", None, 8, None, 15), "dissolved_oxygen": ("mg/L", 5, None, 3, None),
@@ -207,3 +208,37 @@ def parameter_statuses(
         severity = _severity(getattr(reading, parameter), threshold)
         result[parameter] = severity.value if severity else "normal"
     return result
+
+
+def public_parameter_statuses(
+    db: Session,
+    reading: SensorReading | None,
+    *,
+    evaluated_at: datetime | None = None,
+) -> dict[str, str]:
+    """Return only the sensor statuses approved for public tank displays."""
+    statuses = parameter_statuses(db, reading, evaluated_at=evaluated_at)
+    return {parameter: statuses[parameter] for parameter in PUBLIC_PARAMETERS}
+
+
+def public_status_for_reading(
+    db: Session,
+    reading: SensorReading | None,
+    *,
+    evaluated_at: datetime | None = None,
+) -> str:
+    """Derive public tank status without deferred sensor fields."""
+    if reading is None:
+        return "offline"
+    if not is_reading_current(reading.timestamp, received_at=reading.received_at, evaluated_at=evaluated_at):
+        return "offline"
+
+    statuses = public_parameter_statuses(db, reading, evaluated_at=evaluated_at)
+    usable = [status for status in statuses.values() if status in {"normal", "warning", "critical"}]
+    if not usable:
+        return "offline"
+    if "critical" in usable:
+        return "critical"
+    if "warning" in usable:
+        return "warning"
+    return "normal"

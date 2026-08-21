@@ -1,7 +1,7 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-07-29
+Last reviewed: 2026-08-21
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
@@ -210,6 +210,195 @@ volume, but cannot edit it yet. Adding editable mL configuration requires a
 separately approved firmware endpoint and persistence review. Pump tests remain
 empty-syringe/water-only, default-off, admin-only, and never automatically
 retry a physical dispense.
+
+## 2026-08-17 — Focus the tank editor and add safe hero imagery
+
+**Decision:** Keep tank create/edit centered on operational identity and public
+QR-page content. Support an allowlisted HTTPS hero-image URL and an admin-only
+JPG/PNG/WebP upload for existing tanks, with a 5 MB limit and an application
+media path. Do not expose customer assignment in the demo-facing form while
+that workflow is being redesigned.
+
+**Reason:** The previous drawer mixed internal relationship management with
+public presentation fields and offered no image preview or upload path. A
+focused form is easier to use in the demo while preserving customer ownership
+in the backend contract.
+
+**Consequences:** Local disk uploads work for the local-first demo, but durable
+production uploads require a persistent volume or an object-storage adapter.
+New tanks use a URL at creation and can receive an uploaded hero image after
+the first save.
+
+## 2026-08-17 — Make species care requirements editable and understandable
+
+**Decision:** Keep species preference ranges in the existing fish profile
+contract and expose supported temperature, pH, and TDS ranges through the
+authenticated directory editor and details view. Add explicit care-group,
+diet, and tank-usage filters, safe assigned-tank summaries, and clearer
+Species Care status/freshness wording.
+
+**Reason:** FR-11 requires fish care information and ideal water conditions;
+FR-12 requires searchable and filterable species data; and FR-13 requires
+suitability guidance based on current tank readings. The backend already stores
+the preference ranges, so this closes the web usability gap without a schema
+change or reintroducing deferred ammonia/dissolved-oxygen UI.
+
+**Consequences:** Authenticated fish directory responses include only tank IDs
+and names for assignment summaries. Public fish responses remain privacy-safe
+and unchanged. Species Care remains derived, not an alert lifecycle.
+
+## 2026-08-18 — Align fish photos with tank media management
+
+**Decision:** Keep hosted species-photo URLs supported and add an admin-only
+JPG/PNG/WebP upload endpoint that stores local files under the application media
+path. The fish editor previews either source and allows uploaded photos to
+replace the current image.
+
+**Reason:** Fish species management needs the same practical image workflow as
+tank management, while local uploads keep the demo independent of third-party
+image hosting and preserve the existing `photo_url` contract.
+
+**Consequences:** Existing species do not require a schema migration. New local
+uploads use a separate 5 MB limit setting, `MAX_FISH_IMAGE_BYTES`, and durable
+production storage still requires a persistent volume or object-storage adapter.
+
+## 2026-08-21 — Use paired isolated local recovery bundles
+
+**Decision:** Package file-backed SQLite and `MEDIA_ROOT` together in a
+versioned, checksummed backup bundle. Restore only into a new isolated target;
+the restore process applies Alembic migrations, runs SQLite integrity checks,
+revokes every restored session, and increments every restored user's token
+version. Keep production PostgreSQL backup and point-in-time recovery
+provider-managed, with media retention planned alongside the database policy.
+Enable SQLite foreign keys in both application and test engines.
+
+**Reason:** Database-only recovery can leave image references broken, while
+live replacement risks destructive downtime and restored sessions can revive
+stale access. SQLite must enforce the same relationship behavior that the
+application expects from PostgreSQL. Provider-native PostgreSQL recovery is
+deployment infrastructure and should not be duplicated in application code.
+
+**Consequences:** Operators use `scripts.backup_local` and
+`scripts.restore_local`; there is no live-restore flag or HTTP recovery
+endpoint. Local bundles contain operational data and must remain outside Git
+and under restricted access. Production RPO, RTO, retention, encryption, and
+media-storage decisions remain deployment responsibilities.
+
+## 2026-08-21 — Make account administration a lifecycle workspace
+
+**Decision:** Keep the two-role model and derive account lifecycle metadata from
+existing users, sessions, and audit events. Give administrators a staff detail
+workspace with sanitized session inspection, confirmation-gated lifecycle
+actions, and filtered per-user audit activity. Keep staff on the personal
+Account Center and Security surfaces only; administrator session revocation may
+not target the administrator's own account.
+
+**Reason:** Account administration needs to explain access and security context,
+not only expose destructive buttons. Derived data avoids a migration while
+session and audit boundaries remain explicit and enforceable on the backend.
+
+**Consequences:** The administrator user response gains additive derived fields
+and three administrator-only session endpoints. The web client has richer
+account and staff workspaces, but custom permissions, departments, shifts,
+tank ownership, and customer accounts remain out of scope.
+
+## 2026-08-21 — Harden the Phase 01 domain foundation without narrowing device topology
+
+**Decision:** Keep multiple active devices per tank for the current release, but
+add administrator device lifecycle controls for inspection, activation,
+deactivation, and one-time key rotation. Record a nullable source device and a
+server-side receipt timestamp on sensor readings. Derive device connection state
+from activation and last-seen time. Keep dissolved oxygen and ammonia as nullable
+compatibility fields while hiding them from current bridge and user-facing
+workflows.
+
+**Reason:** The current bridge and actuator boundary already support fixed
+device-to-tank mappings, and a one-device constraint may change as the hardware
+topology evolves. Reading provenance and server receipt time are needed for
+traceability and freshness without forcing a separate per-parameter model.
+
+**Consequences:** Phase 01 now includes a backend and administrator
+  `/admin/devices` workspace, migration `0009_domain_foundation` for reading
+  provenance/timestamps, shared manual/device validation, and regression
+  coverage. Duplicate suppression remains deferred
+until the hardware supplies a stable sample identifier. Device deletion,
+primary-device designation, production bridge orchestration, and deferred sensor
+hardware remain out of scope.
+
+## 2026-08-21 — Lock Phase 02 monitoring and alert lifecycle behavior
+
+**Decision:** Keep strict threshold ordering and open comparisons, with exact
+warning and critical boundaries remaining Normal. Use server receipt time and a
+90-second window for freshness. Derive tank status from the worst present,
+enabled value, treat missing values as Unavailable, and use Offline when no
+usable fresh value exists. Keep threshold changes prospective.
+
+Use one active alert per tank and parameter. Allow Warning/Critical escalation
+and downgrade, automatically resolve only when the same parameter returns to a
+fresh normal value, and create a new incident when a later abnormal period
+returns. Record manual and automatic resolution sources separately; automatic
+resolutions create an administrator-only audit event. Keep notifications
+in-app only and defer external delivery.
+
+**Reason:** These rules make the existing threshold, freshness, and alert
+behavior deterministic without introducing per-tank configuration,
+notification infrastructure, or analytics redesign.
+
+**Consequences:** Alert responses gain additive `resolution_source` metadata and
+the database requires migration `0010_alert_resolution_source`. Historical
+threshold revisions remain intact. Legacy resolved alerts with unknown source
+remain nullable. Deferred sensor compatibility fields and external
+notifications remain outside the current release.
+
+## 2026-08-21 — Keep Phase 03 species care advisory and compatibility notes-only
+
+**Decision:** Keep species care profiles as administrator-managed reference
+data, allow staff to assign and remove species from tanks, and keep assignment
+history in the existing audit trail. Derive suitability from temperature, pH,
+and TDS using inclusive, one-sided-capable preferred ranges and the Phase 02
+receipt-time freshness rule. Use Attention before Unavailable before Suitable
+when aggregating configured checks. Exclude dissolved oxygen and ammonia from
+the approved suitability workflow.
+
+Keep compatibility as free-text `compatibility_notes`. Defer pairwise scoring,
+stocking recommendations, compatibility-based assignment blocking, and a
+dedicated assignment-history workspace.
+
+Approve a reduced public species projection containing common/scientific name,
+photo, care group, description, diet details, and care tips. Omit preferred
+ranges, compatibility notes, assignment metadata, and suitability metadata from
+that public projection.
+
+**Reason:** The current product already supports useful species profiles,
+assignment workflows, and advisory care guidance. The client needs clear,
+explainable information without unsupported automated compatibility or deferred
+sensor behavior. Public pages should expose approved care copy without leaking
+internal management or suitability context.
+
+**Consequences:** The Phase 03 documentation records the intended boundaries;
+the implementation decision below records the subsequent contract hardening.
+Assignment and species-profile audit events remain the current history surface.
+
+## 2026-08-21 — Implement Phase 03 public species and suitability boundaries
+
+**Decision:** Activate the reduced public species projection containing common
+and scientific name, photo, care group, description, diet details, and care
+tips. Redact public species IDs, preferred ranges, compatibility notes,
+assignment metadata, and suitability metadata. Restrict species suitability to
+temperature, pH, and TDS, using the Phase 02 receipt-time freshness rule. Keep
+the legacy `ideal_do_min` database column and internal sensor compatibility
+fields without exposing them in the current species-care or public contracts.
+
+**Reason:** The public tank page needs customer-safe care copy, while the
+species-care evaluator must not imply support for deferred dissolved oxygen or
+ammonia workflows. A dedicated projection makes the boundary explicit at the
+backend schema instead of relying on browser filtering.
+
+**Consequences:** The existing public tank route and assignment workflow remain
+unchanged, but their response projections are narrower. No migration is
+required. Compatibility notes remain authenticated staff reference data,
+pairwise compatibility remains deferred, and assignment history remains
+available through audit events only.
 
 ## Adding a decision
 

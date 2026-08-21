@@ -76,7 +76,6 @@ const operations = {
 let suitabilityResult: unknown;
 let suitabilityError: boolean;
 let operationsError: boolean;
-let customersRequest: Promise<unknown>;
 
 function renderPage(path = '/admin/tanks/1') {
   const client = new QueryClient({
@@ -100,11 +99,7 @@ describe('dedicated tank workspace', () => {
     suitabilityResult = suitability;
     suitabilityError = false;
     operationsError = false;
-    customersRequest = Promise.resolve([
-      { id: 4, name: 'JRed Client', is_active: true },
-    ]);
     vi.mocked(api).mockImplementation((path: string, init?: RequestInit) => {
-      if (path === '/customers') return customersRequest;
       if (path === '/fish') return Promise.resolve([]);
       if (path === '/tanks/1' && !init) {
         return Promise.resolve(tank);
@@ -139,6 +134,7 @@ describe('dedicated tank workspace', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Current 25.0 °C')).toBeInTheDocument();
+    expect(screen.queryByText('Dissolved oxygen')).not.toBeInTheDocument();
     expect(screen.getByText('Operational water status')).toBeInTheDocument();
   });
 
@@ -158,21 +154,14 @@ describe('dedicated tank workspace', () => {
     expect(await screen.findByText('Tank directory')).toBeInTheDocument();
   });
 
-  it('does not render the edit form until customer options are loaded', async () => {
-    let resolveCustomers!: (value: unknown) => void;
-    customersRequest = new Promise((resolve) => {
-      resolveCustomers = resolve;
-    });
+  it('opens a focused tank editor without exposing customer management', async () => {
     renderPage('/admin/tanks/1?edit=1');
 
-    expect(
-      await screen.findByText('Loading customer options…'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Edit Display tank' })).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Customer' })).not.toBeInTheDocument();
-
-    resolveCustomers([{ id: 4, name: 'JRed Client', is_active: true }]);
-    const customer = await screen.findByRole('combobox', { name: 'Customer' });
-    expect(customer).toHaveValue('4');
+    expect(await screen.findByText('Public profile')).toBeInTheDocument();
+    expect(screen.getByText('Hero image')).toBeInTheDocument();
+    expect(screen.getByText('Show public tank page')).toBeInTheDocument();
   });
 
   it('does not report all-clear alerts when operations fail', async () => {

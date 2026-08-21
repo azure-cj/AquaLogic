@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-21
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -32,6 +32,22 @@ choose only the context relevant to the task.
   demo-data boundary.
 - [`areas/FIRMWARE.md`](areas/FIRMWARE.md): ESP32 sketch, bundled libraries,
   hardware scope, and future integration boundary.
+
+## Current implementation deep specs
+
+- [`deep-spec/phase-06-access-and-platform/`](deep-spec/phase-06-access-and-platform/):
+  current behavior and hardening record for authentication, account security,
+  staff lifecycle, authorization, integrity, and local recovery.
+- [`deep-spec/phase-01-domain-foundation/`](deep-spec/phase-01-domain-foundation/):
+  current domain behavior and approved hardening scope for tanks, devices,
+  bridge ingestion, sensor readings, and fish species.
+- [`deep-spec/phase-02-monitoring-engine/`](deep-spec/phase-02-monitoring-engine/):
+  current threshold, reading-validation boundary, freshness, status, alert
+  lifecycle, and in-app notification behavior.
+- [`deep-spec/phase-03-species-care/`](deep-spec/phase-03-species-care/):
+  current species profiles, advisory water suitability, notes-only compatibility,
+  and tank species assignments, including the implemented public projection and
+  deferred compatibility scope.
 
 ## Existing plans and reports
 

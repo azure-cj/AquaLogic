@@ -69,9 +69,7 @@ class SensorReadingPublic(BaseModel):
     temperature: float
     ph: float
     turbidity: float
-    dissolved_oxygen: float | None = None
     tds: float
-    ammonia: float | None = None
 
     @field_validator("timestamp", mode="after")
     @classmethod
@@ -79,7 +77,7 @@ class SensorReadingPublic(BaseModel):
         value = make_timestamp_explicit_utc(value)
         return value.replace(second=0, microsecond=0)  # type: ignore[union-attr]
 
-    @field_validator("temperature", "ph", "turbidity", "dissolved_oxygen", mode="after")
+    @field_validator("temperature", "ph", "turbidity", mode="after")
     @classmethod
     def round_one_decimal(cls, value: float | None) -> float | None:
         return round(value, 1) if value is not None else None
@@ -88,12 +86,6 @@ class SensorReadingPublic(BaseModel):
     @classmethod
     def round_tds(cls, value: float) -> float:
         return round(value)
-
-    @field_validator("ammonia", mode="after")
-    @classmethod
-    def round_ammonia(cls, value: float | None) -> float | None:
-        return round(value, 2) if value is not None else None
-
 
 class DeviceReadingCreate(BaseModel):
     """The v1 bridge payload deliberately contains only installed sensors."""

@@ -20,7 +20,7 @@ SpeciesSuitabilityReason = Literal[
 
 
 class SpeciesSuitabilityCheck(BaseModel):
-    parameter: Literal["temperature", "ph", "dissolved_oxygen", "tds"]
+    parameter: Literal["temperature", "ph", "tds"]
     status: SpeciesSuitabilityStatus
     configured: bool
     reason: SpeciesSuitabilityReason

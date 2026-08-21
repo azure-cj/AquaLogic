@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.models import SensorReading, Tank
 from app.schemas.tank import TankPublicRead
-from app.services.decision_engine import parameter_statuses, status_for_reading
+from app.services.decision_engine import public_parameter_statuses, public_status_for_reading
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -39,7 +39,7 @@ def get_public_tank_view(
         hero_image_url=tank.hero_image_url,
         fish_species=tank.fish_species,
         latest_reading=latest_reading,
-        status=status_for_reading(db, latest_reading),
-        parameter_statuses=parameter_statuses(db, latest_reading),
+        status=public_status_for_reading(db, latest_reading),
+        parameter_statuses=public_parameter_statuses(db, latest_reading),
         public_care_notes=tank.public_care_notes,
     )

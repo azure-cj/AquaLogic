@@ -17,7 +17,6 @@ def _species(**overrides):
         "ideal_temp_max": 31.0,
         "ideal_ph_min": 6.0,
         "ideal_ph_max": 7.0,
-        "ideal_do_min": 5.0,
         "ideal_tds_min": 50.0,
         "ideal_tds_max": 150.0,
     }
@@ -52,7 +51,6 @@ def _create_fish(client, headers, **overrides):
         "ideal_temp_max": 31.0,
         "ideal_ph_min": 6.0,
         "ideal_ph_max": 7.0,
-        "ideal_do_min": 5.0,
         "ideal_tds_min": 50.0,
         "ideal_tds_max": 150.0,
     }
@@ -67,14 +65,19 @@ def test_service_boundaries_one_sided_and_aggregation_are_deterministic():
     result = evaluate_species(species, _reading(temperature=28.0, tds=50.0), evaluated_at=NOW)
 
     assert result["status"] == "suitable"
+    assert [item["parameter"] for item in result["checks"]] == ["temperature", "ph", "tds"]
     assert [item["reason"] for item in result["checks"]] == [
-        "within_preferred_range", "species_range_missing", "within_preferred_range", "within_preferred_range",
+        "within_preferred_range", "species_range_missing", "within_preferred_range",
     ]
     below = evaluate_species(species, _reading(temperature=27.99), evaluated_at=NOW)
     above = evaluate_species(species, _reading(tds=50.01), evaluated_at=NOW)
     assert below["status"] == above["status"] == "attention"
     assert below["checks"][0]["reason"] == "below_preferred_minimum"
-    assert above["checks"][3]["reason"] == "above_preferred_maximum"
+    assert above["checks"][2]["reason"] == "above_preferred_maximum"
+
+    legacy_do = evaluate_species(species, _reading(dissolved_oxygen=0.01), evaluated_at=NOW)
+    assert legacy_do["status"] == result["status"]
+    assert [item["parameter"] for item in legacy_do["checks"]] == ["temperature", "ph", "tds"]
 
 
 def test_service_handles_missing_stale_null_and_invalid_legacy_values():

@@ -26,7 +26,6 @@ def _create_fish(client, headers, common_name="Test Guppy"):
             "ideal_temp_max": 28.0,
             "ideal_ph_min": 7.0,
             "ideal_ph_max": 8.0,
-            "ideal_do_min": 5.0,
             "ideal_tds_min": 150.0,
             "ideal_tds_max": 300.0,
         },
@@ -65,6 +64,7 @@ def test_tank_crud_flow(client, auth_headers):
 def test_fish_crud_and_assignment_flow(client, auth_headers):
     tank = _create_tank(client, auth_headers)
     fish = _create_fish(client, auth_headers)
+    assert "ideal_do_min" not in fish
 
     assign_response = client.post(
         f"/tanks/{tank['id']}/fish",
@@ -78,6 +78,9 @@ def test_fish_crud_and_assignment_flow(client, auth_headers):
     assert fish_list.json()[0]["tank_count"] == 1
     assert fish_list.json()[0]["category"] == "Livebearers"
     assert fish_list.json()[0]["diet_type"] == "Omnivore"
+    assert fish_list.json()[0]["ideal_temp_min"] == 22.0
+    assert fish_list.json()[0]["ideal_temp_max"] == 28.0
+    assert fish_list.json()[0]["assigned_tanks"] == [{"id": tank["id"], "name": tank["name"]}]
 
     protected_delete = client.delete(f"/fish/{fish['id']}", headers=auth_headers)
     assert protected_delete.status_code == 409

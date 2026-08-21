@@ -2,7 +2,6 @@ import { api } from '@/shared/api/client';
 import { ThemeControl } from '@/shared/components/ThemeControl';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Activity,
   Camera,
   ChevronDown,
   CircleHelp,
@@ -21,7 +20,6 @@ import {
   Thermometer,
   Utensils,
   Waves,
-  Wind,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -40,23 +38,16 @@ type PublicReading = {
   temperature: number;
   ph: number;
   turbidity: number;
-  dissolved_oxygen: number | null;
   tds: number;
-  ammonia: number | null;
 };
 
 type PublicFish = {
-  id: number;
   common_name: string;
   scientific_name: string;
+  category: string;
   photo_url?: string | null;
   description?: string | null;
-  ideal_temp_min?: number | null;
-  ideal_temp_max?: number | null;
-  ideal_ph_min?: number | null;
-  ideal_ph_max?: number | null;
   diet?: string | null;
-  compatibility_notes?: string | null;
   care_tips?: string | null;
 };
 
@@ -88,13 +79,11 @@ type MetricDefinition = {
 const primaryMetrics: MetricDefinition[] = [
   { key: 'temperature', label: 'Water temperature', unit: '°C', digits: 1, icon: Thermometer },
   { key: 'ph', label: 'pH balance', unit: 'pH', digits: 1, icon: FlaskConical },
-  { key: 'dissolved_oxygen', label: 'Oxygen level', unit: 'mg/L', digits: 1, icon: Wind },
   { key: 'turbidity', label: 'Water clarity', unit: 'NTU', digits: 1, icon: Waves },
 ];
 
 const secondaryMetrics: MetricDefinition[] = [
   { key: 'tds', label: 'Dissolved solids', unit: 'ppm', digits: 0, icon: Gauge },
-  { key: 'ammonia', label: 'Ammonia', unit: 'ppm', digits: 2, icon: Activity },
 ];
 
 const overallCopy: Record<
@@ -258,8 +247,17 @@ export function PublicTank() {
     );
   }
 
-  const overall = overallCopy[tank.status];
   const parameterStatuses = tank.parameter_statuses ?? {};
+  const visibleMetricDefinitions = [...primaryMetrics, ...secondaryMetrics];
+  const visibleMetricStatuses = visibleMetricDefinitions.map((metric) => parameterStatuses[metric.key]);
+  const overallStatus: PublicStatus = tank.status === 'offline'
+    ? 'offline'
+    : visibleMetricStatuses.includes('critical')
+      ? 'critical'
+      : visibleMetricStatuses.includes('warning')
+        ? 'warning'
+        : 'normal';
+  const overall = overallCopy[overallStatus];
   const advancedNeedsAttention = secondaryMetrics.filter((metric) =>
     ['warning', 'critical'].includes(parameterStatuses[metric.key]),
   );
@@ -429,24 +427,13 @@ export function PublicTank() {
           {tank.fish_species.length ? (
             <div className="visitor-fish-list">
               {tank.fish_species.map((fish) => (
-                <details className="visitor-fish-card" key={fish.id}>
+                <details className="visitor-fish-card" key={`${fish.common_name}:${fish.scientific_name}`}>
                   <summary>
                     <FishPhoto fish={fish} />
                     <span className="visitor-fish-name">
                       <strong>{fish.common_name}</strong>
                       <i>{fish.scientific_name}</i>
-                      <span className="visitor-fish-ranges">
-                        {fish.ideal_temp_min != null && fish.ideal_temp_max != null && (
-                          <b>
-                            <Thermometer size={12} /> {fish.ideal_temp_min}–{fish.ideal_temp_max}°C
-                          </b>
-                        )}
-                        {fish.ideal_ph_min != null && fish.ideal_ph_max != null && (
-                          <b>
-                            <FlaskConical size={12} /> pH {fish.ideal_ph_min}–{fish.ideal_ph_max}
-                          </b>
-                        )}
-                      </span>
+                      <span className="visitor-fish-category">{fish.category}</span>
                     </span>
                     {waterType && <em>{waterType}</em>}
                     <ChevronDown className="visitor-fish-chevron" size={18} aria-hidden="true" />
@@ -463,12 +450,6 @@ export function PublicTank() {
                       <p>
                         <strong>Care</strong>
                         {fish.care_tips}
-                      </p>
-                    )}
-                    {fish.compatibility_notes && (
-                      <p>
-                        <strong>Compatibility</strong>
-                        {fish.compatibility_notes}
                       </p>
                     )}
                   </div>
