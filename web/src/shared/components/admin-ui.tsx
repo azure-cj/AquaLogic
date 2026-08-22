@@ -21,7 +21,12 @@ export const fleetStatusOrder: FleetStatus[] = [
 ];
 
 export function statusLabel(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).replaceAll('_', ' ');
+  const labels: Record<string, string> = {
+    suitable: 'Water suitable',
+    attention: 'Water needs attention',
+    unavailable: 'Water data unavailable',
+  };
+  return labels[value] ?? value.charAt(0).toUpperCase() + value.slice(1).replaceAll('_', ' ');
 }
 
 export function StatusBadge({ value }: { value: string; }) {
@@ -345,6 +350,7 @@ export function ConfirmDialog({
   onClose,
   busy = false,
   tone = 'danger',
+  children,
 }: {
   open: boolean;
   title: string;
@@ -354,6 +360,7 @@ export function ConfirmDialog({
   onClose: () => void;
   busy?: boolean;
   tone?: 'danger' | 'primary';
+  children?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   useModalFocus(open, onClose, dialogRef);
@@ -374,6 +381,7 @@ export function ConfirmDialog({
         </span>
         <h2 id="confirm-title">{title}</h2>
         <p id="confirm-message">{message}</p>
+        {children}
         <div className="dialog-actions">
           <button className="button button-secondary" type="button" onClick={onClose}>
             Cancel

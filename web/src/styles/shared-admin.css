@@ -407,6 +407,18 @@ a.data-row:hover {
   --badge-color: var(--offline);
 }
 
+.status-suitable {
+  --badge-color: var(--normal);
+}
+
+.status-attention {
+  --badge-color: var(--warning);
+}
+
+.status-unavailable {
+  --badge-color: var(--offline);
+}
+
 .alert-symbol {
   display: grid;
   width: 31px;

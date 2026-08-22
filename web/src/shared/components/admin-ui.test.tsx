@@ -23,6 +23,7 @@ const fleet: FleetTank[] = [
     reporting_age_seconds: null,
     active_warning_count: 0,
     active_critical_count: 0,
+    active_monitoring_incident_count: 0,
   },
   {
     id: 2,
@@ -36,6 +37,7 @@ const fleet: FleetTank[] = [
     reporting_age_seconds: null,
     active_warning_count: 0,
     active_critical_count: 1,
+    active_monitoring_incident_count: 0,
   },
   {
     id: 3,
@@ -49,6 +51,7 @@ const fleet: FleetTank[] = [
     reporting_age_seconds: null,
     active_warning_count: 0,
     active_critical_count: 0,
+    active_monitoring_incident_count: 0,
   },
 ];
 

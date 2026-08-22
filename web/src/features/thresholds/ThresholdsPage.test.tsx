@@ -39,5 +39,8 @@ describe('Thresholds', () => {
     expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(4);
     expect(screen.queryByRole('heading', { name: 'ammonia' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'dissolved oxygen' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Values must pass a configured boundary to trigger Warning or Critical/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Critical below').length).toBe(4);
+    expect(screen.getAllByText('Warning above').length).toBe(4);
   });
 });

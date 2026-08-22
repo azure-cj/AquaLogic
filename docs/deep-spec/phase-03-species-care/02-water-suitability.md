@@ -1,7 +1,7 @@
 # Water Suitability
 
-Last reviewed: 2026-08-21
-Status: Implemented advisory evaluation with deferred metrics excluded
+Last reviewed: 2026-08-22
+Status: Implemented advisory water-only evaluation with deferred metrics excluded
 
 ## 1. Purpose
 
@@ -18,9 +18,9 @@ result is advisory guidance and is separate from operational threshold alerts.
 
 The tank workspace requests derived suitability for assigned species and shows:
 
-- Suitable
-- Needs attention
-- Insufficient data / Unavailable
+- Water suitable
+- Water needs attention
+- Water data unavailable
 
 The service uses the latest reading selected by server `received_at` and the
 Phase 02 90-second freshness window. Suitability evaluation now enumerates only

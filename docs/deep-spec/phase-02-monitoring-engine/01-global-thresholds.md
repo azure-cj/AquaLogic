@@ -1,6 +1,6 @@
 # Global Thresholds
 
-**Current implementation and Phase 02 hardening record — reviewed 2026-08-21.**
+**Current implementation and Phase 02 hardening record — reviewed 2026-08-22.**
 
 ## 1. Purpose
 
@@ -33,6 +33,11 @@ Threshold changes create a historical revision and apply prospectively to the
 next valid reading. Existing readings, analytics history, and active alerts are
 not recalculated at save time.
 
+The global-threshold UI explains the strict/open semantics before save: a value
+must pass a configured boundary to trigger Warning or Critical, while exact
+warning and critical boundary values remain Normal. The fields are presented as
+Critical below, Warning below, Warning above, and Critical above.
+
 ## 3. Business rules
 
 - **BR-001:** Newly saved thresholds apply to the next valid supported reading.
@@ -50,4 +55,3 @@ not recalculated at save time.
 
 Per-tank threshold overrides are deferred. There is no notification provider or
 external delivery behavior in this phase.
-

@@ -21,6 +21,36 @@ export const relativeTime = (value?: string | null) => {
   return `${Math.round(hours / 24)}d ago`;
 };
 
+const reportingAgeDescription = (ageSeconds: number) => {
+  const seconds = Math.max(0, Math.round(ageSeconds));
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+};
+
+export const reportingAgeSeconds = (
+  receivedAt?: string | null,
+  now = Date.now(),
+) => {
+  if (!receivedAt) return null;
+  return Math.max(0, Math.round((now - new Date(receivedAt).getTime()) / 1000));
+};
+
+export const formatReportingAge = (
+  ageSeconds?: number | null,
+  { offline = false }: { offline?: boolean } = {},
+) => {
+  if (ageSeconds == null) return 'No report received';
+  const description = reportingAgeDescription(ageSeconds);
+  return offline
+    ? `No report for approximately ${description}`
+    : `Reported approximately ${description} ago`;
+};
+
 export const initials = (name: string) =>
   name
     .split(/\s+/)

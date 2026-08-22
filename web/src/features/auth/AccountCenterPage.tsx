@@ -34,13 +34,13 @@ function capabilities(role?: User['role']) {
   if (role === 'admin') {
     return [
       'Everything available to staff, including fleet, tanks, readings, alerts, analytics, fish, customers, and thresholds.',
-      'Resolve alerts and manage species assignments across tanks.',
+      'Mark alerts handled and manage species assignments across tanks.',
       'Manage staff accounts, roles, account status, sessions, and security audit activity.',
     ];
   }
   return [
     'Read fleet, tanks, readings, alerts, analytics, fish, customers, and thresholds.',
-    'Resolve alerts and manage species assignments across tanks.',
+    'Mark alerts handled and manage species assignments across tanks.',
     'Manage your own password and signed-in sessions; administrator security controls are not available.',
   ];
 }

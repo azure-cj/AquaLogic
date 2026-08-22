@@ -74,7 +74,7 @@ export function Thresholds() {
       <PageHeader
         eyebrow="System configuration"
         title="Global thresholds"
-        description="Changes apply to the next supported sensor reading across all tanks."
+        description="Changes apply to the next supported sensor reading across all tanks. Values must pass a configured boundary to trigger Warning or Critical; exact boundary values remain within the Normal range."
       />
       {notice && <Notice>{notice}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
@@ -124,7 +124,7 @@ export function Thresholds() {
                   <input name="unit" defaultValue={threshold.unit} aria-label="Unit" />
                 </label>
                 <label className="field critical-field">
-                  <span>Critical low</span>
+                  <span>Critical below</span>
                   <input
                     name="critical_min"
                     type="number"
@@ -133,7 +133,7 @@ export function Thresholds() {
                   />
                 </label>
                 <label className="field warning-field">
-                  <span>Warning low</span>
+                  <span>Warning below</span>
                   <input
                     name="warning_min"
                     type="number"
@@ -142,7 +142,7 @@ export function Thresholds() {
                   />
                 </label>
                 <label className="field warning-field">
-                  <span>Warning high</span>
+                  <span>Warning above</span>
                   <input
                     name="warning_max"
                     type="number"
@@ -151,7 +151,7 @@ export function Thresholds() {
                   />
                 </label>
                 <label className="field critical-field">
-                  <span>Critical high</span>
+                  <span>Critical above</span>
                   <input
                     name="critical_max"
                     type="number"
