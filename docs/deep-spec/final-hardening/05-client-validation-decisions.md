@@ -110,7 +110,7 @@ curated data before writing an evaluator.
 
 ## Decision C — unattended monitoring outages
 
-Decision status: **Owner approved — implement after P0/P1 hardening**
+Decision status: **Owner approved — implemented in packet 09**
 
 ### Ask exactly
 
@@ -121,15 +121,17 @@ Decision status: **Owner approved — implement after P0/P1 hardening**
 ### Current behavior
 
 The dashboard derives Offline after 90 seconds without a fresh accepted reading
-when status is requested. There is no background freshness worker or persistent
-offline incident. Analytics later reconstructs reporting gaps from receipt-time
-intervals. There is no push, email, SMS, or browser notification subsystem.
+when status is requested. Packet 09 now adds a lightweight background detector
+that opens one persistent tank-level incident after the configured outage grace
+period and recovers it only from an accepted reading. Analytics still
+reconstructs reporting gaps from receipt-time intervals. There is no push, email,
+SMS, or browser notification subsystem.
 
 ### Approved direction
 
-Implement a lightweight persistent in-app monitoring incident after a
-configurable 15-minute grace period, separate from the 90-second live-dashboard
-freshness threshold:
+The implemented direction is a lightweight persistent in-app monitoring incident
+after a configurable 15-minute grace period, separate from the 90-second
+live-dashboard freshness threshold:
 
 ```text
 no fresh reading for 90 seconds
@@ -177,31 +179,3 @@ Explicitly excluded:
 Packets 08 and 09 are implemented owner-approved work. Fish compatibility is
 not. Silence or lack of a later direction is not approval for compatibility
 functionality.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Audit product-decision
-compliance using:
-docs/deep-spec/final-hardening/05-client-validation-decisions.md
-
-This is a decision/guardrail goal, not authorization to implement all branches.
-Read AGENTS.md, docs/INDEX.md, docs/DECISIONS.md, docs/DEVELOPMENT_STATUS.md, the
-final-hardening hub, packets 08 and 09, and current Species Care/compatibility
-specs. Inspect current source, tests, documentation, and git status.
-
-Confirm and report that:
-- retired tank history is implemented owner-approved work governed by packet 08;
-- persistent tank-level monitoring incidents are owner-approved implemented
-  work governed by packet 09;
-- fish-to-fish compatibility remains undecided and notes-only;
-- none of these owner decisions is falsely attributed to a JRed representative;
-- adjacent external notifications, generalized asset management, and biological
-  compatibility-engine scope remain unapproved.
-
-If the user explicitly asks for a plan for packet 08 or 09, produce a bounded
-file-level plan for that packet only. Otherwise make documentation corrections
-only. Do not add pairwise scores, compatibility statuses, assignment blocking,
-structured compatibility data, or an AI care engine. Finish with a short
-decision-compliance report and any contradictions found.
-```

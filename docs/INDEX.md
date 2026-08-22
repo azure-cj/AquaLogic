@@ -8,6 +8,10 @@ choose only the context relevant to the task.
 
 ## Canonical current documentation
 
+These files are the stable source of truth for the current implementation. The
+area guides and deep specs provide navigation and feature detail; they should
+link back here rather than duplicate a competing project status.
+
 | Document | Use it for |
 | --- | --- |
 | [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) | Product purpose, users, scope, constraints, and terminology |
@@ -36,10 +40,10 @@ choose only the context relevant to the task.
 ## Current implementation deep specs
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
-  authoritative roadmap and detailed work-packet index for the final
-  cross-cutting safety, correctness, clarity, and client-validation pass after
-  Phases 01–06. Goals 1–5 are implemented; persistent monitoring incidents are
-  current behavior under packet 09.
+  implementation record and scope guardrail for the final cross-cutting safety,
+  correctness, clarity, and client-validation pass after Phases 01–06. Goals 1–5
+  are implemented; persistent monitoring incidents are current behavior under
+  packet 09.
 
 - [`deep-spec/phase-06-access-and-platform/`](deep-spec/phase-06-access-and-platform/):
   current behavior and hardening record for authentication, account security,
@@ -63,10 +67,13 @@ choose only the context relevant to the task.
   schedules, guarded pump maintenance, command lifecycle, and actuator audit
   history.
 
-## Existing plans and reports
+## Historical plans and reports
 
 These documents are preserved because they contain useful history or proposal
 material. They are not the primary source of current implementation behavior.
+
+They are intentionally kept separate from current status in this index. After
+the physical archive move, links below will point into `history/`.
 
 - [`WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
   is a historical implementation checkpoint for the web dashboard. It is
@@ -91,4 +98,24 @@ material. They are not the primary source of current implementation behavior.
 - Prefer links to source files and tests over copying large code blocks.
 - Clearly label information as `Current`, `Planned`, `Deferred`, or `Historical`.
 - When an old plan becomes misleading, update this index and either reconcile it
-  or move it to an archive in a separate cleanup task.
+  or move it to `history/`.
+
+## Source-of-truth map
+
+| Question | Authoritative location |
+| --- | --- |
+| What is implemented, deferred, or still pending? | [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md) |
+| What are the system boundaries and data flows? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| What entities, states, and invariants exist? | [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) |
+| What routes and response contracts exist? | [`API_CONTRACT.md`](API_CONTRACT.md) |
+| Why was a cross-cutting choice made? | [`DECISIONS.md`](DECISIONS.md) |
+| How is a local or operational task performed? | [`WORKFLOWS.md`](WORKFLOWS.md) and the hardware runbooks |
+| How does a feature behave in detail? | The relevant `deep-spec/` phase or hardening packet |
+| What was proposed or previously reported? | The historical documents listed above |
+
+## Evidence
+
+Browser screenshots and other validation artifacts are evidence, not current
+behavioral specifications. They are organized separately from the Markdown
+reference docs and should be interpreted with the validation notes in
+`DEVELOPMENT_STATUS.md`.

@@ -1,6 +1,6 @@
 # Monitoring and Species-Care UI Clarity
 
-Classification: **Polish/harden now**  
+Classification: **Implemented UI clarity record**
 Status: Implemented UI clarity hardening; algorithms unchanged  
 Last reviewed: 2026-08-22
 
@@ -222,36 +222,3 @@ replacement.
 - Species Care does not imply pairwise compatibility or stocking safety.
 - Administrators are told that exact threshold boundary values remain Normal.
 - No evaluation algorithm, alert lifecycle, or historical record changes.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Implement the monitoring
-and Species Care UI clarity goal in:
-docs/deep-spec/final-hardening/03-ui-terminology-and-clarity.md
-
-Read AGENTS.md, docs/INDEX.md, docs/DEVELOPMENT_STATUS.md, the final-hardening
-hub, Phase 02 monitoring/alert specs, Phase 03 Species Care specs, and the web
-area guide. Inspect the fleet, tank detail, alerts, Species Care, thresholds,
-shared formatting/API models, tests, backend response schemas, and git status.
-
-Before editing, produce a file-level plan with five checkpoints:
-1. stale/offline values presented as last-known context using server-receipt age;
-2. manual Resolve changed to Mark handled without changing backend lifecycle;
-3. operational status explained separately from Species Care;
-4. Species Care described as water-only, not fish compatibility;
-5. strict/open threshold boundaries explained without algorithm changes.
-
-Prefer a shared reporting-age formatter. Add the smallest authenticated backend
-response field only if accurate tank-detail age cannot be derived from existing
-server-receipt data. Do not use observation timestamps as freshness evidence.
-Keep the 90-second freshness rule, strict threshold comparisons, alert
-deduplication/resolution behavior, and advisory Species Care evaluator unchanged.
-Fish compatibility remains notes-only and undecided.
-
-Implement all five checkpoints consistently across visible copy, accessible
-labels, status chips/filters where applicable, notices, and tests. Run focused
-component/contract tests, then web typecheck, full tests, and build; run backend
-tests if the API changes. Update API/phase docs when behavior or terminology
-changes. Report changed files, validation, and acceptance-criteria coverage.
-```

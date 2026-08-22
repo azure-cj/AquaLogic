@@ -1,5 +1,8 @@
 # Deep-Spec Workflow
 
+Status: Current specification workflow
+Last reviewed: 2026-08-22
+
 Use this order when hardening AquaLogic.
 
 ## Phase 1 — Domain Foundation

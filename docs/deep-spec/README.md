@@ -41,12 +41,13 @@ Breeding-specific management is deferred for now.
 
 ## Final hardening package
 
-Phases 01–06 are implemented. The remaining external stress-review findings are
-organized in [`FINAL-HARDENING-REVIEW.md`](FINAL-HARDENING-REVIEW.md) and its
-linked `final-hardening/` work packets. This is a cross-cutting final hardening
-roadmap, not a seventh feature phase.
+Phases 01–06 and Goals 1–5 of the final hardening package are implemented. The
+remaining external stress-review findings are recorded in
+[`FINAL-HARDENING-REVIEW.md`](FINAL-HARDENING-REVIEW.md) and its linked
+`final-hardening/` implementation records. This is a cross-cutting hardening
+record and scope guardrail, not a seventh feature phase.
 
-Implementation agents should use the focused packet for source anchors, required
-behavior, invariants, tests, acceptance criteria, and non-goals. Items marked
-client decision required or deferred must not be added to an implementation
-plan without explicit approval.
+Maintainers should use the focused packet for source anchors, required behavior,
+invariants, tests, acceptance criteria, and non-goals. The fish-compatibility
+decision remains open and notes-only; deferred items must not be added to an
+implementation plan without explicit approval.

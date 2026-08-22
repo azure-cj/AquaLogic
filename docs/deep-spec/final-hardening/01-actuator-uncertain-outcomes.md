@@ -1,6 +1,6 @@
 # Actuator Commands With an Uncertain Physical Outcome
 
-Classification: **Fix now — P0, highest technical priority**  
+Classification: **Implemented P0 safety record**
 Status: Implemented in current backend/web behavior
 Last reviewed: 2026-08-22
 
@@ -288,49 +288,3 @@ safety stop behavior.
 - A generalized workflow engine, distributed job platform, or fleet failover.
 - Inferring physical truth from a missing network acknowledgement.
 - Retrofitting unknown status onto already finalized historical commands.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Implement Goal 1 only:
-actuator commands with an uncertain physical outcome.
-
-First read:
-- AGENTS.md
-- docs/INDEX.md
-- docs/DEVELOPMENT_STATUS.md
-- docs/deep-spec/FINAL-HARDENING-REVIEW.md
-- docs/deep-spec/final-hardening/01-actuator-uncertain-outcomes.md
-- the linked/current Phase 05 equipment-control specs
-- docs/areas/BACKEND.md and docs/areas/WEB.md
-
-Inspect current actuator models, migrations, schemas, routes, web models/UI,
-bridge code, focused backend/web/bridge tests, and git status. Treat source and
-tests as authoritative. Preserve unrelated user changes.
-
-Before editing, produce a file-level implementation plan that explicitly locks:
-- the outcome_unknown state and transition semantics;
-- a conservative confirmation deadline derived from the bridge's permitted
-  execution/report timing rather than queue expiry;
-- idempotent reconciliation entry points;
-- the same-device, same-pump dispense interlock;
-- administrator physical-verification clearance and audit metadata;
-- concurrency behavior for SQLite development and PostgreSQL target;
-- the late bridge report policy;
-- migration/backfill, API, history summary/filter, UI, test, hardware-validation,
-  and documentation impact.
-
-Then implement the approved plan end to end. Preserve unique command IDs,
-fixed device/tank binding, atomic claim-before-execution, queued-only expiry,
-finalized-state protection, authorization, payload validation, audit history,
-and the bridge's no-blind-retry behavior. Stop must remain available during a
-pump uncertainty lock. Do not add automatic dosing, command replay, generalized
-scheduling, or enterprise job infrastructure.
-
-Run focused tests while iterating, then the full backend suite, bridge suite,
-web typecheck/tests/build, Alembic upgrade validation, and the applicable safe
-hardware checklist. Update API, architecture, development status, and affected
-Phase 05 documentation so implemented semantics are not recorded only in this
-review packet. Finish with a concise changed-files summary, validation evidence,
-acceptance-criteria checklist, and any hardware validation still pending.
-```

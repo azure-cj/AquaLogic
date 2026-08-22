@@ -123,28 +123,3 @@ asset-management, external-notification, or enterprise-monitoring features.
 If an implementation plan includes a deferred item, it must cite a new explicit
 owner instruction or dated decision. “The review mentioned it” is not
 sufficient authority.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Perform a scope and
-preserved-design audit using:
-docs/deep-spec/final-hardening/06-deferred-scope-and-preserved-design.md
-
-Read AGENTS.md, docs/INDEX.md, docs/DECISIONS.md, the final-hardening hub, all
-work packets relevant to the change under review, current source/tests, and git
-status. This packet is a guardrail, not an implementation backlog.
-
-Compare the proposed or completed work against every preserved invariant and
-deferred item. Identify any change that weakens server-receipt freshness,
-alert-incident deduplication, alert/notification terminology, global-threshold
-separation, advisory Species Care, fixed device/tank ownership, atomic actuator
-claiming, or no-blind-retry behavior. Confirm that fish compatibility remains
-notes-only and that packets 08/09 do not expand into generalized asset
-management or external notification infrastructure.
-
-Do not implement deferred features. If auditing a diff, report concrete
-violations with file references and recommend the smallest correction. If no
-violations exist, say so explicitly and list the preserved invariants verified.
-Only edit documentation when needed to remove a contradiction.
-```

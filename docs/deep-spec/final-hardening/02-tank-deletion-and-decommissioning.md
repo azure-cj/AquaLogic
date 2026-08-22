@@ -1,6 +1,6 @@
 # Tank Deletion and Hardware Decommissioning
 
-Classification: **Fix/polish now**, with permanent deletion bounded by the approved packet 08 lifecycle
+Classification: **Implemented cleanup and decommissioning record**, with permanent deletion bounded by the approved packet 08 lifecycle
 Status: Implemented cleanup, warning, decommissioning documentation, and retirement-before-delete boundary  
 Last reviewed: 2026-08-22
 
@@ -157,36 +157,3 @@ This goal therefore:
 - Remote factory reset or generalized decommissioning protocol.
 - Deleting external image-host resources.
 - Preserving relational tank history after hard deletion.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Implement the bounded tank
-deletion cleanup and decommissioning goal described in:
-- docs/deep-spec/final-hardening/02-tank-deletion-and-decommissioning.md
-- docs/deep-spec/final-hardening/04-device-movement-and-provisioning.md
-
-Read AGENTS.md, docs/INDEX.md, docs/DEVELOPMENT_STATUS.md, relevant backend/web
-area guides, the tank/device/equipment deep specs, and the final-hardening hub.
-Inspect tank routes/models/schemas, media helpers, deletion and integrity tests,
-both web deletion entry points, device lifecycle behavior, canonical workflows,
-and git status before editing.
-
-Produce a file-level implementation plan first. It must cover database-first
-owned-media cleanup, post-commit filesystem failure behavior, path containment,
-external URL exclusion, accurate deletion warning copy, backend/web tests, the
-hardware decommissioning procedure, and device move/reprovisioning cross-links.
-The now-implemented retired-tank lifecycle makes permanent deletion apply only
-after retirement. Keep the API/UI wording and hardware procedure consistent
-with that boundary.
-
-The cleanup, warnings, tests, durable operational documentation, and packet-08
-retirement boundary are implemented. Do not add remote firmware reset, device
-reassignment, schedule cloning, or deletion of hosted
-external resources.
-
-Run focused backend media/integrity/permission tests and affected web component
-tests, then full validation for affected applications. Update canonical workflow
-and phase documentation. Report changed files, validation results, acceptance
-criteria, and any physical cleanup steps that remain inherently manual.
-```

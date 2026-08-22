@@ -1,5 +1,10 @@
 # AquaLogic Project Context
 
+Status: **Historical proposal context** — this paper records the original
+business framing and proposed scope; it is not the current implementation
+contract.
+Last reviewed: 2026-08-22
+
 ## What This Paper Is About
 AquaLogic is a project documentation paper for JRed Aquatics, a small aquaculture business in Novaliches, Caloocan City that also operates a food service side business. The system being proposed combines IoT-based water monitoring with a fish information management system to improve aquarium care, reduce manual work, and support better operational decisions.
 

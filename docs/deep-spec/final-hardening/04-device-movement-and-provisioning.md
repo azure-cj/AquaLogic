@@ -1,6 +1,6 @@
 # Device Movement and Reprovisioning
 
-Classification: **Document now; general reassignment deferred**  
+Classification: **Implemented operational workflow record; general reassignment deferred**
 Status: Implemented canonical operational workflow  
 Last reviewed: 2026-08-22
 
@@ -133,33 +133,3 @@ unless the existing UI actively suggests reassignment or automatic cleanup.
 - Moving historical readings between tanks.
 - Automatic cloning of schedules or actuator state.
 - Device deletion or credential recovery.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Complete the documentation
-and workflow goal in:
-docs/deep-spec/final-hardening/04-device-movement-and-provisioning.md
-
-Read AGENTS.md, docs/INDEX.md, the Phase 01 monitoring-device and bridge specs,
-the Phase 05 equipment specs, docs/WORKFLOWS.md, the hardware runbooks, packet
-02, packet 08, and current device/bridge source and tests. Inspect git status and
-preserve unrelated changes.
-
-Produce a documentation change plan first, identifying the canonical home for
-the operator runbook and every necessary cross-link. Verify each step against
-current provisioning, activation/deactivation, key rotation, fixed server-side
-tank mapping, sensor ingestion, actuator identity, and device-resident schedule
-behavior.
-
-Then update documentation only unless a current UI statement is actively false.
-Define the deactivate -> physically move -> newly provision -> configure new key
--> confirm fresh readings -> verify equipment identity -> recreate intended
-schedules workflow, including failure/rollback guidance. Never expose raw keys,
-move historical readings, edit a device's tank_id, add reassignment, infer
-physical location, or claim database actions erase firmware state.
-
-Validate relative links and terminology against source/tests. Report updated
-documents, verified assumptions, and any operator steps that require physical
-confirmation. Do not implement adjacent device-management features.
-```

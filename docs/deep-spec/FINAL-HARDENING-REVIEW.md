@@ -1,13 +1,13 @@
 # Final AquaLogic Hardening Review
 
-Status: Authoritative implementation roadmap; Goals 1–5 implemented  
+Status: Authoritative implementation record and scope guardrail; Goals 1–5 implemented
 Last reviewed: 2026-08-22
 
 ## Purpose
 
 This package converts the final external panel-style stress review into bounded,
-implementation-ready work for AquaLogic. It is the authoritative planning
-source for the last hardening pass after Phases 01–06.
+implementation records and scope guardrails for AquaLogic. It is the
+authoritative record for the last hardening pass after Phases 01–06.
 
 This is not a seventh feature phase. The governing principle is:
 
@@ -20,12 +20,12 @@ original review transcript.
 
 ## How to use this package
 
-1. Read this file and the work packet for the item being planned.
+1. Read this file and the work packet for the behavior being changed or audited.
 2. Reinspect every named source and test before editing; line numbers may move.
 3. Preserve the invariants and non-goals in the work packet.
-4. Implement only items marked **Fix now** or **Polish now**.
-5. Implement owner-approved packets 08 and 09 only in their scheduled order;
-   leave the undecided fish-compatibility branch unchanged.
+4. Treat implemented packets as the current behavior record, not as permission
+   to broaden scope.
+5. Leave the undecided fish-compatibility branch unchanged.
 6. Treat **Deferred** items as scope boundaries, not as a backlog.
 7. Update the relevant Phase 01–06 deep spec after implementation so current
    behavior is not documented only in this review package.
@@ -39,21 +39,23 @@ claim/no-retry fundamentals should be preserved.
 
 Goal 1's high-priority physical-safety gap, Goal 2's tank-deletion cleanup,
 warning, and device-movement documentation, Goal 3's monitoring and Species
-Care terminology hardening, and Goal 4's retained tank lifecycle are
-implemented. The remaining work is bounded to the separate client decisions
-and packet 09's persistent monitoring-incident model/worker are implemented.
+Care terminology hardening, Goal 4's retained tank lifecycle, and Goal 5's
+persistent monitoring-incident model/worker are implemented. Remaining work is
+bounded to physical/deployment validation for claims software cannot prove and
+the unresolved fish-compatibility decision; no implementation is authorized by
+that unresolved decision.
 
 ## Work packet index
 
 | Packet | Classification | Outcome |
 | --- | --- | --- |
-| [`01-actuator-uncertain-outcomes.md`](final-hardening/01-actuator-uncertain-outcomes.md) | **Fix now — P0** | Persist uncertain physical outcomes and prevent duplicative pump dispense |
+| [`01-actuator-uncertain-outcomes.md`](final-hardening/01-actuator-uncertain-outcomes.md) | **Implemented P0 safety record** | Persist uncertain physical outcomes and prevent duplicative pump dispense |
 | [`02-tank-deletion-and-decommissioning.md`](final-hardening/02-tank-deletion-and-decommissioning.md) | **Implemented** | Clean owned media, warn accurately, and document hardware cleanup |
 | [`03-ui-terminology-and-clarity.md`](final-hardening/03-ui-terminology-and-clarity.md) | **Implemented** | Make freshness, alert, Species Care, and threshold meaning unambiguous |
 | [`04-device-movement-and-provisioning.md`](final-hardening/04-device-movement-and-provisioning.md) | **Implemented** | Define a safe move-as-reprovisioning workflow |
-| [`05-client-validation-decisions.md`](final-hardening/05-client-validation-decisions.md) | **Client decision required** | Record the only three open product questions and their bounded branches |
-| [`06-deferred-scope-and-preserved-design.md`](final-hardening/06-deferred-scope-and-preserved-design.md) | **Preserve/defer** | Prevent feature creep and unnecessary redesign |
-| [`07-implementation-order-and-consistency-audit.md`](final-hardening/07-implementation-order-and-consistency-audit.md) | **Execution guide** | Sequence implementation, validation, and final reconciliation |
+| [`05-client-validation-decisions.md`](final-hardening/05-client-validation-decisions.md) | **Decision record — fish compatibility undecided** | Record settled owner decisions and the remaining bounded product question |
+| [`06-deferred-scope-and-preserved-design.md`](final-hardening/06-deferred-scope-and-preserved-design.md) | **Scope guardrail** | Prevent feature creep and unnecessary redesign |
+| [`07-implementation-order-and-consistency-audit.md`](final-hardening/07-implementation-order-and-consistency-audit.md) | **Completed audit record** | Preserve implementation order, validation expectations, and final reconciliation evidence |
 | [`08-retired-tank-lifecycle.md`](final-hardening/08-retired-tank-lifecycle.md) | **Implemented** | Retain retired-tank history outside active operations |
 | [`09-persistent-monitoring-incidents.md`](final-hardening/09-persistent-monitoring-incidents.md) | **Implemented** | Persist unattended tank-level reporting outages in-app |
 
@@ -120,35 +122,3 @@ The final hardening pass is complete only when:
   touched;
 - actual hardware validation is recorded for physical-command timing and safety
   claims that software tests cannot prove.
-
-## Luna Extra High coordination prompt
-
-Use this prompt to begin or resume the overall hardening program. Do not use it
-to authorize all implementation in one task.
-
-```text
-You are working in the current AquaLogic repository. The actual Git repository
-is the nested AquaLogic/ directory.
-
-Coordinate the final hardening program described by:
-- docs/deep-spec/FINAL-HARDENING-REVIEW.md
-- docs/deep-spec/final-hardening/07-implementation-order-and-consistency-audit.md
-
-Read the repository AGENTS.md, docs/INDEX.md, docs/DEVELOPMENT_STATUS.md, and the
-relevant area/phase documentation before proposing work. Inspect current source,
-tests, and git status; preserve unrelated changes.
-
-Do not implement the whole hardening program as one monolithic change. Determine
-the first incomplete goal in the approved order, read that goal's full work
-packet and embedded Luna Extra High prompt, and produce a file-level
-implementation plan for that goal only. Identify persistence/API/UI/test/docs
-impact, dependencies, risks, validation commands, and explicit non-goals.
-
-After the plan is approved or if the task explicitly authorizes implementation,
-complete only that bounded goal, validate it in proportion to risk, update all
-affected canonical and phase documentation, and report acceptance-criteria
-coverage. Do not implement fish-to-fish compatibility. Do not convert deferred
-items into backlog work. Never weaken fixed device/tank ownership, strict
-threshold semantics, freshness behavior, alert deduplication, or physical-command
-no-retry safety.
-```

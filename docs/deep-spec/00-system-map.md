@@ -1,5 +1,8 @@
 # AquaLogic System Map
 
+Status: Current implementation map
+Last reviewed: 2026-08-22
+
 ## Core System View
 
 AquaLogic is organized around the **tank** as the central operational object.

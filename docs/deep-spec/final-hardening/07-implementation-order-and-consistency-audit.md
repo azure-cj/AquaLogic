@@ -1,7 +1,7 @@
 # Final Hardening Implementation Order and Consistency Audit
 
-Classification: **Execution and verification guide**  
-Status: Approved order  
+Classification: **Completed implementation-order and consistency-audit record**
+Status: Goals 1–5 implemented; physical/deployment evidence remains operational
 Last reviewed: 2026-08-22
 
 ## Planning standard
@@ -194,41 +194,3 @@ For every inconsistency:
   evidence.
 - Hardware-dependent claims are supported by hardware test evidence.
 - UI, API, tests, and current documentation use compatible terminology.
-
-## Luna Extra High goal prompt
-
-```text
-You are working in the current AquaLogic repository. Execute the final hardening
-consistency and release-readiness audit described in:
-docs/deep-spec/final-hardening/07-implementation-order-and-consistency-audit.md
-
-Use this prompt only after the intended implementation goals are complete. Read
-AGENTS.md, docs/INDEX.md, docs/DEVELOPMENT_STATUS.md, docs/DECISIONS.md, the
-final-hardening hub and every numbered packet, relevant canonical/area/phase
-docs, current source/tests, and git status.
-
-First inventory which goals are implemented, partially implemented, planned, or
-still deferred. Do not assume a document marked approved means its code exists.
-Build an evidence-backed audit matrix covering implementation, migration/API,
-UI terminology, focused tests, full validation, documentation reconciliation,
-and hardware evidence for each applicable goal.
-
-Inspect and correct inconsistencies across current implementation, deep specs,
-canonical architecture/domain/API/workflow docs, SRS/older proposals, and UI.
-Source and tests are authoritative for current behavior. Label unimplemented
-material Planned, Decision required, Deferred, or Historical. Leave fish
-compatibility notes-only. Do not introduce new product behavior during this
-audit; any real implementation gap must be reported and returned to its bounded
-goal unless the user explicitly authorizes the fix.
-
-Run the complete validation matrix for affected applications: backend tests,
-Alembic upgrade on fresh and representative existing databases, bridge tests,
-web typecheck/tests/build, and recorded safe hardware validation where required.
-Perform responsive/accessibility refinement only when it does not change
-workflow scope. Update DEVELOPMENT_STATUS with exact evidence and affected
-canonical/phase documentation with final implemented semantics.
-
-Finish with: goal status table, inconsistencies corrected, validations and exact
-results, remaining hardware/manual checks, deferred items confirmed, and a clear
-release-readiness conclusion.
-```

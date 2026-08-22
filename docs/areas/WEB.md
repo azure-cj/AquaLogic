@@ -8,8 +8,8 @@ Last reviewed: 2026-08-22
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
 - [`../API_CONTRACT.md`](../API_CONTRACT.md)
 - [`../DEVELOPMENT_STATUS.md`](../DEVELOPMENT_STATUS.md)
-- [`../WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](../WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
-  (historical checkpoint only)
+- [`../deep-spec/phase-04-operations/`](../deep-spec/phase-04-operations/)
+- [`../deep-spec/phase-05-equipment-control/`](../deep-spec/phase-05-equipment-control/)
 
 ## Important locations
 

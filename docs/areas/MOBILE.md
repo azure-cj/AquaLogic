@@ -8,7 +8,7 @@ Last reviewed: 2026-07-27
 - [`../PROJECT_CONTEXT.md`](../PROJECT_CONTEXT.md)
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
 - [`../API_CONTRACT.md`](../API_CONTRACT.md)
-- [`../MOBILE_APP_DEVELOPMENT_PLAN.md`](../MOBILE_APP_DEVELOPMENT_PLAN.md)
+- [`../DEVELOPMENT_STATUS.md`](../DEVELOPMENT_STATUS.md)
 
 ## Current boundary
 
