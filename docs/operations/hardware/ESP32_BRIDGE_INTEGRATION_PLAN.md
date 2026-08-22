@@ -25,7 +25,7 @@ component allowed to call local actuator routes. A tunnel may expose the
 dashboard/API during a test, but the ESP32 is never tunneled or published.
 Physical movement is a deactivation plus new-provisioning workflow, not a
 change to this bridge's tank mapping. Use the [canonical move/reprovisioning
-runbook](WORKFLOWS.md#moving-equipment-to-another-tank) before changing the
+runbook](../../WORKFLOWS.md#moving-equipment-to-another-tank) before changing the
 local bridge configuration.
 
 ## Firmware endpoint map used by v1
@@ -133,7 +133,7 @@ queue requests require a fresh bridge heartbeat.
 
 ## Bridge implementation
 
-The implementation is [`../bridge/esp32_bridge.py`](../bridge/esp32_bridge.py).
+The implementation is [`../../../bridge/esp32_bridge.py`](../../../bridge/esp32_bridge.py).
 Each cycle:
 
 1. polls `/data`, validates the four installed readings, and posts them through
@@ -209,7 +209,7 @@ verify and reconnect the equipment, provision a new destination registration,
 configure the new one-time key, confirm destination-only fresh readings and
 equipment identity, then recreate intended device-resident schedules. Do not
 edit `tank_id`, migrate readings, or infer a location from the bridge. Use the
-[canonical workflow](WORKFLOWS.md#moving-equipment-to-another-tank) for the
+[canonical workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank) for the
 full rollback and physical-confirmation rules.
 
 ## Explicit exclusions and success criteria

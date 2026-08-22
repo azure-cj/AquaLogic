@@ -41,7 +41,7 @@ Last reviewed: 2026-08-22
 - Temporary ESP32 bridge testing is implemented: registered device keys map to
   fixed tanks, ingest only four supported `/data` measurements, audit requests,
   and represent dissolved oxygen/ammonia as unavailable. See
-  `ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
+  `operations/hardware/ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 - v1 admin-only actuator bridge controls are implemented for UV, normal LED, and
   fish feeder, plus a guarded Pump A/B manual-test phase. Pump commands use
   expiring server records, fixed device/tank mapping, firmware-configured mL
@@ -110,7 +110,7 @@ Last reviewed: 2026-08-22
   flat links to clustered menus as the viewport or navigation count requires.
 - Local typecheck, tests, and production build are recorded in the dated
   validation checkpoints below; the older
-  `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md` is retained as historical
+  `docs/history/reports/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md` is retained as historical
   context only.
 - Fish species use a grouped directory by default with a remembered compact-list
   alternative, diet badges, hosted or uploaded JPG/PNG/WebP thumbnails,
@@ -307,7 +307,7 @@ Last reviewed: 2026-08-22
 - Physical hardware validation remains pending. The safe one-device/one-tank
   UV/LED/feeder, water-only or empty-syringe Pump A/B, actuator-uncertainty,
   and tank-decommissioning checklist is recorded in
-  `ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
+  `operations/hardware/ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 
 ## Validation checkpoint — 2026-08-21
 

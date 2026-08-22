@@ -26,7 +26,7 @@ The bridge device route does not trust a device to choose an arbitrary tank ID.
 A registered device identity is mapped to exactly one tank server-side. The
 bridge uses the registered device key, never a staff password or browser token.
 The browser and backend do not call the local ESP32 directly. A physical move
-uses the [canonical deactivation and move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank);
+uses the [canonical deactivation and move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank);
 it does not edit the mapping or move historical readings.
 
 ## Reading contract
@@ -163,7 +163,7 @@ manual-override, emergency-stop, and physical fail-safe behavior are reviewed.
 8. Review physical safety controls before any production actuator deployment.
 
 For any later physical move, do not reuse this registration as a new tank
-identity. Follow the [canonical move/reprovisioning runbook](WORKFLOWS.md#moving-equipment-to-another-tank)
+identity. Follow the [canonical move/reprovisioning runbook](../../WORKFLOWS.md#moving-equipment-to-another-tank)
 and perform the physical sensor, actuator, pump, and schedule checks there.
 
 Any change to this contract should be reviewed by both hardware and software

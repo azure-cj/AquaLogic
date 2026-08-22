@@ -98,7 +98,7 @@ branch instead and coordinate before resolving conflicts.
 
 Keep hardware and software changes independently reviewable:
 
-1. Agree on [`HARDWARE_INTEGRATION_CONTRACT.md`](HARDWARE_INTEGRATION_CONTRACT.md)
+1. Agree on [`HARDWARE_INTEGRATION_CONTRACT.md`](operations/hardware/HARDWARE_INTEGRATION_CONTRACT.md)
    before implementing a live connection.
 2. The software side adds a simulator, validation, and backend contract tests.
 3. The hardware side adds firmware sensor reads and sends the agreed payload.

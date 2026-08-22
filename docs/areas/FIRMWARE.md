@@ -13,7 +13,7 @@ LiquidCrystal I2C. The current web, backend, and Flutter workflows use mock or
 demo readings instead of requiring this firmware.
 
 The shared device/software contract is
-[`../HARDWARE_INTEGRATION_CONTRACT.md`](../HARDWARE_INTEGRATION_CONTRACT.md).
+[`../operations/hardware/HARDWARE_INTEGRATION_CONTRACT.md`](../operations/hardware/HARDWARE_INTEGRATION_CONTRACT.md).
 The temporary bridge maps the locally registered UV, normal LED, feeder, and
 guarded Pump A/B manual-test routes documented there. Pump schedules and pH
 auto-dose are not connected. Do not change firmware, pins, wiring, or Wi-Fi

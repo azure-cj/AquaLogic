@@ -18,13 +18,15 @@ link back here rather than duplicate a competing project status.
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Implemented components, data flow, boundaries, and extension points |
 | [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) | Domain entities, relationships, statuses, and invariants |
 | [`API_CONTRACT.md`](API_CONTRACT.md) | Current backend routes, authentication, public access, and client expectations |
-| [`HARDWARE_INTEGRATION_CONTRACT.md`](HARDWARE_INTEGRATION_CONTRACT.md) | Draft device payload, units, failure behavior, and actuator boundary |
-| [`ESP32_BRIDGE_INTEGRATION_PLAN.md`](ESP32_BRIDGE_INTEGRATION_PLAN.md) | Implemented no-firmware-change bridge test for the received ESP32 code |
-| [`ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`](ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md) | Temporary owner/tester procedure for the implemented bridge test |
 | [`GIT_WORKFLOW.md`](GIT_WORKFLOW.md) | Branching, commits, pull requests, and hardware/software collaboration |
 | [`DEVELOPMENT_STATUS.md`](DEVELOPMENT_STATUS.md) | What is complete, active, planned, deferred, and known to be limited |
 | [`DECISIONS.md`](DECISIONS.md) | Important decisions and their reasons |
 | [`WORKFLOWS.md`](WORKFLOWS.md) | Local setup, validation, database, browser, and deployment workflows |
+
+## Operational documentation
+
+- [`operations/hardware/`](operations/hardware/): the hardware contract, bridge
+  integration notes, and safe local hardware-test runbook.
 
 ## Area guides
 
@@ -72,21 +74,20 @@ link back here rather than duplicate a competing project status.
 These documents are preserved because they contain useful history or proposal
 material. They are not the primary source of current implementation behavior.
 
-They are intentionally kept separate from current status in this index. After
-the physical archive move, links below will point into `history/`.
+They are intentionally kept separate from current status in this index.
 
-- [`WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
+- [`history/reports/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](history/reports/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
   is a historical implementation checkpoint for the web dashboard. It is
   retained for history; current route, validation, and release status come from
   `DEVELOPMENT_STATUS.md`, canonical docs, and source/tests.
-- [`AQUALOGIC_CONTEXT.md`](AQUALOGIC_CONTEXT.md) is the original business and
+- [`history/proposals/AQUALOGIC_CONTEXT.md`](history/proposals/AQUALOGIC_CONTEXT.md) is the original business and
   academic proposal context.
-- [`AquaLogic_Full_Software_Development_Plan.md`](AquaLogic_Full_Software_Development_Plan.md)
+- [`history/proposals/AquaLogic_Full_Software_Development_Plan.md`](history/proposals/AquaLogic_Full_Software_Development_Plan.md)
   is an earlier full-stack plan with some superseded directory and stack
   assumptions.
-- [`AquaLogic_Implementation_Plan.md`](AquaLogic_Implementation_Plan.md) is an
+- [`history/proposals/AquaLogic_Implementation_Plan.md`](history/proposals/AquaLogic_Implementation_Plan.md) is an
   earlier execution plan; use it for intent and milestones, not current status.
-- [`MOBILE_APP_DEVELOPMENT_PLAN.md`](MOBILE_APP_DEVELOPMENT_PLAN.md) contains
+- [`history/proposals/MOBILE_APP_DEVELOPMENT_PLAN.md`](history/proposals/MOBILE_APP_DEVELOPMENT_PLAN.md) contains
   early mobile and hardware ideas. The current app is Flutter, and the source
   code is authoritative.
 
@@ -116,6 +117,5 @@ the physical archive move, links below will point into `history/`.
 ## Evidence
 
 Browser screenshots and other validation artifacts are evidence, not current
-behavioral specifications. They are organized separately from the Markdown
-reference docs and should be interpreted with the validation notes in
-`DEVELOPMENT_STATUS.md`.
+behavioral specifications. See [`evidence/`](evidence/) and interpret artifacts
+with the validation notes in `DEVELOPMENT_STATUS.md`.

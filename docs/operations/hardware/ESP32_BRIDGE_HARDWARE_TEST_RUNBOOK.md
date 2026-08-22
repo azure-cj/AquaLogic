@@ -30,7 +30,7 @@ Last reviewed: 2026-08-22
 
 This runbook covers a one-device/one-tank test. A physical move is not a
 reconfiguration of the existing tank mapping: use the [canonical
-move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank)
+move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank)
 for deactivation, physical relocation, new provisioning, fresh-reading and
 equipment-identity checks, schedule recreation, and rollback guidance.
 

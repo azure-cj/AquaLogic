@@ -280,13 +280,13 @@ Start with the workspace instructions and documentation index:
 - `docs/API_CONTRACT.md`
 - `docs/WORKFLOWS.md`
 
-Historical and planning documents are also preserved in `docs/`:
+Historical and planning documents are also preserved in `docs/history/`:
 
-- `docs/AQUALOGIC_CONTEXT.md`
-- `docs/AquaLogic_Full_Software_Development_Plan.md`
-- `docs/AquaLogic_Implementation_Plan.md`
-- `docs/MOBILE_APP_DEVELOPMENT_PLAN.md`
-- `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`
+- `docs/history/proposals/AQUALOGIC_CONTEXT.md`
+- `docs/history/proposals/AquaLogic_Full_Software_Development_Plan.md`
+- `docs/history/proposals/AquaLogic_Implementation_Plan.md`
+- `docs/history/proposals/MOBILE_APP_DEVELOPMENT_PLAN.md`
+- `docs/history/reports/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`
 
 ## Scope Notes
 

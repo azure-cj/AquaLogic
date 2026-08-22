@@ -72,7 +72,7 @@ creating the account link. Setup links are single-use and expire after 30
 minutes, so generate a fresh link if an older one was opened or reset.
 
 For the temporary ESP32 sensor/actuator bridge, follow
-[`ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`](ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md).
+[`ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`](operations/hardware/ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md).
 Use the nested repository's owner/tester launcher files or run:
 
 ```powershell
@@ -211,7 +211,7 @@ flutter test
 
 For changes that affect public/admin behavior, also run the browser smoke or
 visual regression workflow and preserve only intentional evidence under
-`docs/browser-artifacts/`.
+`docs/evidence/browser-artifacts/`.
 
 ## Local backup and isolated restore
 
