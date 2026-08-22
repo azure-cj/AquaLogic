@@ -169,12 +169,17 @@ def build_fleet_analytics(
     end: datetime,
     bucket_seconds: int,
     selected_tank_ids: list[int],
+    include_retired: bool = False,
 ) -> dict[str, Any]:
     start, end = _aware(start), _aware(end)
     duration = end - start
     previous_start = start - duration
     bucket_count = ceil(duration.total_seconds() / bucket_seconds)
-    tanks = list(db.scalars(select(Tank).order_by(Tank.name)).all())
+    tank_stmt = select(Tank).order_by(Tank.name)
+    if not include_retired:
+        tank_stmt = tank_stmt.where(Tank.retired_at.is_(None))
+    tanks = list(db.scalars(tank_stmt).all())
+    scope_tank_ids = {tank.id for tank in tanks}
     tank_names = {tank.id: tank.name for tank in tanks}
     selected = set(selected_tank_ids)
 
@@ -202,6 +207,7 @@ def build_fleet_analytics(
         .where(
             SensorReading.received_at >= previous_start,
             SensorReading.received_at < end,
+            SensorReading.tank_id.in_(scope_tank_ids),
         )
         .order_by(SensorReading.received_at)
         .execution_options(yield_per=5_000)
@@ -295,7 +301,11 @@ def build_fleet_analytics(
         select(*alert_columns)
         .join(Tank, Tank.id == Alert.tank_id)
         .outerjoin(SensorReading, SensorReading.id == Alert.reading_id)
-        .where(Alert.created_at >= start, Alert.created_at < end)
+        .where(
+            Alert.created_at >= start,
+            Alert.created_at < end,
+            Tank.retired_at.is_(None) if not include_retired else True,
+        )
         .order_by(Alert.created_at)
     ).all()
     for row in alert_rows:
@@ -400,7 +410,7 @@ def build_fleet_analytics(
             "bucket_seconds": bucket_seconds,
             "timezone": "Asia/Manila",
         },
-        "tanks": [{"id": tank.id, "name": tank.name} for tank in tanks],
+        "tanks": [{"id": tank.id, "name": tank.name, "lifecycle": tank.lifecycle} for tank in tanks],
         "fleet_series": _point_series(
             fleet_current, start, bucket_seconds, bucket_count
         ),

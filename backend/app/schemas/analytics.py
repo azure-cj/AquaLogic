@@ -70,6 +70,7 @@ class ThresholdSegment(BaseModel):
 class TankOption(BaseModel):
     id: int
     name: str
+    lifecycle: Literal["active", "retired"] = "active"
 
 
 class TankUptime(BaseModel):

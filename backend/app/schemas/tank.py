@@ -80,6 +80,11 @@ class TankRead(TankBase):
     id: int
     public_id: str
     created_at: datetime
+    lifecycle: Literal["active", "retired"]
+    retired_at: datetime | None = None
+    retired_by_user_id: int | None = None
+    retired_by_user_name: str | None = None
+    retirement_note: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +92,10 @@ class TankRead(TankBase):
 class TankDetail(TankRead):
     fish_species: list[FishSpeciesRead] = Field(default_factory=list)
     customer: CustomerSummary | None = None
+
+
+class TankRetireRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
 
 
 class TankPublicRead(BaseModel):

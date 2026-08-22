@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -11,12 +11,19 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.database import get_db
 from app.dependencies import require_admin, require_staff
-from app.models import Alert, Customer, FishSpecies, SensorReading, Tank, TankFish, User
+from app.models import Alert, Customer, FishSpecies, RegisteredDevice, SensorReading, Tank, TankFish, User
 from app.schemas.fish import FishAssignmentRequest
 from app.schemas.operations import TankOperationsResponse
-from app.schemas.tank import HeroImageUploadRead, TankCreate, TankDetail, TankRead, TankUpdate
+from app.schemas.tank import HeroImageUploadRead, TankCreate, TankDetail, TankRetireRequest, TankRead, TankUpdate
 from app.services.auth_security import audit_event
 from app.services.decision_engine import parameter_statuses, status_for_reading
+from app.services.tank_lifecycle import (
+    RETIREMENT_BLOCKED_BY_ACTUATOR_DETAIL,
+    lock_tank_for_mutation,
+    require_active_tank,
+    uncleared_actuator_work,
+)
+from app.services.monitoring_incidents import resolve_active_monitoring_incident
 
 
 router = APIRouter(prefix="/tanks", tags=["tanks"])
@@ -50,7 +57,11 @@ def _remove_local_hero_image(image_url: str | None) -> None:
 def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
     tank = db.scalar(
         select(Tank)
-        .options(selectinload(Tank.fish_species), selectinload(Tank.customer))
+        .options(
+            selectinload(Tank.fish_species),
+            selectinload(Tank.customer),
+            selectinload(Tank.retired_by_user),
+        )
         .where(Tank.id == tank_id)
     )
     if tank is None:
@@ -59,8 +70,17 @@ def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
 
 
 @router.get("", response_model=list[TankRead])
-def list_tanks(db: Session = Depends(get_db), _: User = Depends(require_staff)) -> list[Tank]:
-    return list(db.scalars(select(Tank).order_by(Tank.id)).all())
+def list_tanks(
+    lifecycle: str = Query(default="active", pattern="^(active|retired|all)$"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+) -> list[Tank]:
+    stmt = select(Tank).options(selectinload(Tank.retired_by_user)).order_by(Tank.id)
+    if lifecycle == "active":
+        stmt = stmt.where(Tank.retired_at.is_(None))
+    elif lifecycle == "retired":
+        stmt = stmt.where(Tank.retired_at.is_not(None))
+    return list(db.scalars(stmt).all())
 
 
 @router.get("/{tank_id}", response_model=TankDetail)
@@ -70,14 +90,14 @@ def get_tank(tank_id: int, db: Session = Depends(get_db), _: User = Depends(requ
 
 @router.get("/{tank_id}/operations", response_model=TankOperationsResponse)
 def get_tank_operations(tank_id: int, db: Session = Depends(get_db), _: User = Depends(require_staff)) -> dict:
-    _get_tank_or_404(db, tank_id)
+    tank = _get_tank_or_404(db, tank_id)
     evaluated_at = datetime.now(timezone.utc)
     reading = db.scalar(select(SensorReading).where(SensorReading.tank_id == tank_id).order_by(SensorReading.received_at.desc(), SensorReading.id.desc()).limit(1))
     active_alerts = list(db.scalars(select(Alert).where(Alert.tank_id == tank_id, Alert.is_resolved.is_(False)).order_by(Alert.created_at.desc())).all())
     return {
         "tank_id": tank_id,
         "evaluated_at": evaluated_at,
-        "status": status_for_reading(db, reading, evaluated_at=evaluated_at),
+        "status": "retired" if tank.retired_at is not None else status_for_reading(db, reading, evaluated_at=evaluated_at),
         "latest_reading": reading,
         "parameter_statuses": parameter_statuses(db, reading, evaluated_at=evaluated_at),
         "active_alerts": active_alerts,
@@ -104,6 +124,7 @@ def create_tank(payload: TankCreate, request: Request, db: Session = Depends(get
 @router.put("/{tank_id}", response_model=TankRead)
 def update_tank(tank_id: int, payload: TankUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> Tank:
     tank = _get_tank_or_404(db, tank_id)
+    require_active_tank(tank)
     updates = payload.model_dump(exclude_unset=True)
     if updates.get("customer_id") is not None and not db.get(Customer, updates["customer_id"]):
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -132,6 +153,7 @@ def upload_hero_image(
     current_user: User = Depends(require_admin),
 ) -> dict[str, str | int]:
     tank = _get_tank_or_404(db, tank_id)
+    require_active_tank(tank)
     image_type = HERO_IMAGE_TYPES.get(image.content_type or "")
     if image_type is None:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Use a JPG, PNG, or WebP image")
@@ -182,18 +204,86 @@ def upload_hero_image(
     }
 
 
+@router.post("/{tank_id}/retire", response_model=TankDetail)
+def retire_tank(
+    tank_id: int,
+    payload: TankRetireRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> Tank:
+    tank = lock_tank_for_mutation(db, tank_id)
+    if tank.retired_at is not None:
+        db.commit()
+        return _get_tank_or_404(db, tank_id)
+
+    blocking_command = uncleared_actuator_work(db, tank_id)
+    if blocking_command is not None:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=RETIREMENT_BLOCKED_BY_ACTUATOR_DETAIL,
+        )
+
+    retired_at = datetime.now(timezone.utc)
+    active_devices = list(
+        db.scalars(
+            select(RegisteredDevice).where(RegisteredDevice.tank_id == tank_id)
+        ).all()
+    )
+    was_monitoring_expected = tank.monitoring_expected_at is not None
+    tank.retired_at = retired_at
+    tank.retired_by_user_id = current_user.id
+    tank.retirement_note = payload.note
+    tank.is_public = False
+    tank.monitoring_expected_at = None
+    resolve_active_monitoring_incident(
+        db,
+        tank_id,
+        reason="tank_retired",
+        resolved_at=retired_at,
+    )
+    deactivated_device_count = sum(device.is_active for device in active_devices)
+    for device in active_devices:
+        device.is_active = False
+    audit_event(
+        db,
+        request,
+        "tank.retire",
+        "success",
+        actor_user_id=current_user.id,
+        target_type="tank",
+        target_id=tank.id,
+        details={
+            "retired_at": retired_at.isoformat(),
+            "deactivated_device_count": deactivated_device_count,
+            "monitoring_expectation_cleared": was_monitoring_expected,
+            "incident_resolution": "tank_retired",
+        },
+    )
+    db.commit()
+    return _get_tank_or_404(db, tank_id)
+
+
 @router.delete("/{tank_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tank(tank_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> Response:
     tank = _get_tank_or_404(db, tank_id)
+    if tank.retired_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tank must be retired before permanent deletion",
+        )
+    hero_image_url = tank.hero_image_url
     audit_event(db, request, "tank.delete", "success", actor_user_id=current_user.id, target_type="tank", target_id=tank.id)
     db.delete(tank)
     db.commit()
+    _remove_local_hero_image(hero_image_url)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{tank_id}/fish", status_code=status.HTTP_201_CREATED)
 def assign_fish_to_tank(tank_id: int, payload: FishAssignmentRequest, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_staff)) -> dict[str, str]:
-    _get_tank_or_404(db, tank_id)
+    require_active_tank(_get_tank_or_404(db, tank_id))
     fish = db.scalar(select(FishSpecies).where(FishSpecies.id == payload.fish_species_id))
     if fish is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fish species not found")
@@ -207,7 +297,7 @@ def assign_fish_to_tank(tank_id: int, payload: FishAssignmentRequest, request: R
 
 @router.delete("/{tank_id}/fish/{fish_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_fish_from_tank(tank_id: int, fish_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_staff)) -> Response:
-    _get_tank_or_404(db, tank_id)
+    require_active_tank(_get_tank_or_404(db, tank_id))
     link = db.scalar(select(TankFish).where(TankFish.tank_id == tank_id, TankFish.fish_species_id == fish_id))
     if link is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fish assignment not found")

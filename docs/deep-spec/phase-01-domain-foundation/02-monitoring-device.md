@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented Phase 01 device lifecycle** — reviewed 2026-08-21.
+**Implemented Phase 01 device lifecycle** — reviewed 2026-08-22.
 
 ## 1. Purpose
 Define the ESP32-based monitoring hardware as a registered AquaLogic device.
@@ -58,7 +58,8 @@ Registered → Online
 - BR-003: A reading must be associated with an authorized device/tank mapping.
 - BR-004: A stale or offline device must not appear healthy merely because old readings exist.
 - BR-005: Deactivating a device immediately rejects bridge ingestion and device
-  actuator operations while preserving its historical records.
+  actuator operations while preserving its historical records; it does not
+  clear device-resident schedules or prove a physical shutdown.
 - BR-006: Rotating a device key invalidates the previous key and reveals the new
   key only in the rotation response.
 - BR-007: Device list/detail responses never expose raw keys, key hashes, or
@@ -74,12 +75,22 @@ Add an administrator-only device management surface in both backend and web:
 - rotate a device key and display the replacement once
 
 Device deletion is not part of the first lifecycle pass. Deactivation or key
-rotation is the recoverable replacement mechanism. Historical readings will
-retain their nullable source-device reference if a device is later retired.
+rotation is the recoverable replacement mechanism. Retiring a tank deactivates
+all of its registered devices transactionally; retired device records and
+historical readings retain their fixed tank/source-device references, while
+device-key ingestion and reactivation are rejected.
 
 The web surface is an administrator-only `/admin/devices` workspace under
 Configure. It supports status filtering, activation changes, and confirmation-
 gated one-time key rotation without persisting device keys in browser storage.
+
+For tank deletion and physical movement, operators must follow the canonical
+[decommissioning and move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank).
+A move keeps the old registration inactive and provisions a new destination
+identity; the device row's fixed `tank_id` and historical readings are never
+rewritten. Activation/deactivation changes whether the same fixed identity may
+authenticate. Key rotation only replaces credentials for that same identity; it
+is not a reassignment or a move.
 
 ## 8. Deferred Scope
 

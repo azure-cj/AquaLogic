@@ -10,7 +10,7 @@ from .sensor import SensorReadingRead, make_timestamp_explicit_utc
 class TankOperationsResponse(BaseModel):
     tank_id: int
     evaluated_at: datetime
-    status: Literal["normal", "warning", "critical", "offline"]
+    status: Literal["normal", "warning", "critical", "offline", "retired"]
     latest_reading: SensorReadingRead | None = None
     parameter_statuses: dict[str, str]
     active_alerts: list[AlertRead]

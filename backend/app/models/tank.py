@@ -26,12 +26,27 @@ class Tank(Base):
     volume_liters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     established_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     hero_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    retired_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    retired_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    retirement_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    monitoring_expected_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
     customer: Mapped["Customer | None"] = relationship("Customer", back_populates="tanks")
+    retired_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[retired_by_user_id])
+
+    @property
+    def lifecycle(self) -> str:
+        return "retired" if self.retired_at is not None else "active"
+
+    @property
+    def retired_by_user_name(self) -> str | None:
+        return self.retired_by_user.name if self.retired_by_user else None
 
     tank_fish_links: Mapped[list["TankFish"]] = relationship(
         "TankFish",
@@ -54,6 +69,12 @@ class Tank(Base):
     )
     alerts: Mapped[list["Alert"]] = relationship(
         "Alert",
+        back_populates="tank",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    monitoring_incidents: Mapped[list["MonitoringIncident"]] = relationship(
+        "MonitoringIncident",
         back_populates="tank",
         cascade="all, delete-orphan",
         passive_deletes=True,

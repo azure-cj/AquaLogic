@@ -1,5 +1,6 @@
 import { ApiError, api } from '@/shared/api/client';
 import type {
+  Alert,
   Fish,
   SpeciesSuitabilityResponse,
   Tank,
@@ -15,7 +16,12 @@ import {
   Panel,
   StatusBadge,
 } from '@/shared/components/admin-ui';
-import { formatDate, formatReading, relativeTime } from '@/shared/utils/formatting';
+import {
+  formatDate,
+  formatReading,
+  formatReportingAge,
+  reportingAgeSeconds,
+} from '@/shared/utils/formatting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
@@ -26,6 +32,7 @@ import {
   Pencil,
   QrCode,
   Trash2,
+  Archive,
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -34,6 +41,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CareStatusChip, SpeciesCarePanel } from './SpeciesCarePanel';
 import { ActuatorControlPanel, StaffActuatorNotice } from './ActuatorControlPanel';
 import { TankEditorDrawer } from './TankEditorDrawer';
+import { TankRetireDialog } from './TankRetireDialog';
+import { MonitoringIncidentTankPanel } from '@/features/monitoring/MonitoringIncidentViews';
 import { publicTankUrl } from './publicLink';
 import { useMe } from '@/shared/hooks/useMe';
 import './styles.css';
@@ -46,6 +55,7 @@ const measurements = [
 ] as const;
 
 function currentReleaseOperationalStatus(operations: TankOperations): TankOperations['status'] {
+  if (operations.status === 'retired') return 'retired';
   if (operations.status === 'offline') return 'offline';
   const statuses = measurements.map(([key]) => operations.parameter_statuses[key]);
   if (statuses.includes('critical')) return 'critical';
@@ -71,6 +81,8 @@ export function TankDetail() {
   const [removeBusy, setRemoveBusy] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const [retireBusy, setRetireBusy] = useState(false);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [heroFailed, setHeroFailed] = useState(false);
@@ -88,14 +100,19 @@ export function TankDetail() {
     queryKey: ['tank-operations', id],
     queryFn: () => api<TankOperations>(`/tanks/${id}/operations`),
     enabled: tank.isSuccess,
-    refetchInterval: 30_000,
+    refetchInterval: tank.data?.lifecycle === 'active' ? 30_000 : false,
   });
   const suitability = useQuery({
     queryKey: ['species-suitability', id],
     queryFn: () =>
       api<SpeciesSuitabilityResponse>(`/tanks/${id}/species-suitability`),
-    enabled: tank.isSuccess,
+    enabled: tank.isSuccess && tank.data?.lifecycle === 'active',
     refetchInterval: 30_000,
+  });
+  const historicalAlerts = useQuery({
+    queryKey: ['tank-alert-history', id],
+    queryFn: () => api<Alert[]>(`/tanks/${id}/alerts?include_resolved=true`),
+    enabled: tank.isSuccess && tank.data?.lifecycle === 'retired',
   });
   const fish = useQuery({
     queryKey: ['fish'],
@@ -161,9 +178,9 @@ export function TankDetail() {
       client.invalidateQueries({ queryKey: ['tank-operations', id] });
       client.invalidateQueries({ queryKey: ['alerts'] });
       client.invalidateQueries({ queryKey: ['fleet'] });
-      setActionNotice('Operational alert resolved.');
+      setActionNotice('Operational alert marked as handled.');
     } catch (error) {
-      setActionError(errorMessage(error, 'Could not resolve the alert.'));
+      setActionError(errorMessage(error, 'Could not mark the alert handled.'));
     } finally {
       setResolvingId(null);
     }
@@ -183,6 +200,26 @@ export function TankDetail() {
       setDeleteOpen(false);
     } finally {
       setDeleteBusy(false);
+    }
+  };
+
+  const retireTank = async (note: string | null) => {
+    clearFeedback();
+    setRetireBusy(true);
+    try {
+      const retired = await api<Tank>(`/tanks/${id}/retire`, {
+        method: 'POST',
+        body: JSON.stringify({ note }),
+      });
+      client.setQueryData(['tank', id], retired);
+      client.invalidateQueries({ queryKey: ['tanks'] });
+      client.invalidateQueries({ queryKey: ['fleet'] });
+      setRetireOpen(false);
+      setActionNotice('Tank retired. History is retained and live controls are disabled.');
+    } catch (error) {
+      setActionError(errorMessage(error, 'Could not retire the tank.'));
+    } finally {
+      setRetireBusy(false);
     }
   };
 
@@ -210,10 +247,13 @@ export function TankDetail() {
   }
 
   const value = tank.data!;
+  const isRetired = value.lifecycle === 'retired';
   const reading = operations.data?.latest_reading;
   const assigned = value.fish_species ?? [];
   const care = suitability.data;
   const operationalStatus = operations.data ? currentReleaseOperationalStatus(operations.data) : null;
+  const reportingAge = reportingAgeSeconds(reading?.received_at);
+  const isLastKnown = operationalStatus === 'offline' && Boolean(reading);
   const visibleActiveAlerts = operations.data?.active_alerts.filter((alert) =>
     measurements.some(([key]) => key === alert.parameter),
   ) ?? [];
@@ -250,6 +290,8 @@ export function TankDetail() {
         <QrCode size={16} /> QR
       </button>
     </>
+  ) : isRetired ? (
+    <span className="private-state">Retired — public page disabled</span>
   ) : (
     <span className="private-state">Private — public link disabled</span>
   );
@@ -265,7 +307,7 @@ export function TankDetail() {
         description={`${value.location}${value.tank_code ? ` · ${value.tank_code}` : ''}${value.water_type ? ` · ${value.water_type}` : ''}${value.volume_liters ? ` · ${value.volume_liters} L` : ''}${value.customer ? ` · ${value.customer.name}` : ''}`}
         actions={
           <div className="tank-detail-actions">
-            {canManage && <>
+            {canManage && value.lifecycle === 'active' && <>
             <button
               className="button button-primary"
               type="button"
@@ -277,9 +319,19 @@ export function TankDetail() {
             <button
               className="button button-danger button-quiet-danger"
               type="button"
+              onClick={() => setRetireOpen(true)}
+            >
+              <Archive size={16} /> Retire
+            </button>
+            </>}
+            {canManage && value.lifecycle === 'retired' && <>
+            <StatusBadge value="retired" />
+            <button
+              className="button button-danger button-quiet-danger"
+              type="button"
               onClick={() => setDeleteOpen(true)}
             >
-              <Trash2 size={16} /> Delete
+              <Trash2 size={16} /> Permanently delete
             </button>
             </>}
           </div>
@@ -291,18 +343,20 @@ export function TankDetail() {
 
       <div className="tank-summary-grid">
         <div className="tank-summary-card">
-          <small>Operational water status</small>
+          <small>{isRetired ? 'Lifecycle state' : 'Operational water status'}</small>
           {operations.isLoading ? (
             <span>Loading…</span>
           ) : operations.isError ? (
             <strong>Unavailable</strong>
           ) : (
-            <StatusBadge value={operationalStatus!} />
+            <StatusBadge value={isRetired ? 'retired' : operationalStatus!} />
           )}
         </div>
         <div className="tank-summary-card">
-          <small>Species Care status</small>
-          {suitability.isLoading ? (
+          <small>{isRetired ? 'Species Care history' : 'Species Care status'}</small>
+          {isRetired ? (
+            <strong>Retained historical assignment</strong>
+          ) : suitability.isLoading ? (
             <span>Loading…</span>
           ) : suitability.isError || !care ? (
             <strong>Unavailable</strong>
@@ -311,17 +365,19 @@ export function TankDetail() {
           )}
         </div>
         <div className="tank-summary-card">
-          <small>Active operational alerts</small>
+          <small>{isRetired ? 'Retained alerts' : 'Active operational alerts'}</small>
           <strong>
-            {operations.isLoading || operations.isError
-              ? '—'
-              : visibleActiveAlerts.length}
+            {isRetired
+              ? (historicalAlerts.data?.length ?? '—')
+              : operations.isLoading || operations.isError ? '—' : visibleActiveAlerts.length}
           </strong>
         </div>
         <div className="tank-summary-card">
-          <small>Latest reading</small>
+          <small>{isRetired ? 'Last known reading' : isLastKnown ? 'Last known reading' : 'Latest reading'}</small>
           <strong>
-            {operations.isError ? 'Unavailable' : relativeTime(reading?.timestamp ?? null)}
+            {operations.isError
+              ? 'Unavailable'
+              : formatReportingAge(reportingAge, { offline: operationalStatus === 'offline' })}
           </strong>
         </div>
         <div className="tank-summary-card">
@@ -330,25 +386,34 @@ export function TankDetail() {
         </div>
       </div>
 
+      <p className="tank-status-explanation">
+        {isRetired ? (
+          <><strong>Retired</strong> is a historical, read-only state. The last reading, assignments, alerts, configuration, media, and equipment history remain available; no new operational data or controls are accepted.</>
+        ) : (
+          <><strong>Operational status</strong> uses global monitoring thresholds.{' '}
+          <strong>Species Care</strong> compares current supported readings with assigned-species preferences.</>
+        )}
+      </p>
+
       <div className="tank-primary-grid">
         <Panel
-          title="Live care evaluation"
-          description="Live suitability by assigned species"
+          title={isRetired ? 'Species Care history' : 'Live care evaluation'}
+          description={isRetired ? 'Retained assignment records; no new evaluation is run' : 'Live suitability by assigned species'}
           className="tank-care-panel"
         >
-          <SpeciesCarePanel
+          {isRetired ? <Notice>Retired tanks do not participate in live Species Care evaluation.</Notice> : <SpeciesCarePanel
             result={care}
             loading={suitability.isLoading}
             error={suitability.isError}
             retry={() => suitability.refetch()}
-          />
+          />}
         </Panel>
         <div className="tank-operations-column">
           <Panel
-            title="Current readings"
+            title={isRetired || isLastKnown ? 'Last known readings' : 'Current readings'}
             description={
                 reading
-                 ? `Observed ${formatDate(reading.timestamp)} · ${operationalStatus === 'offline' ? 'Device offline or stale' : 'Device data current'}`
+                 ? `Observed ${formatDate(reading.timestamp)} · ${formatReportingAge(reportingAge, { offline: operationalStatus === 'offline' })}`
                 : 'No sensor reading is available'
             }
             className="tank-readings-panel"
@@ -369,7 +434,7 @@ export function TankDetail() {
               <div className="reading-grid">
                 {measurements.map(([key, label, unit, decimals]) => (
                   <div className="reading-item" key={key}>
-                    <small>{label}</small>
+                    <small>{isLastKnown && reading[key] !== null ? `Last known ${label === 'pH' ? 'pH' : label.toLowerCase()}` : label}</small>
                     <strong>{reading[key] === null ? 'Not installed' : formatReading(reading[key], unit, decimals)}</strong>
                     <StatusBadge value={operations.data!.parameter_statuses[key]} />
                   </div>
@@ -379,7 +444,7 @@ export function TankDetail() {
           </Panel>
           <Panel
             title="Operational alerts"
-            description="Persisted unresolved alerts only"
+            description={isRetired ? 'Historical alert records retained with this retired tank.' : 'Persisted unresolved alerts only. Mark handled removes an alert from the active queue but does not confirm water recovery.'}
             className="tank-alerts-panel"
             action={
               <Link
@@ -390,16 +455,23 @@ export function TankDetail() {
               </Link>
             }
           >
-            {operations.isLoading ? (
+            {isRetired && historicalAlerts.isLoading ? (
+              <LoadingState label="Loading alert history…" />
+            ) : isRetired && historicalAlerts.isError ? (
+              <ErrorState
+                message="Alert history could not be loaded."
+                retry={() => historicalAlerts.refetch()}
+              />
+            ) : !isRetired && operations.isLoading ? (
               <LoadingState label="Loading operational alerts…" />
-            ) : operations.isError ? (
+            ) : !isRetired && operations.isError ? (
               <ErrorState
                 message="Operational alerts could not be loaded."
                 retry={() => operations.refetch()}
               />
-            ) : visibleActiveAlerts.length ? (
+            ) : (isRetired ? historicalAlerts.data ?? [] : visibleActiveAlerts).length ? (
               <div className="alert-feed">
-                {visibleActiveAlerts.map((alert) => (
+                {(isRetired ? historicalAlerts.data ?? [] : visibleActiveAlerts).map((alert) => (
                   <div className="alert-feed-item" key={alert.id}>
                     <span
                       className={`alert-symbol alert-${alert.severity}`}
@@ -411,21 +483,26 @@ export function TankDetail() {
                       <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
                       <small>{alert.message}</small>
                     </span>
-                    <button
-                      className="button button-secondary"
-                      type="button"
-                      disabled={resolvingId === alert.id}
-                      onClick={() => resolve(alert.id)}
-                    >
-                      {resolvingId === alert.id ? 'Resolving…' : 'Resolve'}
-                    </button>
+                    {isRetired ? (
+                      <span className="muted">{alert.is_resolved ? 'Handled' : 'Unresolved at retirement'}</span>
+                    ) : (
+                      <button
+                        className="button button-secondary"
+                        type="button"
+                        disabled={resolvingId === alert.id}
+                        onClick={() => resolve(alert.id)}
+                        aria-label={`Mark ${alert.parameter.replaceAll('_', ' ')} alert handled; this does not confirm water recovery`}
+                      >
+                        {resolvingId === alert.id ? 'Marking handled…' : 'Mark handled'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <EmptyState
-                title="No active alerts"
-                message="Species Care observations are intentionally separate."
+                title={isRetired ? 'No retained alerts' : 'No active alerts'}
+                message={isRetired ? 'No alert records were stored for this tank.' : 'Species Care observations are intentionally separate.'}
               />
             )}
           </Panel>
@@ -435,16 +512,18 @@ export function TankDetail() {
       <div className="tank-secondary-grid">
         <Panel
           title="Assigned species"
-          description="Manage the livestock assigned to this tank"
+          description={isRetired ? 'Historical livestock assignment retained for this tank' : 'Manage the livestock assigned to this tank'}
           className="tank-assignments-panel"
           action={
-            <button
-              className="button button-secondary"
-              type="button"
-              onClick={() => setAssigning((open) => !open)}
-            >
-              Add species
-            </button>
+            !isRetired ? (
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => setAssigning((open) => !open)}
+              >
+                Add species
+              </button>
+            ) : undefined
           }
         >
           {assigning &&
@@ -505,14 +584,16 @@ export function TankDetail() {
                     ) : (
                       <span className="muted">Care status pending</span>
                     )}
-                    <button
-                      className="icon-button icon-danger"
-                      type="button"
-                      onClick={() => setRemoving(item)}
-                      aria-label={`Remove ${item.common_name}`}
-                    >
-                      <X size={16} />
-                    </button>
+                    {!isRetired && (
+                      <button
+                        className="icon-button icon-danger"
+                        type="button"
+                        onClick={() => setRemoving(item)}
+                        aria-label={`Remove ${item.common_name}`}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -589,10 +670,14 @@ export function TankDetail() {
         </Panel>
       </div>
 
-      {isAdmin ? <ActuatorControlPanel tankId={id} variant="summary" /> : <StaffActuatorNotice />}
+      <MonitoringIncidentTankPanel tankId={id} />
+
+      {isRetired ? (
+        isAdmin ? <ActuatorControlPanel tankId={id} variant="full" readOnly /> : <StaffActuatorNotice />
+      ) : isAdmin ? <ActuatorControlPanel tankId={id} variant="summary" /> : <StaffActuatorNotice />}
 
       <TankEditorDrawer
-        open={editing}
+        open={!isRetired && editing}
         tank={value}
         onClose={closeEditor}
         onSaved={() => {
@@ -639,13 +724,20 @@ export function TankDetail() {
         onClose={() => setRemoving(null)}
       />
       <ConfirmDialog
-        open={deleteOpen}
+        open={deleteOpen && isRetired}
         title={`Delete ${value.name}?`}
-        message="This permanently removes the tank and cannot be undone."
+        message="Permanently delete this tank? Its sensor readings, alerts, equipment command and state history, device registrations, species assignments, uploaded tank image, and public tank page will also be removed. This cannot be undone."
         confirmLabel="Delete tank"
         busy={deleteBusy}
         onConfirm={removeTank}
         onClose={() => setDeleteOpen(false)}
+      />
+      <TankRetireDialog
+        tankName={value.name}
+        open={retireOpen}
+        busy={retireBusy}
+        onConfirm={retireTank}
+        onClose={() => setRetireOpen(false)}
       />
     </section>
   );

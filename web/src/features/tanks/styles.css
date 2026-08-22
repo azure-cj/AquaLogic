@@ -320,6 +320,8 @@
 .private-state { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
 .tank-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
 .tank-summary-card { display: grid; gap: 0.42rem; min-height: 92px; padding: 0.85rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.tank-status-explanation { margin: -0.35rem 0 1rem; color: var(--muted); font-size: 0.72rem; line-height: 1.5; }
+.tank-status-explanation strong { color: var(--text); }
 .tank-summary-card small, .reading-item small { color: var(--muted); font-size: 0.63rem; font-weight: 700; }
 .tank-summary-card strong { color: var(--text); font-size: 1rem; }
 .tank-primary-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 1rem; align-items: start; }
@@ -592,6 +594,9 @@
 .pump-action-grid .button:last-child { grid-column: 1 / -1; }
 .pump-stop-button { border-color: #e7b9be; }
 .pump-disabled-note { color: #9d303a; font-size: .68rem; line-height: 1.4; }
+.pump-uncertainty-note { display: grid; gap: .35rem; padding: .65rem .7rem; border: 1px solid #d6a4aa; border-radius: 8px; background: #fff2f3; color: #8b2c37; font-size: .68rem; line-height: 1.4; }
+.pump-uncertainty-note strong { font-size: .72rem; }
+.pump-uncertainty-note .button { justify-self: start; }
 .actuator-card { display: grid; gap: .85rem; min-width: 0; padding: 1rem; border: 1px solid var(--border); border-radius: 13px; background: #fff; box-shadow: 0 4px 13px rgba(26, 67, 77, .035); }
 .actuator-card-header, .actuator-schedule-heading, .actuator-history-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
 .actuator-card h3, .actuator-history h3 { margin: 0; color: var(--text); font-size: .98rem; }
@@ -634,7 +639,7 @@
 .command-history-tooltip { position: fixed; z-index: 160; width: min(330px, calc(100vw - 2rem)); padding: .75rem .85rem; border: 1px solid #b8d5d8; border-radius: 10px; background: #fff; color: var(--text); box-shadow: 0 12px 28px rgba(20, 58, 69, .18); font-size: .74rem; font-weight: 500; line-height: 1.45; pointer-events: none; }
 .command-history-tooltip::before { position: absolute; top: -6px; left: var(--tooltip-arrow-left, 18px); width: 10px; height: 10px; border-top: 1px solid #b8d5d8; border-left: 1px solid #b8d5d8; background: #fff; content: ''; transform: rotate(45deg); }
 .command-history-tooltip[data-placement='top']::before { top: auto; bottom: -6px; border-top: 0; border-left: 0; border-right: 1px solid #b8d5d8; border-bottom: 1px solid #b8d5d8; }
-.actuator-history-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .5rem; margin-bottom: .85rem; padding: .65rem; border: 1px solid var(--border); border-radius: 10px; background: #f7fbfb; }
+.actuator-history-summary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .5rem; margin-bottom: .85rem; padding: .65rem; border: 1px solid var(--border); border-radius: 10px; background: #f7fbfb; }
 .actuator-history-summary span { display: grid; gap: .18rem; min-width: 0; padding: .35rem .45rem; border-left: 2px solid #cbdde0; }
 .actuator-history-summary strong { color: var(--text); font-size: 1rem; line-height: 1; }
 .actuator-history-summary small { color: var(--muted); font-size: .69rem; font-weight: 700; }
@@ -643,6 +648,7 @@
 .actuator-history-summary .summary-succeeded { border-color: #3a9a73; }
 .actuator-history-summary .summary-failed { border-color: #bd5360; }
 .actuator-history-summary .summary-expired { border-color: #8b7b9f; }
+.actuator-history-summary .summary-unknown { border-color: #b84d59; }
 .actuator-history-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin-bottom: .85rem; }
 .actuator-history-filter { display: grid; gap: .28rem; min-width: 0; }
 .actuator-history-filter > span { color: var(--muted); font-size: .7rem; font-weight: 750; }
@@ -658,6 +664,7 @@
 .actuator-history-row .status-succeeded { --badge-color: #3a9a73; }
 .actuator-history-row .status-failed { --badge-color: #bd5360; }
 .actuator-history-row .status-expired { --badge-color: #8068a3; }
+.actuator-history-row .status-outcome_unknown { --badge-color: #b84d59; }
 .command-expired-badge { display: inline-flex; min-height: 28px; align-items: center; padding: .35rem .55rem; border: 1px solid #d7c5e5; border-radius: 999px; background: #f5effa; color: #6f4f8c; font-size: .68rem; font-weight: 800; }
 .command-status-detail { color: var(--muted); font-size: .7rem; line-height: 1.35; }
 .actuator-history-action { display: grid; min-width: 0; gap: .22rem; align-content: center; }

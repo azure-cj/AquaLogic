@@ -111,6 +111,7 @@ def test_staff_is_denied_every_administrator_only_browser_capability(client, db_
         ("POST", "/users/999999/reset-password", {}),
         ("POST", "/tanks", {"json": {"name": "Denied Tank", "location": "Rack"}}),
         ("PUT", f"/tanks/{tank.id}", {"json": {"location": "Denied"}}),
+        ("POST", f"/tanks/{tank.id}/retire", {"json": {}}),
         ("DELETE", f"/tanks/{tank.id}", {}),
         ("POST", f"/tanks/{tank.id}/hero-image", {"files": {"image": ("hero.jpg", b"not-an-image", "image/jpeg")}}),
         ("POST", "/fish", {"json": valid_fish}),

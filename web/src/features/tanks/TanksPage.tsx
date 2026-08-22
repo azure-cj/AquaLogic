@@ -1,7 +1,6 @@
 import { api } from '@/shared/api/client';
 import type { FleetTank, Tank } from '@/shared/api/models';
 import {
-  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -18,17 +17,18 @@ import {
   Download,
   Droplets,
   ExternalLink,
+  Archive,
   Pencil,
   Plus,
   Printer,
   QrCode,
-  Trash2,
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { TankEditorDrawer } from './TankEditorDrawer';
+import { TankRetireDialog } from './TankRetireDialog';
 import { useMe } from '@/shared/hooks/useMe';
 import './styles.css';
 
@@ -115,7 +115,7 @@ export function Tanks() {
   const client = useQueryClient();
   const me = useMe();
   const canManage = me.data?.role !== 'staff';
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
@@ -123,9 +123,12 @@ export function Tanks() {
     data: string;
     tank: Tank;
   } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Tank | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [retireTarget, setRetireTarget] = useState<Tank | null>(null);
+  const [retireBusy, setRetireBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const lifecycle = searchParams.get('lifecycle') === 'retired' || searchParams.get('lifecycle') === 'all'
+    ? searchParams.get('lifecycle') as 'retired' | 'all'
+    : 'active';
 
   useEffect(() => {
     if (!notice) return;
@@ -134,8 +137,8 @@ export function Tanks() {
   }, [notice]);
 
   const tanks = useQuery({
-    queryKey: ['tanks'],
-    queryFn: () => api<Tank[]>('/tanks'),
+    queryKey: ['tanks', lifecycle],
+    queryFn: () => api<Tank[]>(`/tanks?lifecycle=${lifecycle}`),
   });
   const fleet = useQuery({
     queryKey: ['fleet'],
@@ -162,18 +165,22 @@ export function Tanks() {
     await navigator.clipboard.writeText(publicUrl(tank));
     setNotice(`Public URL copied for ${tank.name}.`);
   };
-  const removeTank = async () => {
-    if (!deleteTarget) return;
-    setBusy(true);
+  const retireTank = async (note: string | null) => {
+    if (!retireTarget) return;
+    setRetireBusy(true);
     try {
-      await api(`/tanks/${deleteTarget.id}`, { method: 'DELETE' });
-      setNotice(`${deleteTarget.name} was deleted.`);
-      setDeleteTarget(null);
+      await api(`/tanks/${retireTarget.id}/retire`, {
+        method: 'POST',
+        body: JSON.stringify({ note }),
+      });
+      setNotice(`${retireTarget.name} was retired. History is retained.`);
+      setRetireTarget(null);
       client.invalidateQueries({ queryKey: ['tanks'] });
       client.invalidateQueries({ queryKey: ['fleet'] });
-      closeDrawer();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The tank could not be retired.');
     } finally {
-      setBusy(false);
+      setRetireBusy(false);
     }
   };
   const saved = () => {
@@ -215,13 +222,28 @@ export function Tanks() {
       )}
       <Panel
         title="Registered tanks"
-        description={`${visible.length} of ${tanks.data?.length ?? 0} tanks`}
+        description={`${visible.length} of ${tanks.data?.length ?? 0} ${lifecycle} tanks`}
         action={
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder="Search tanks…"
-          />
+          <div className="tanks-directory-tools">
+            <label className="field tanks-lifecycle-filter">
+              <span className="sr-only">Tank lifecycle</span>
+              <select
+                aria-label="Tank lifecycle"
+                value={lifecycle}
+                onChange={(event) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (event.target.value === 'active') next.delete('lifecycle');
+                  else next.set('lifecycle', event.target.value);
+                  setSearchParams(next);
+                }}
+              >
+                <option value="active">Active tanks</option>
+                <option value="retired">Retired tanks</option>
+                <option value="all">All tanks</option>
+              </select>
+            </label>
+            <SearchField value={search} onChange={setSearch} placeholder="Search tanks…" />
+          </div>
         }
       >
         {tanks.isLoading ? (
@@ -243,7 +265,7 @@ export function Tanks() {
               const health = fleet.data?.find((item) => item.id === tank.id);
               return (
                 <div
-                  className={`data-row${tank.id === highlightedTankId ? ' analytics-target-row' : ''}`}
+                  className={`data-row${tank.id === highlightedTankId ? ' analytics-target-row' : ''}${tank.lifecycle === 'retired' ? ' is-retired' : ''}`}
                   key={tank.id}
                 >
                   <span className="tank-cell">
@@ -255,7 +277,9 @@ export function Tanks() {
                       <small>{tank.location}</small>
                     </span>
                   </span>
-                  {health ? (
+                  {tank.lifecycle === 'retired' ? (
+                    <StatusBadge value="retired" />
+                  ) : health ? (
                     <StatusBadge value={health.status} />
                   ) : (
                     <span className="muted">—</span>
@@ -265,7 +289,7 @@ export function Tanks() {
                     <small>{tank.is_public ? 'Published' : 'Private'}</small>
                   </span>
                   <span className="row-actions">
-                    {canManage && <ActionTooltip label="Edit tank">
+                    {canManage && tank.lifecycle === 'active' && <ActionTooltip label="Edit tank">
                       <Link
                         className="icon-button"
                         to={`/admin/tanks?edit=${tank.id}`}
@@ -274,7 +298,7 @@ export function Tanks() {
                         <Pencil size={16} />
                       </Link>
                     </ActionTooltip>}
-                    <ActionTooltip label="Show QR code">
+                    {tank.lifecycle === 'active' && <ActionTooltip label="Show QR code">
                       <button
                         className="icon-button"
                         type="button"
@@ -283,8 +307,8 @@ export function Tanks() {
                       >
                         <QrCode size={16} />
                       </button>
-                    </ActionTooltip>
-                    <ActionTooltip label="Copy public URL">
+                    </ActionTooltip>}
+                    {tank.lifecycle === 'active' && <ActionTooltip label="Copy public URL">
                       <button
                         className="icon-button"
                         type="button"
@@ -293,8 +317,8 @@ export function Tanks() {
                       >
                         <Copy size={16} />
                       </button>
-                    </ActionTooltip>
-                    <ActionTooltip label="Preview public page">
+                    </ActionTooltip>}
+                    {tank.lifecycle === 'active' && <ActionTooltip label="Preview public page">
                       <Link
                         className="icon-button"
                         to={`/tank/${tank.public_id}`}
@@ -304,15 +328,15 @@ export function Tanks() {
                       >
                         <ExternalLink size={16} />
                       </Link>
-                    </ActionTooltip>
-                    {canManage && <ActionTooltip label="Delete tank">
+                    </ActionTooltip>}
+                    {canManage && tank.lifecycle === 'active' && <ActionTooltip label="Retire tank">
                       <button
                         className="icon-button icon-danger"
                         type="button"
-                        onClick={() => setDeleteTarget(tank)}
-                        aria-label={`Delete ${tank.name}`}
+                        onClick={() => setRetireTarget(tank)}
+                        aria-label={`Retire ${tank.name}`}
                       >
-                        <Trash2 size={16} />
+                        <Archive size={16} />
                       </button>
                     </ActionTooltip>}
                   </span>
@@ -334,14 +358,12 @@ export function Tanks() {
         onSaved={saved}
       />}
       <QrModal value={qrPreview} onClose={() => setQrPreview(null)} />
-      {canManage && <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title={`Delete ${deleteTarget?.name ?? 'tank'}?`}
-        message="This permanently removes the tank and cannot be undone."
-        confirmLabel="Delete tank"
-        busy={busy}
-        onConfirm={removeTank}
-        onClose={() => setDeleteTarget(null)}
+      {canManage && <TankRetireDialog
+        tankName={retireTarget?.name ?? 'tank'}
+        open={Boolean(retireTarget)}
+        busy={retireBusy}
+        onConfirm={retireTank}
+        onClose={() => setRetireTarget(null)}
       />}
     </section>
   );

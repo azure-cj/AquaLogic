@@ -10,15 +10,13 @@ from app.models import SensorReading, Tank, User
 from app.schemas.sensor import SensorReadingCreate, SensorReadingRead
 from app.services.decision_engine import ingest_reading
 from app.services.auth_security import audit_event
+from app.services.tank_lifecycle import lock_tank_for_mutation, require_active_tank, tank_or_404
 
 router = APIRouter(prefix="/tanks/{tank_id}/sensors", tags=["sensors"])
 
 
 def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
-    tank = db.scalar(select(Tank).where(Tank.id == tank_id))
-    if tank is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tank not found")
-    return tank
+    return tank_or_404(db, tank_id)
 
 
 @router.get("", response_model=SensorReadingRead)
@@ -75,7 +73,8 @@ def create_sensor_reading(
     current_user: User = Depends(require_admin),
 ) -> SensorReading:
     _ = current_user
-    _get_tank_or_404(db, tank_id)
+    tank = lock_tank_for_mutation(db, tank_id)
+    require_active_tank(tank, db)
 
     values = payload.model_dump()
     timestamp = values.pop("timestamp", None)

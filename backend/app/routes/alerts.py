@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_staff
-from app.models import Alert, User
+from app.models import Alert, Tank, User
 from app.schemas.alert import AlertRead
 from app.services.auth_security import audit_event
+from app.services.tank_lifecycle import require_active_tank, tank_or_404
 
 router = APIRouter(tags=["alerts"])
 
@@ -26,7 +27,7 @@ def list_alerts(
     current_user: User = Depends(require_staff),
 ) -> list[Alert]:
     _ = current_user
-    stmt = select(Alert)
+    stmt = select(Alert).join(Tank, Tank.id == Alert.tank_id).where(Tank.retired_at.is_(None))
     if not include_resolved:
         stmt = stmt.where(Alert.is_resolved.is_(False))
     alerts = db.scalars(stmt.order_by(Alert.created_at.desc())).all()
@@ -56,6 +57,7 @@ def resolve_alert(
     current_user: User = Depends(require_staff),
 ) -> Alert:
     alert = _get_alert_or_404(db, alert_id)
+    require_active_tank(tank_or_404(db, alert.tank_id))
     if not alert.is_resolved:
         alert.is_resolved = True
         alert.resolved_at = datetime.now(timezone.utc)

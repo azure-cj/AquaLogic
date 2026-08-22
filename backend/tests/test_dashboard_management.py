@@ -94,6 +94,45 @@ def test_analytics_allows_deferred_device_metrics(client, auth_headers, db_sessi
     assert bridge_point["values"]["ammonia"] is None
 
 
+def test_retired_tanks_leave_live_fleet_but_remain_explicit_historical_analytics(client, auth_headers, db_session):
+    active = _tank(client, auth_headers, "Live analytics tank")
+    retired = _tank(client, auth_headers, "Retired analytics tank")
+    db_session.add(
+        SensorReading(
+            tank_id=retired["id"],
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=1),
+            received_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+            temperature=26,
+            ph=7,
+            turbidity=2,
+            tds=120,
+        )
+    )
+    db_session.commit()
+    assert client.post(f"/tanks/{retired['id']}/retire", headers=auth_headers, json={}).status_code == 200
+
+    fleet = client.get("/fleet", headers=auth_headers)
+    assert fleet.status_code == 200
+    assert {item["id"] for item in fleet.json()} == {active["id"]}
+
+    default_analytics = client.get("/analytics/fleet?range=24h", headers=auth_headers)
+    assert {item["id"] for item in default_analytics.json()["tanks"]} == {active["id"]}
+    excluded_selection = client.get(
+        f"/analytics/fleet?range=24h&tank_id={retired['id']}",
+        headers=auth_headers,
+    )
+    assert excluded_selection.status_code == 422
+
+    included = client.get(
+        f"/analytics/fleet?range=24h&tank_id={retired['id']}&include_retired=true",
+        headers=auth_headers,
+    )
+    assert included.status_code == 200
+    assert {item["id"] for item in included.json()["tanks"]} == {active["id"], retired["id"]}
+    assert next(item for item in included.json()["tanks"] if item["id"] == retired["id"])["lifecycle"] == "retired"
+    assert included.json()["tank_series"][0]["tank_id"] == retired["id"]
+
+
 def test_admin_staff_lifecycle_and_threshold_validation(client, db_session):
     admin = User(name="Admin", email="admin@example.com", role="admin", hashed_password=get_password_hash("password123"))
     db_session.add(admin)
