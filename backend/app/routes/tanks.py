@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +20,7 @@ from app.services.decision_engine import parameter_statuses, status_for_reading
 
 
 router = APIRouter(prefix="/tanks", tags=["tanks"])
+logger = logging.getLogger(__name__)
 
 HERO_IMAGE_TYPES = {
     "image/jpeg": (".jpg", b"\xff\xd8\xff"),
@@ -35,7 +37,14 @@ def _remove_local_hero_image(image_url: str | None) -> None:
     media_root = Path(settings.media_root).resolve()
     if media_root not in target.parents or not target.is_file():
         return
-    target.unlink()
+    try:
+        target.unlink()
+    except OSError:
+        logger.warning(
+            "Tank-owned hero image cleanup failed after the database change: %s",
+            relative_name,
+            exc_info=True,
+        )
 
 
 def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
