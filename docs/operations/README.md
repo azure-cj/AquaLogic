@@ -6,6 +6,8 @@ API, domain, or development-status documents.
 
 - [`hardware/`](hardware/): hardware contract, bridge integration notes, and
   safe local sensor/actuator testing.
+- [`../WORKFLOWS.md#documentation-validation`](../WORKFLOWS.md#documentation-validation):
+  Markdown-link and documentation cleanup checks.
 - [`../WORKFLOWS.md`](../WORKFLOWS.md): database, browser, deployment, tank
   lifecycle, and device-movement workflows.
 

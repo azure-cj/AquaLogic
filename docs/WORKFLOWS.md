@@ -285,6 +285,25 @@ At the end of a meaningful task:
 - Update the status checkpoint only when implementation status changed.
 - Keep task-specific notes in the task response or issue, not in permanent docs.
 
+## Documentation validation
+
+From the repository root, run the Markdown link checker after moving or adding
+documentation:
+
+```powershell
+python scripts/check_markdown_links.py
+git diff --check
+```
+
+Then confirm that current documents use the source-of-truth map in
+`docs/INDEX.md`, historical material remains under `docs/history/`, and evidence
+files are accompanied by a dated validation checkpoint. Search for stale paths,
+task prompts, or superseded status language before committing:
+
+```powershell
+rg -n "Luna Extra High|implementation roadmap|WEB_DASHBOARD_IMPLEMENTATION_REPORT\.md|MOBILE_APP_DEVELOPMENT_PLAN\.md" docs README.md
+```
+
 ## Deployment preparation
 
 Deployment configuration is present in `render.yaml` and `web/vercel.json`, but
