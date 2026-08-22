@@ -1,7 +1,7 @@
 # Fish Feeder Control
 
 Status: Implemented v1 controls; advanced feeding automation deferred  
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -33,8 +33,10 @@ authority for delivery.
 4. The bridge claims it and makes one exact feeder request.
 5. The bridge reports success or failure and refreshes state when possible.
 
-An uncertain or timed-out request is not automatically sent again. An operator
-must inspect the equipment before issuing a new command.
+An uncertain or timed-out request is not automatically sent again. A claimed
+command that loses confirmation beyond the 180-second window becomes
+`outcome_unknown`; an operator must inspect the equipment before issuing a new
+command.
 
 ## Schedule behavior
 
@@ -49,6 +51,13 @@ AquaLogic does not execute feeding schedules or create a command for every
 autonomous feed. A successful schedule command confirms configuration delivery,
 not every future feed. If a new schedule command expires before delivery, the
 application does not claim that the device received the replacement.
+
+For a physical move, disable the intended source schedule, deactivate the old
+device registration, provision a new destination identity, verify the physical
+feeder and fresh destination reading, and recreate only the intended schedule
+through the [canonical move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank).
+Deactivation or database deletion does not erase the firmware-resident feeder
+schedule.
 
 ## Permissions and audit
 

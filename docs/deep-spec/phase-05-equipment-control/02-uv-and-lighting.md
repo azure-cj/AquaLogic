@@ -1,7 +1,7 @@
 # UV and Lighting Controls
 
 Status: Implemented v1 controls; production hardware hardening deferred  
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -51,6 +51,12 @@ configuration request. It does not confirm every future scheduled execution.
 The backend does not run a lighting scheduler and does not create a separate
 command for each scheduled on/off event.
 
+For a physical move, disable the intended source schedule, deactivate the old
+device registration, provision a new destination identity, verify the physical
+light identity and fresh destination reading, and recreate only the intended
+schedule through the [canonical move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank).
+Deactivation or database deletion does not erase the firmware-resident schedule.
+
 ## Permissions and audit
 
 - Only administrators can read light state or queue light commands.
@@ -64,8 +70,10 @@ command for each scheduled on/off event.
 
 - Invalid action/payload combinations are rejected before delivery.
 - Commands that remain queued past their expiry are not returned to the bridge.
-- A bridge timeout or ambiguous physical response is reported as failed without
-  blindly repeating the hardware request.
+- A bridge-reported failure is recorded as failed; if AquaLogic loses the
+  terminal report after claim and the 180-second confirmation window passes, the
+  command becomes `outcome_unknown` rather than expired or automatically
+  repeated.
 - A stale state report does not prove that the light is physically off.
 
 ## Approved hardening and clarification

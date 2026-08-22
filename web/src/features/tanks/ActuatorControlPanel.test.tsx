@@ -80,6 +80,7 @@ const emptySummary = {
   succeeded: 0,
   failed: 0,
   expired: 0,
+  outcome_unknown: 0,
 };
 
 function renderPanel(variant: 'full' | 'summary' = 'full') {
@@ -342,6 +343,65 @@ describe('admin actuator controls', () => {
     expect(await screen.findByText('Equipment connection is offline or stale')).toBeInTheDocument();
     expect(screen.getByText('Light and feeder requests may expire while waiting. Pump maintenance checks are available only when the connection is online.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' })).toBeDisabled();
+  });
+
+  it('locks only the uncertain pump dispense and gates administrator physical verification', async () => {
+    const user = userEvent.setup();
+    const unknownStatus = {
+      ...status,
+      pump_dispense_locks: [{
+        actuator: 'pump_a' as const,
+        command_id: 'unknown-pump-command',
+        status: 'outcome_unknown' as const,
+        verification_required: true,
+      }],
+    };
+    const unknownCommand = {
+      command_id: 'unknown-pump-command',
+      tank_id: 1,
+      device_id: 'esp32-control-01',
+      actor_user_id: 1,
+      actor_name: 'Test Admin',
+      actuator: 'pump_a',
+      action: 'dispense',
+      payload: {},
+      status: 'outcome_unknown',
+      requested_at: '2026-08-15T10:00:00Z',
+      expires_at: '2026-08-15T10:00:20Z',
+      executing_at: '2026-08-15T10:00:01Z',
+      confirmation_deadline_at: '2026-08-15T10:03:01Z',
+      outcome_unknown_at: '2026-08-15T10:03:02Z',
+      execution_at: null,
+      result: null,
+      error: 'Confirmation deadline elapsed; physical outcome is unknown',
+      physical_verification_user_id: null,
+      physical_verification_actor_name: null,
+      physical_verification_at: null,
+      physical_verification_note: null,
+    };
+    vi.mocked(api).mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/tanks/1/actuators/status') return Promise.resolve(unknownStatus);
+      if (path.startsWith('/tanks/1/actuators/history')) {
+        return Promise.resolve({ items: [unknownCommand], page: 1, page_size: 10, total: 1, total_pages: 1, has_previous: false, has_next: false, summary: { ...emptySummary, total: 1, outcome_unknown: 1 } });
+      }
+      if (path === '/tanks/1/actuators/commands/unknown-pump-command/clear-uncertainty' && init?.method === 'POST') {
+        return Promise.resolve({ ...unknownCommand, physical_verification_user_id: 1, physical_verification_actor_name: 'Test Admin', physical_verification_at: '2026-08-15T10:04:00Z' });
+      }
+      return Promise.reject(new Error(`Unexpected path ${path}`));
+    });
+
+    renderPanel();
+    expect(await screen.findByText('Outcome unknown — physical verification required.')).toBeInTheDocument();
+    expect(screen.getByText('The earlier dispense may have reached the equipment. Verify the pump locally before another dispense. Stop remains available; this verification clears only the software lock.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A stop' })).toBeEnabled();
+    expect(screen.getAllByText('Outcome unknown').length).toBeGreaterThanOrEqual(2);
+
+    await user.click(screen.getByRole('button', { name: 'Record physical verification' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('does not prove the exact historical dose');
+    await user.click(within(dialog).getByRole('button', { name: 'Record verification' }));
+    await screen.findByText('Physical verification recorded. The historical command remains Outcome unknown; the software pump lock is cleared.');
   });
 
   it('renders a non-usable staff notice without fetching actuator APIs', () => {

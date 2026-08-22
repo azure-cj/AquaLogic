@@ -164,4 +164,8 @@ export const statusText = (status: string) =>
     warning: 'Warning — a reading needs attention',
     critical: 'Critical — immediate attention required',
     offline: 'Offline — no recent sensor report',
+    suitable: 'Water suitable — supported readings are within preferred water ranges',
+    attention: 'Water needs attention — a supported reading is outside a preferred water range',
+    unavailable: 'Water data unavailable — a current reading or preference is missing',
+    outcome_unknown: 'Outcome unknown — physical execution may have occurred; physical verification is required',
   })[status] || status;

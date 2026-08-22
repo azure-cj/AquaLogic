@@ -1,7 +1,7 @@
 # Command History and Audit
 
-Status: Implemented bounded administrator history and audit trail  
-Last reviewed: 2026-08-21
+Status: Implemented bounded administrator history, audit trail, and uncertainty records
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -11,23 +11,26 @@ bridge-reported actuator state.
 ## Current implemented behavior
 
 The administrator actuator workspace reads newest-first history for the fixed
-device/tank mapping. History supports:
+device/tank mapping. History remains available for retired tanks as a
+read-only historical surface; retired tanks are not eligible for live actuator
+controls. History supports:
 
 - default page size of 10
 - maximum page size of 50
 - previous/next pagination metadata
 - actuator filtering for UV, LED, feeder, Pump A, or Pump B
-- lifecycle-status filtering for queued, executing, succeeded, failed, or
-  expired
+- lifecycle-status filtering for queued, executing, succeeded, failed, expired,
+  or `outcome_unknown`
 - command/action name
 - actor
-- requested, expiry, claim, and completion timestamps
+- requested, queue expiry, claim, confirmation deadline, unknown, completion, and
+  physical-verification timestamps
 - validated payload
 - result or error
 - expandable command details
 
 Each response also includes fixed-device summary counts for total, queued,
-executing, succeeded, failed, and expired commands. Summary counts remain
+executing, succeeded, failed, expired, and `outcome_unknown` commands. Summary counts remain
 available while row filters are active.
 
 Actuator state history is append-only. Each bridge state report records the
@@ -44,12 +47,20 @@ The current lifecycle records audit activity for:
 - successful completion
 - reported failure
 - queued-command expiry
+- `executing -> outcome_unknown` reconciliation
+- rejected late bridge reports
+- administrator physical-verification clearance
 - actuator state reporting
 
 The history and audit trail preserve physical-control context after a command
 has completed. Payloads and results contain validated operational data only;
 device keys, key hashes, refresh tokens, passwords, and private credentials are
 not included.
+
+During a physical move, command and state history remains attached to the old
+registered device/tank. It is not migrated or replayed for the destination;
+follow the [canonical move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank)
+before creating new destination commands or schedules.
 
 ## Permissions and privacy
 

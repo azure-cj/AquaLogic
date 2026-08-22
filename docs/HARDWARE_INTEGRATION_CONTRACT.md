@@ -1,7 +1,7 @@
 # AquaLogic Hardware Integration Contract
 
 Status: Current v1 bridge contract for temporary hardware testing
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-22
 
 This document is the shared boundary between the ESP32 firmware and the
 software system. The v1 bridge uses the received firmware as a read-only
@@ -25,7 +25,9 @@ POST /device-ingestion/readings
 The bridge device route does not trust a device to choose an arbitrary tank ID.
 A registered device identity is mapped to exactly one tank server-side. The
 bridge uses the registered device key, never a staff password or browser token.
-The browser and backend do not call the local ESP32 directly.
+The browser and backend do not call the local ESP32 directly. A physical move
+uses the [canonical deactivation and move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank);
+it does not edit the mapping or move historical readings.
 
 ## Reading contract
 
@@ -76,8 +78,11 @@ The backend creates one command row with:
 - admin `actor_user_id`;
 - one allowlisted actuator/action and validated payload;
 - requested, expiry, executing, and execution timestamps;
-- `queued`, `executing`, `succeeded`, `failed`, or `expired` status;
-- result/error and audit metadata.
+- `queued`, `executing`, `succeeded`, `failed`, `expired`, or `outcome_unknown`
+  status;
+- confirmation-deadline and outcome-unknown timestamps when applicable;
+- result/error, late-report, and audit metadata, including administrator
+  physical-verification actor/time/note when uncertainty is cleared.
 
 The browser command payload is:
 
@@ -114,6 +119,14 @@ and at most one intentional matching safety stop if the configured move does
 not complete. It never retries a request whose execution may already have
 happened.
 
+If the bridge loses a terminal report after claiming a command, the backend
+reconciles it to `outcome_unknown` after the post-claim confirmation window.
+Late reports do not rewrite that history. Same-device/same-pump dispense is
+blocked while an earlier dispense is executing or uncleared unknown; Stop
+remains available, and administrator physical verification records who checked
+the equipment, when, and any bounded note before clearing only the software
+lock.
+
 ## Firmware actuator boundary used by v1
 
 The current ESP32 reference registers these local routes used by the bridge:
@@ -148,6 +161,10 @@ manual-override, emergency-stop, and physical fail-safe behavior are reviewed.
 6. Test Wi-Fi loss, server restart, sensor disconnects, and stale reports.
 7. Validate the temporary v1 actuator bridge on one device and one tank.
 8. Review physical safety controls before any production actuator deployment.
+
+For any later physical move, do not reuse this registration as a new tank
+identity. Follow the [canonical move/reprovisioning runbook](WORKFLOWS.md#moving-equipment-to-another-tank)
+and perform the physical sensor, actuator, pump, and schedule checks there.
 
 Any change to this contract should be reviewed by both hardware and software
 owners and recorded in `docs/DECISIONS.md`.

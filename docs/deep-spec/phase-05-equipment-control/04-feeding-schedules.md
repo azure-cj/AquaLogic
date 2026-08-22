@@ -22,6 +22,14 @@ execution after accepting it.
 The same device-resident model applies to the current UV and normal LED daily
 schedules, which contain one enabled flag and on/off `HH:MM` values.
 
+When equipment is physically moved, schedules do not follow a database device
+mapping. The operator must disable intended source schedules before the move,
+provision the destination identity, verify the new device and equipment
+identity, and recreate only the intended schedules through the [canonical
+move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank).
+Database deletion or device deactivation does not erase firmware-resident
+schedule state.
+
 ## Execution and history
 
 - AquaLogic validates and queues schedule configuration.

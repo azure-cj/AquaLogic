@@ -1,7 +1,7 @@
 # Pump Maintenance
 
-Status: Implemented guarded maintenance workflow; automatic dosing deferred  
-Last reviewed: 2026-08-21
+Status: Implemented guarded maintenance workflow with uncertainty interlock; automatic dosing deferred
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -27,6 +27,15 @@ visible safety control. The maintenance warning instructs the tester to use
 empty syringes or water only, keep both pumps clear of chemicals, and remain
 ready to stop the equipment.
 
+Before tank deletion or a physical move, finish or physically verify any pump
+work, stop the equipment, and follow the [hardware decommissioning and
+move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank).
+An executing or uncleared `outcome_unknown` command requires administrator
+physical verification before the same-device/same-pump dispense lock can be
+cleared; Stop remains available during the lock. Deactivating the registered
+device or deleting its database rows does not prove that a pump stopped or that
+firmware-resident configuration was erased.
+
 ## Configured-volume dispense
 
 The received firmware owns the configured dose volume and exposes no volume
@@ -43,17 +52,30 @@ bridge:
 The reported `volume_ml` is firmware state and is informational to AquaLogic;
 the browser cannot edit it.
 
+Before another dispense, AquaLogic reconciles stale commands and blocks the
+same registered device plus same pump while an earlier dispense is `executing`
+or uncleared `outcome_unknown`. Pump A does not block Pump B or another device.
+Stop remains available during the lock. Retract remains an explicit,
+confirmation-gated maintenance action but does not clear the lock or prove that
+the earlier dispense did not occur.
+
 ## Failure and retry behavior
 
 - Pump commands default to a 20-second queue expiry and cannot exceed 30
   seconds before bridge claim.
 - Pump commands are rejected with `409` while the bridge is offline.
-- A timeout or ambiguous physical response is reported as failed.
+- A bridge-reported timeout/failure follows the bridge failure path. If AquaLogic
+  then loses the terminal report past the 180-second confirmation window, the
+  command becomes `outcome_unknown`: physical execution may have occurred and
+  the command is never automatically retried.
 - The bridge never retries a dispense, stop, or retract request automatically.
 - The one safety stop after an unsafe or incomplete dispense is not a retry of
   the dispense action.
 - A new dispense or retract command requires a fresh operator decision and
   confirmation; Stop remains available as the direct safety action.
+- An administrator can record physical verification with a bounded note. This
+  clears the software dispense lock while preserving the original
+  `outcome_unknown` history.
 
 ## Permissions and audit
 
@@ -85,4 +107,6 @@ the browser cannot edit it.
 - Offline pump commands are rejected rather than queued.
 - Dispense uses the firmware-configured volume and no client duration payload.
 - An incomplete dispense may receive one safety stop but is never retried.
+- A same-device/same-pump dispense is blocked while an earlier dispense is
+  executing or uncleared unknown, and physical verification is attributable.
 - The UI and docs warn against chemical use during testing.

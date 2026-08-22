@@ -41,9 +41,17 @@ class ActuatorCommand(Base):
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     executing_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmation_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    outcome_unknown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     execution_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    physical_verification_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    physical_verification_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    physical_verification_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    late_report_fingerprints_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ActuatorState(Base):

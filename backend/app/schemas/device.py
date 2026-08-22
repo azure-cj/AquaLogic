@@ -18,7 +18,7 @@ TIME_PATTERN = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
 
 ActuatorName = Literal["uv", "led", "feeder", "pump_a", "pump_b"]
 ActuatorAction = Literal["on", "off", "timer", "schedule", "feed_now", "config", "dispense", "stop", "retract"]
-CommandStatus = Literal["queued", "executing", "succeeded", "failed", "expired"]
+CommandStatus = Literal["queued", "executing", "succeeded", "failed", "expired", "outcome_unknown"]
 
 
 class DeviceCreate(BaseModel):
@@ -161,9 +161,21 @@ class ActuatorCommandRead(BaseModel):
     requested_at: datetime
     expires_at: datetime
     executing_at: datetime | None = None
+    confirmation_deadline_at: datetime | None = None
+    outcome_unknown_at: datetime | None = None
     execution_at: datetime | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
+    physical_verification_user_id: int | None = None
+    physical_verification_actor_name: str | None = None
+    physical_verification_at: datetime | None = None
+    physical_verification_note: str | None = None
+
+
+class ActuatorPhysicalVerification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: StrictStr | None = Field(default=None, max_length=500)
 
 
 class ActuatorHistorySummary(BaseModel):
@@ -173,6 +185,7 @@ class ActuatorHistorySummary(BaseModel):
     succeeded: int
     failed: int
     expired: int
+    outcome_unknown: int
 
 
 class ActuatorCommandHistoryPage(BaseModel):
@@ -275,3 +288,11 @@ class DeviceActuatorStatusRead(BaseModel):
     last_seen_at: datetime | None
     checked_at: datetime
     actuators: list[ActuatorStateRead]
+    pump_dispense_locks: list["PumpDispenseLockRead"] = Field(default_factory=list)
+
+
+class PumpDispenseLockRead(BaseModel):
+    actuator: Literal["pump_a", "pump_b"]
+    command_id: str
+    status: Literal["executing", "outcome_unknown"]
+    verification_required: bool

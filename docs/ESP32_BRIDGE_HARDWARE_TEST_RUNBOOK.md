@@ -1,7 +1,7 @@
 # ESP32 bridge hardware-test runbook
 
 Status: Temporary local-first sensor and actuator test procedure
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-22
 
 ## Safety and scope
 
@@ -19,9 +19,20 @@ Last reviewed: 2026-08-17
   must be `true` only during a controlled empty/water motor test.
 - Hardware calls are one-shot. A timeout may mean the actuator already ran, so
   the bridge reports the failure and does not retry that physical command.
+- If the bridge loses the terminal report after claiming a command, AquaLogic
+  may later show `Outcome unknown` after its 180-second confirmation window.
+  Do not issue another same-pump dispense until the equipment has been
+  physically inspected and an administrator records verification in the
+  dashboard. Stop remains the available safety action during the lock.
 - Keep the one-time device key and local `bridge-config.json` private and
   untracked. Never put Wi-Fi credentials or device secrets in repository files,
   console output, screenshots, or tickets.
+
+This runbook covers a one-device/one-tank test. A physical move is not a
+reconfiguration of the existing tank mapping: use the [canonical
+move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank)
+for deactivation, physical relocation, new provisioning, fresh-reading and
+equipment-identity checks, schedule recreation, and rollback guidance.
 
 ## Owner computer
 
@@ -137,7 +148,10 @@ retries dispense. Return the flag to `false` after testing.
    keep **Stop** ready, and use **Retract** only after confirming the mechanism
    is clear. Do not enable pump schedules or pH auto-dose.
 7. Verify each command moves through the audit history with the admin actor,
-   request time, result/error, and final status.
+   request time, result/error, and final status. For a deliberately interrupted
+   report, verify `Outcome unknown`, the same-pump dispense lock, and the
+   administrator-only physical-verification confirmation. Confirm the original
+   status remains unknown after clearance.
 8. Sign in as staff in a separate session. Controls must not be usable, and
    direct actuator command/status/history API calls must receive 403.
 9. Disconnect the ESP32 or stop the bridge. The dashboard should become stale /
@@ -151,6 +165,9 @@ retries dispense. Return the flag to `false` after testing.
   that may have timed out is not automatically retried.
 - An unreachable backend prevents new command delivery/reporting but does not
   expose the ESP32.
+- A claimed command whose terminal report is lost must become `outcome_unknown`
+  after the documented confirmation window; a late bridge report receives a
+  conflict and does not issue another ESP32 request or rewrite history.
 - Expired queued commands are not returned by the device pending API and are
   never executed later.
 - The bridge never calls `/feeder/test`, pump schedule/config/jog, or pH

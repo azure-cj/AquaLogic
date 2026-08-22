@@ -1,7 +1,7 @@
 # Equipment Connection
 
-Status: Implemented local bridge boundary; production hardware hardening deferred  
-Last reviewed: 2026-08-21
+Status: Implemented local bridge boundary and uncertainty reconciliation; production hardware hardening deferred
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -21,6 +21,10 @@ application presents connection freshness before physical controls are used.
 - Active devices with no recent activity are offline. Inactive devices are
   disabled. Actuator status may also be `unknown` when no device activity has
   been observed yet.
+- Retiring a tank deactivates every registered device in the same transaction.
+  Retired device status and command history remain readable to administrators,
+  but device-key authentication, ingestion, command creation, and reactivation
+  are rejected.
 - The actuator workspace displays connection freshness, last update time,
   offline/stale warnings, and the latest validated state reported by the
   bridge.
@@ -35,9 +39,25 @@ application presents connection freshness before physical controls are used.
 4. The bridge reports the result and refreshes local actuator state on a
    best-effort basis.
 
+The backend opportunistically reconciles claimed commands before command
+creation, status/history reads, pending fetches, claim, and report operations.
+An executing command that passes its 180-second post-claim confirmation window
+becomes terminal `outcome_unknown`; it is never returned to the bridge queue.
+
 Light and feeder commands may remain queued while a bridge is unavailable and
 can expire before delivery. Pump maintenance commands require an online bridge
 and are rejected rather than silently queued while it is offline.
+
+Tank retirement/deletion and hardware movement are operator workflows, not
+remote teardown commands. Before retiring or deleting a tank's equipment,
+disable device-resident
+schedules and stop/verify equipment locally, deactivate the old registration,
+and use a new registration for a destination tank. Follow the [canonical
+move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank)
+to verify the new device identity, sensor readings, and physical UV/LED/feeder
+and Pump A/B identity before controls resume. The workflow does not claim that
+database deletion or device deactivation clears firmware configuration or
+physical state.
 
 ## Safety rule
 
@@ -54,6 +74,9 @@ fresh confirmation.
 - A device cannot select another tank through an ingestion or actuator request.
 - Multiple active devices per tank remain supported; operations that require one
   device must select it explicitly when necessary.
+- A pump dispense lock is scoped to the registered device and pump actuator, not
+  the tank alone. Administrator physical verification records the verifier,
+  time, and optional note and clears only the software lock.
 
 ## Approved hardening and clarification
 

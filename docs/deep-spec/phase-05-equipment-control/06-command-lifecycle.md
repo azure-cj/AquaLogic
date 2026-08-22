@@ -1,7 +1,7 @@
 # Command Lifecycle
 
-Status: Implemented lifecycle and safety boundary  
-Last reviewed: 2026-08-21
+Status: Implemented lifecycle, uncertainty reconciliation, and safety boundary
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -19,6 +19,7 @@ The backend stores these states:
 | `succeeded` | Succeeded | The bridge received a valid firmware response and reported completion |
 | `failed` | Failed | Validation, network, timeout, or firmware-response failure was reported |
 | `expired` | Expired | The command was still queued when its expiry passed and was not sent |
+| `outcome_unknown` | Outcome unknown | The command was claimed, but no trustworthy terminal result arrived before the post-claim confirmation deadline; physical execution may have occurred |
 
 Normal UV, LED, and feeder commands default to a 120-second expiry and may be
 configured up to 300 seconds. Pump commands default to 20 seconds and may not
@@ -35,10 +36,15 @@ exceed 30 seconds before bridge claim.
 6. The bridge reports success or failure and attempts a state refresh.
 7. Finalized commands cannot be claimed, requeued, or physically executed
    again.
+8. Reconciliation measures the 180-second confirmation window from
+   `executing_at`, not from queue request or queue expiry. It transitions only
+   `executing -> outcome_unknown`, persists and audits that transition once, and
+   is idempotent when called again.
 
-Pending queue expiry is enforced by the backend and bridge. An executing
-command is finalized by its result report rather than being silently converted
-to a queued retry.
+Pending queue expiry is enforced by the backend and bridge only while a command
+is `queued`. An executing command is finalized by its result report or by
+reconciliation to `outcome_unknown`, rather than being silently converted to a
+queued retry.
 
 ## Success and acknowledgement semantics
 
@@ -46,6 +52,12 @@ Success means the bridge received a valid response from the intended firmware
 endpoint and reported it to AquaLogic. State refresh is best effort and is not
 required to repeat the physical command. For device-resident schedules,
 success confirms configuration acceptance, not every future scheduled event.
+
+Retirement is a tank lifecycle boundary, not a command replay or teardown
+workflow. It is rejected while a tank command is `executing` or an uncleared
+`outcome_unknown`; after physical verification and retirement, no new command
+can be created or claimed, while the old command and state history remain
+readable to authorized administrators.
 
 For pump dispense, success additionally requires observation that the
 firmware-configured volume move completed. A bounded timeout may trigger one
@@ -59,6 +71,9 @@ intentional safety stop before the command is reported failed.
 - Duplicate bridge claims return a conflict and cannot execute the command
   twice.
 - Duplicate final reports are idempotent and cannot requeue a finalized command.
+- A late success/failure report after `outcome_unknown` returns `409 Conflict`,
+  is recorded once per distinct report fingerprint, and cannot overwrite the
+  terminal unknown state.
 - There is no retry endpoint or retry button. An operator may issue a new
   command only after checking the physical equipment.
 - Pump safety stop is a deliberate one-shot safety action, not a retry.
@@ -70,6 +85,19 @@ intentional safety stop before the command is reported failed.
   key.
 - A device can claim or report only commands mapped to its own fixed tank.
 - Staff and public users cannot create, read, or finalize actuator commands.
+
+## Device movement boundary
+
+Before a physical move, the operator follows the [canonical
+move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank):
+finish or physically verify pending work, disable device-resident schedules,
+deactivate the old registration, and provision a new destination identity.
+Commands and state history remain attached to the old registered device/tank;
+they are not moved or replayed. A new destination schedule or actuator command
+is allowed only after fresh readings and physical equipment identity have been
+verified. An executing or `outcome_unknown` pump command must be handled by the
+physical-verification flow before its same-device/same-pump dispense lock is
+cleared.
 
 ## Approved hardening and clarification
 
@@ -95,3 +123,5 @@ intentional safety stop before the command is reported failed.
 - Hardware requests are never blindly retried.
 - Success is not overstated as proof of future schedule execution or current
   physical state.
+- Unknown outcomes are visible, auditable, and require attributable administrator
+  physical verification before the same-device/same-pump dispense lock clears.

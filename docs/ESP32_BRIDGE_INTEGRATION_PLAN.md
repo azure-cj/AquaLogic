@@ -2,7 +2,7 @@
 
 Status: v1 UV/LED/feeder controls plus Pump A/B manual-test bridge implemented
 for temporary hardware testing
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-22
 
 ## Goal and boundary
 
@@ -23,6 +23,10 @@ flowchart LR
 The browser and backend never call the ESP32 directly. The bridge is the only
 component allowed to call local actuator routes. A tunnel may expose the
 dashboard/API during a test, but the ESP32 is never tunneled or published.
+Physical movement is a deactivation plus new-provisioning workflow, not a
+change to this bridge's tank mapping. Use the [canonical move/reprovisioning
+runbook](WORKFLOWS.md#moving-equipment-to-another-tank) before changing the
+local bridge configuration.
 
 ## Firmware endpoint map used by v1
 
@@ -61,7 +65,9 @@ remain out of scope.
 An administrator provisions one device key once and the server fixes that
 device to one tank. The device key is shown only at provisioning and is stored
 as a hash. Staff passwords, browser JWTs, and browser sessions are never used
-by the bridge.
+by the bridge. Deactivation immediately rejects the old key while preserving
+its identity and history. Key rotation replaces credentials for that same
+fixed device/tank mapping; movement requires a new registration and key.
 
 The migration `0008_actuator_controls` adds:
 
@@ -70,6 +76,11 @@ The migration `0008_actuator_controls` adds:
   error;
 - `actuator_states`: latest validated state for UV, LED, feeder, and Pump A/B; and
 - `actuator_state_history`: append-only state reports for diagnostics.
+
+Migration `0011_actuator_uncertain_outcomes` extends those command rows with
+the post-claim confirmation deadline, persistent unknown-outcome and late-report
+metadata, and administrator physical-verification metadata. It does not add a
+retry or replay path.
 
 Admin routes:
 
@@ -89,7 +100,14 @@ POST /device-ingestion/actuators/{command_id}/failed
 POST /device-ingestion/actuator-state
 ```
 
-Commands are `queued`, `executing`, `succeeded`, `failed`, or `expired`.
+Commands are `queued`, `executing`, `succeeded`, `failed`, `expired`, or
+`outcome_unknown`. A claimed command that has no trustworthy terminal report
+by the 180-second post-claim confirmation deadline becomes `outcome_unknown`;
+it is not returned to the bridge queue or automatically retried. A late bridge
+report is rejected without overwriting that terminal state. A same-device,
+same-pump dispense remains locked while an earlier dispense is executing or
+uncleared unknown; Stop remains available, and an administrator must record
+physical verification before clearing the software lock.
 Queued light/feeder commands expire after 120 seconds by default; pump commands
 expire after 20 seconds by default and never exceed 30 seconds. No command
 appears in a pending response after expiry. The backend only allows the device mapped to the
@@ -100,7 +118,7 @@ History is newest-first and paginated. `page_size` defaults to 10 and is capped
 at 50; optional exact-match `actuator` and lifecycle `status` filters narrow the
 audit view. The response includes `items`, `total`, `total_pages`, previous/next
 flags, and a fixed-device lifecycle `summary` with queued, executing, succeeded,
-failed, and expired counts. The admin dashboard never loads an unbounded audit
+failed, expired, and outcome_unknown counts. The admin dashboard never loads an unbounded audit
 list; each row uses human-readable actuator/action labels, and details such as
 the command ID, validated request, timestamps, and reported result/error remain
 available through an expandable detail view.
@@ -184,6 +202,15 @@ device key, and the safe polling values from the example file. Keep
 `pump_manual_test_enabled` false except during a controlled empty-syringe or
 water-only motor test; set it to true only for that test window. Do not create a
 tunnel to the ESP32.
+
+This temporary test setup provisions the identity for one tank only. If the
+physical hardware is later moved, deactivate this registration, physically
+verify and reconnect the equipment, provision a new destination registration,
+configure the new one-time key, confirm destination-only fresh readings and
+equipment identity, then recreate intended device-resident schedules. Do not
+edit `tank_id`, migrate readings, or infer a location from the bridge. Use the
+[canonical workflow](WORKFLOWS.md#moving-equipment-to-another-tank) for the
+full rollback and physical-confirmation rules.
 
 ## Explicit exclusions and success criteria
 

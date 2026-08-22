@@ -39,6 +39,11 @@ export type Tank = {
   volume_liters?: number | null;
   established_on?: string | null;
   hero_image_url?: string | null;
+  lifecycle: 'active' | 'retired';
+  retired_at?: string | null;
+  retired_by_user_id?: number | null;
+  retired_by_user_name?: string | null;
+  retirement_note?: string | null;
 };
 
 export type Fish = {
@@ -95,14 +100,46 @@ export type FleetTank = {
   reporting_age_seconds: number | null;
   active_warning_count: number;
   active_critical_count: number;
+  active_monitoring_incident_count: number;
   species_care_status?: SpeciesSuitabilityStatus;
   assigned_species_count?: number;
+};
+
+export type MonitoringIncidentResolutionReason =
+  | 'reporting_recovered'
+  | 'monitoring_disabled'
+  | 'tank_retired';
+
+export type MonitoringIncident = {
+  id: number;
+  tank_id: number;
+  tank_name: string;
+  tank_lifecycle: 'active' | 'retired';
+  state: 'active' | 'resolved';
+  started_at: string;
+  detected_at: string;
+  last_reading_received_at: string | null;
+  last_report_age_seconds: number | null;
+  resolved_at: string | null;
+  resolution_reason: MonitoringIncidentResolutionReason | null;
+  recovery_reading_id: number | null;
+  duration_seconds: number;
+};
+
+export type MonitoringIncidentPage = {
+  items: MonitoringIncident[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_previous: boolean;
+  has_next: boolean;
 };
 
 export type TankOperations = {
   tank_id: number;
   evaluated_at: string;
-  status: FleetStatus;
+  status: FleetStatus | 'retired';
   latest_reading: Reading | null;
   parameter_statuses: Record<string, FleetStatus | 'unavailable'>;
   active_alerts: Alert[];
@@ -110,7 +147,7 @@ export type TankOperations = {
 
 export type ActuatorName = 'uv' | 'led' | 'feeder' | 'pump_a' | 'pump_b';
 export type ActuatorAction = 'on' | 'off' | 'timer' | 'schedule' | 'feed_now' | 'config' | 'dispense' | 'stop' | 'retract';
-export type ActuatorCommandStatus = 'queued' | 'executing' | 'succeeded' | 'failed' | 'expired';
+export type ActuatorCommandStatus = 'queued' | 'executing' | 'succeeded' | 'failed' | 'expired' | 'outcome_unknown';
 
 export type LightActuatorState = {
   on: boolean;
@@ -158,6 +195,7 @@ export type DeviceActuatorStatus = {
   last_seen_at: string | null;
   checked_at: string;
   actuators: ActuatorStateSnapshot[];
+  pump_dispense_locks: PumpDispenseLock[];
 };
 
 export type ActuatorCommand = {
@@ -173,9 +211,22 @@ export type ActuatorCommand = {
   requested_at: string;
   expires_at: string;
   executing_at: string | null;
+  confirmation_deadline_at: string | null;
+  outcome_unknown_at: string | null;
   execution_at: string | null;
   result: Record<string, unknown> | null;
   error: string | null;
+  physical_verification_user_id: number | null;
+  physical_verification_actor_name: string | null;
+  physical_verification_at: string | null;
+  physical_verification_note: string | null;
+};
+
+export type PumpDispenseLock = {
+  actuator: 'pump_a' | 'pump_b';
+  command_id: string;
+  status: 'executing' | 'outcome_unknown';
+  verification_required: boolean;
 };
 
 export type ActuatorCommandHistoryPage = {
@@ -196,6 +247,7 @@ export type ActuatorHistorySummary = {
   succeeded: number;
   failed: number;
   expired: number;
+  outcome_unknown: number;
 };
 
 export type Threshold = {

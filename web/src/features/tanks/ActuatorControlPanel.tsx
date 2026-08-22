@@ -10,6 +10,7 @@ import type {
   FeederActuatorState,
   FeederScheduleSlot,
   LightActuatorState,
+  PumpDispenseLock,
   PumpActuatorState,
 } from '@/shared/api/models';
 import {
@@ -67,6 +68,7 @@ const commandStatusDescription: Record<ActuatorCommandStatus, string> = {
   succeeded: 'Completed — the equipment confirmed the action',
   failed: 'Not completed — the equipment did not confirm the action',
   expired: 'Not sent — the request expired while waiting',
+  outcome_unknown: 'Physical result unknown — verify the equipment before another dispense',
 };
 
 const commandStatusFilterLabel: Record<ActuatorCommandStatus, string> = {
@@ -75,6 +77,7 @@ const commandStatusFilterLabel: Record<ActuatorCommandStatus, string> = {
   succeeded: 'Completed · action confirmed',
   failed: 'Failed · action not confirmed',
   expired: 'Expired · not sent',
+  outcome_unknown: 'Outcome unknown · physical verification required',
 };
 
 const actuatorLabels: Record<ActuatorName, string> = {
@@ -230,12 +233,14 @@ function CommandDetails({ command }: { command: ActuatorCommand }) {
         <div><dt>Requested</dt><dd>{formatDate(command.requested_at)}</dd></div>
         <div><dt>Expires</dt><dd>{formatDate(command.expires_at)}</dd></div>
         <div><dt>Processing started</dt><dd>{command.executing_at ? formatDate(command.executing_at) : 'Not started'}</dd></div>
-        <div><dt>Equipment result</dt><dd>{command.execution_at ? formatDate(command.execution_at) : 'Not reported'}</dd></div>
+        <div><dt>Equipment result</dt><dd>{command.execution_at ? formatDate(command.execution_at) : command.outcome_unknown_at ? `Unknown since ${formatDate(command.outcome_unknown_at)}` : 'Not reported'}</dd></div>
         <div><dt>Actor</dt><dd>{command.actor_name ?? 'Administrator'}</dd></div>
       </dl>
       {payloadSummary && <p className="command-details-summary"><strong>Validated request</strong><span>{payloadSummary}</span></p>}
+      {command.status === 'outcome_unknown' && <p className="command-details-error"><strong>Physical verification required</strong><span>This command may have reached the equipment. Verification clears the software pump lock but does not prove the historical dose.</span></p>}
       {command.error && <p className="command-details-error"><strong>Reported failure</strong><span>{command.error}</span></p>}
       {command.result && <p className="command-details-result"><strong>Completion result</strong><span>The equipment action was reported as complete.</span></p>}
+      {command.physical_verification_at && <p className="command-details-result"><strong>Verified by {command.physical_verification_actor_name ?? 'Administrator'}</strong><span>{formatDate(command.physical_verification_at)}{command.physical_verification_note ? ` · ${command.physical_verification_note}` : ''}</span></p>}
     </div>
   );
 }
@@ -341,6 +346,8 @@ function PumpCard({
   onRetract,
   busy,
   disabled,
+  lock,
+  onClearVerification,
 }: {
   actuator: 'pump_a' | 'pump_b';
   state: PumpActuatorState | null;
@@ -349,6 +356,8 @@ function PumpCard({
   onRetract: () => void;
   busy: string | null;
   disabled: boolean;
+  lock: PumpDispenseLock | undefined;
+  onClearVerification: () => void;
 }) {
   const label = actuator === 'pump_a' ? 'Syringe Pump A' : 'Syringe Pump B';
   const busyFor = (action: string) => busy === `${actuator}:${action}`;
@@ -375,16 +384,24 @@ function PumpCard({
         <strong>{state ? `${state.volume_ml.toFixed(2)} mL` : 'Unknown'}</strong>
       </div>
       <div className="pump-action-grid" aria-label={`${label} manual test controls`}>
-        <button className="button button-primary" type="button" aria-label={`${label} dispense/test`} disabled={disabled || Boolean(busy)} onClick={onDispense}>
+        <button className="button button-primary" type="button" aria-label={`${label} dispense/test`} disabled={disabled || Boolean(busy) || Boolean(lock)} onClick={onDispense}>
           <Play size={15} /> Dispense / test
         </button>
-        <button className="button button-danger pump-stop-button" type="button" aria-label={`${label} stop`} disabled={disabled || Boolean(busy)} onClick={onStop}>
+        <button className="button button-danger pump-stop-button" type="button" aria-label={`${label} stop`} disabled={disabled || (Boolean(busy) && !lock)} onClick={onStop}>
           <Square size={14} /> Stop
         </button>
         <button className="button button-secondary" type="button" aria-label={`${label} retract`} disabled={disabled || Boolean(busy)} onClick={onRetract}>
           <RotateCcw size={15} /> Retract
         </button>
       </div>
+      {lock?.status === 'executing' && <small className="pump-uncertainty-note">An earlier dispense is still awaiting confirmation. Do not start another dispense.</small>}
+      {lock?.status === 'outcome_unknown' && (
+        <div className="pump-uncertainty-note" role="status">
+          <strong>Outcome unknown — physical verification required.</strong>
+          <small>The earlier dispense may have reached the equipment. Verify the pump locally before another dispense. Stop remains available; this verification clears only the software lock.</small>
+          <button className="button button-secondary button-small" type="button" onClick={onClearVerification}>Record physical verification</button>
+        </div>
+      )}
       {disabled && <small className="pump-disabled-note">Reconnect the equipment connection before starting a pump test. No offline test is queued.</small>}
       {busyFor('dispense') && <small className="actuator-busy">Queueing pump test…</small>}
     </article>
@@ -524,12 +541,13 @@ function ActuatorSummary({
   );
 }
 
-export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: number; variant?: ActuatorControlPanelVariant }) {
+export function ActuatorControlPanel({ tankId, variant = 'full', readOnly = false }: { tankId: number; variant?: ActuatorControlPanelVariant; readOnly?: boolean }) {
   const fullView = variant === 'full';
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [feedConfirmOpen, setFeedConfirmOpen] = useState(false);
   const [pumpConfirmation, setPumpConfirmation] = useState<PumpConfirmation | null>(null);
+  const [verificationLock, setVerificationLock] = useState<PumpDispenseLock | null>(null);
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyActuator, setHistoryActuator] = useState<HistoryActuatorFilter>('all');
@@ -569,6 +587,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
     setExpandedCommandId(null);
     setFeedback(null);
     setPumpConfirmation(null);
+    setVerificationLock(null);
     setScheduleInitialized(false);
   }, [tankId]);
 
@@ -596,6 +615,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
     label: string,
     expiresInSeconds?: number,
   ) => {
+    if (readOnly) return;
     clearFeedback();
     const key = `${actuator}:${action}`;
     setBusy(key);
@@ -619,6 +639,29 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
     }
   };
 
+  const clearUncertainty = async () => {
+    if (readOnly || !verificationLock) return;
+    const key = `clear:${verificationLock.command_id}`;
+    clearFeedback();
+    setBusy(key);
+    try {
+      await api<ActuatorCommand>(`/tanks/${tankId}/actuators/commands/${verificationLock.command_id}/clear-uncertainty`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tank-actuator-status', tankId] }),
+        queryClient.invalidateQueries({ queryKey: ['tank-actuator-history', tankId] }),
+      ]);
+      setVerificationLock(null);
+      setFeedback({ tone: 'success', message: 'Physical verification recorded. The historical command remains Outcome unknown; the software pump lock is cleared.' });
+    } catch (caught) {
+      setFeedback({ tone: 'error', message: errorMessage(caught, 'Could not record physical verification.') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const snapshots = status.data?.actuators ?? [];
   const uv = asLightState(snapshots.find((item) => item.actuator === 'uv'));
   const led = asLightState(snapshots.find((item) => item.actuator === 'led'));
@@ -629,6 +672,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
   const historyStart = historyData?.total ? ((historyData.page - 1) * historyData.page_size) + 1 : 0;
   const historyEnd = historyData ? Math.min(historyData.page * historyData.page_size, historyData.total) : 0;
   const pumpsDisabled = !status.data?.device_online;
+  const pumpALock = status.data?.pump_dispense_locks?.find((lock) => lock.actuator === 'pump_a');
+  const pumpBLock = status.data?.pump_dispense_locks?.find((lock) => lock.actuator === 'pump_b');
   const confirmedPumpLabel = pumpConfirmation ? actuatorLabels[pumpConfirmation.actuator] : '';
   const confirmedPumpVolume = pumpConfirmation?.actuator === 'pump_a' ? pumpA?.volume_ml : pumpB?.volume_ml;
 
@@ -641,10 +686,10 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
         onDismiss={() => setFeedback(null)}
       />
       <Panel
-        title={fullView ? 'Actuator controls' : 'Actuator snapshot'}
-        description={fullView ? 'Administrator-only controls for this tank’s equipment' : 'Quick equipment controls for this tank'}
-        className={`tank-actuator-panel ${fullView ? '' : 'tank-actuator-summary-panel'}`}
-        action={fullView ? (
+        title={readOnly ? 'Equipment history' : fullView ? 'Actuator controls' : 'Actuator snapshot'}
+        description={readOnly ? 'Retained administrator command history; retired equipment is read-only' : fullView ? 'Administrator-only controls for this tank’s equipment' : 'Quick equipment controls for this tank'}
+        className={`tank-actuator-panel ${fullView ? '' : 'tank-actuator-summary-panel'} ${readOnly ? 'retired-read-only' : ''}`}
+        action={fullView && !readOnly ? (
           <span className={`bridge-freshness bridge-${status.data?.device_freshness ?? 'unknown'}`}>
             <span className="bridge-freshness-dot" aria-hidden="true" />
             {status.data?.device_freshness ?? 'unknown'}
@@ -688,7 +733,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
             />
           ) : (
           <>
-          <div className="actuator-grid">
+          <div className="actuator-grid" hidden={readOnly}>
             <LightCard actuator="uv" state={uv} schedule={uvSchedule} timerSeconds={uvTimer} onTimerChange={setUvTimer} onScheduleChange={setUvSchedule} onCommand={(action, payload, label) => void queueCommand('uv', action, payload, label)} busy={busy} />
             <LightCard actuator="led" state={led} schedule={ledSchedule} timerSeconds={ledTimer} onTimerChange={setLedTimer} onScheduleChange={setLedSchedule} onCommand={(action, payload, label) => void queueCommand('led', action, payload, label)} busy={busy} />
             <article className="actuator-card feeder-card">
@@ -718,7 +763,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
               </div>
             </article>
           </div>
-          <section className="pump-test-section" aria-labelledby="pump-test-heading">
+          <section className="pump-test-section" aria-labelledby="pump-test-heading" hidden={readOnly}>
             <div className="pump-test-heading">
               <div>
                 <p className="actuator-kicker">Advanced maintenance check</p>
@@ -739,6 +784,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_a', action: 'retract' })}
                 busy={busy}
                 disabled={pumpsDisabled}
+                lock={pumpALock}
+                onClearVerification={() => setVerificationLock(pumpALock ?? null)}
               />
               <PumpCard
                 actuator="pump_b"
@@ -748,6 +795,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_b', action: 'retract' })}
                 busy={busy}
                 disabled={pumpsDisabled}
+                lock={pumpBLock}
+                onClearVerification={() => setVerificationLock(pumpBLock ?? null)}
               />
             </div>
           </section>
@@ -773,6 +822,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
                 <span className="summary-succeeded"><strong>{historyData.summary.succeeded}</strong><small>Succeeded</small></span>
                 <span className="summary-failed"><strong>{historyData.summary.failed}</strong><small>Failed</small></span>
                 <span className="summary-expired"><strong>{historyData.summary.expired}</strong><small>Expired</small></span>
+                <span className="summary-unknown"><strong>{historyData.summary.outcome_unknown}</strong><small>Outcome unknown</small></span>
               </div>
             )}
             <div className="actuator-history-filters">
@@ -904,6 +954,16 @@ export function ActuatorControlPanel({ tankId, variant = 'full' }: { tankId: num
           );
         }}
         onClose={() => setPumpConfirmation(null)}
+      />
+      <ConfirmDialog
+        open={verificationLock !== null}
+        title="Record physical verification?"
+        message="Confirm that you physically inspected this pump and verified the equipment before another dispense. This records who verified the setup and clears only the software lock; it does not prove the exact historical dose or change the Outcome unknown command."
+        confirmLabel="Record verification"
+        tone="danger"
+        busy={verificationLock ? busy === `clear:${verificationLock.command_id}` : false}
+        onConfirm={() => void clearUncertainty()}
+        onClose={() => setVerificationLock(null)}
       />
       </Panel>
     </>
