@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-08-17
+Last reviewed: 2026-08-22
 
 ## System overview
 
@@ -36,6 +36,9 @@ and includes the route modules. The main implementation areas are:
   alert creation.
 - `app/services/species_suitability.py`: pure, staff-only derived species-care
   evaluation using the latest sensor reading and species preference fields.
+- `app/services/tank_lifecycle.py`: centralized active-tank write guards,
+  SQLite/PostgreSQL mutation locking, retirement actuator checks, and the
+  explicit monitoring-expectation boundary.
 - `app/services/demo_sensor.py`: opt-in local reading generation.
 - `alembic/versions/`: database schema history.
 - `tests/`: API and behavior tests using an isolated test database.
@@ -83,15 +86,54 @@ from current web and backend work.
 3. The decision engine evaluates enabled threshold configurations.
 4. Warning or critical alerts are created when values violate configured bounds,
    while unresolved alert duplication is controlled by the service logic.
-5. Authenticated web clients read fleet, history, alerts, and analytics data.
-6. Public web clients read a restricted tank view by public ID.
+5. A successfully accepted reading resolves the tank's active monitoring
+   incident as reporting recovery in the same transaction; heartbeat, invalid,
+   or rolled-back requests do not.
+6. A lifespan-owned 60-second detector records one tank-level monitoring outage
+   after the configured grace period, using the database uniqueness boundary so
+   multiple API workers remain idempotent.
+7. Authenticated web clients read fleet, incident history, alerts, and analytics
+   data.
+8. Public web clients read a restricted tank view by public ID.
+
+Tank deletion is a database-first administrator operation. The route captures
+the current hero URL, commits the audit event and relational cascade, and only
+then attempts to remove an AquaLogic-owned local tank image. The safe media
+helper confines deletion to the configured media root and the `/api/media/tanks/`
+namespace, ignores missing or external files, and logs post-commit filesystem
+failures without reversing the committed database change. Deletion does not
+send hardware commands or imply that ESP32 schedules or physical state were
+cleared; the operator procedure is in
+[`docs/WORKFLOWS.md`](WORKFLOWS.md#tank-deletion-and-hardware-decommissioning).
+
+Tank retirement is the preceding one-way lifecycle transition. It is serialized
+with device writes, records retirement metadata and an audit event, forces the
+tank private, clears `monitoring_expected_at`, resolves an active monitoring
+incident as `tank_retired`, and deactivates every registered device in the same
+transaction. The shared lifecycle service uses SQLite's writer lock during
+development and row locks on PostgreSQL. Retired detail and history remain
+readable, but live fleet/public/ingestion/control and active tank mutation paths
+exclude or reject the retired record. A last-device transition resolves an
+active incident as `monitoring_disabled`; the first active device after zero
+starts a fresh expectation grace period.
+
+Physical device movement is modeled as deactivation plus new provisioning. A
+registered device's server-side tank mapping is never edited, and readings,
+commands, and state history remain attached to the original identity. The
+operator must physically move and verify the hardware, provision a new
+destination registration and one-time key, confirm destination-only readings,
+and recreate only intended device-resident schedules. See
+[`docs/WORKFLOWS.md`](WORKFLOWS.md#moving-equipment-to-another-tank).
 
 For actuator control, an admin queues a server-generated command for the fixed
 device/tank mapping. The bridge fetches only unexpired commands using the
 registered device key, claims one before making the matching allowlisted local
-GET request, and reports `executing`, `succeeded`, or `failed`. The backend
-records the admin actor, validated payload, expiry, timestamps, result/error,
-and append-only state reports. Staff users receive 403 for actuator command,
+    GET request, and reports `executing`, `succeeded`, or `failed`. If the
+    confirmation deadline expires from `executing_at`, shared reconciliation
+    persists terminal `outcome_unknown` rather than expiring or retrying the
+    command. The backend records the admin actor, validated payload, queue and
+    confirmation deadlines, timestamps, result/error, physical-verification
+    metadata, and append-only state reports. Staff users receive 403 for actuator command,
 state, and history endpoints.
 
 The ESP32 bridge is temporary test infrastructure. It polls the local firmware
@@ -107,7 +149,16 @@ actuator may already have run. The current firmware does not expose a
 volume-setting route, so the dashboard displays the firmware-reported volume
 and does not accept a fake millisecond dose value. Dissolved oxygen and
 ammonia remain nullable/unavailable, are skipped by threshold evaluation, and
-have no actuator or command path.
+  have no actuator or command path.
+
+   Same-device, same-pump dispense creation is serialized on the registered
+   device row: PostgreSQL uses a row lock and SQLite development uses its
+   `BEGIN IMMEDIATE` writer lock. The claim path repeats the active-pump check
+   under the same serialization before the physical call. A pump uncertainty
+   lock blocks only another dispense for that device and pump; Stop remains
+   available, and administrator physical verification clears only the software
+   lock without changing the historical unknown outcome. Late bridge reports
+   receive a deterministic conflict and cannot rewrite the command.
 
 The browser and backend never connect directly to the ESP32. Tunnel
 infrastructure is limited to temporary dashboard/API testing; the ESP32 stays

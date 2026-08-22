@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -35,6 +35,12 @@ choose only the context relevant to the task.
 
 ## Current implementation deep specs
 
+- [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
+  authoritative roadmap and detailed work-packet index for the final
+  cross-cutting safety, correctness, clarity, and client-validation pass after
+  Phases 01–06. Goals 1–5 are implemented; persistent monitoring incidents are
+  current behavior under packet 09.
+
 - [`deep-spec/phase-06-access-and-platform/`](deep-spec/phase-06-access-and-platform/):
   current behavior and hardening record for authentication, account security,
   staff lifecycle, authorization, integrity, and local recovery.
@@ -63,8 +69,9 @@ These documents are preserved because they contain useful history or proposal
 material. They are not the primary source of current implementation behavior.
 
 - [`WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
-  is the latest implementation report for the web dashboard and should be read
-  alongside `DEVELOPMENT_STATUS.md`.
+  is a historical implementation checkpoint for the web dashboard. It is
+  retained for history; current route, validation, and release status come from
+  `DEVELOPMENT_STATUS.md`, canonical docs, and source/tests.
 - [`AQUALOGIC_CONTEXT.md`](AQUALOGIC_CONTEXT.md) is the original business and
   academic proposal context.
 - [`AquaLogic_Full_Software_Development_Plan.md`](AquaLogic_Full_Software_Development_Plan.md)

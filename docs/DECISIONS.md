@@ -1,10 +1,85 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-08-21 — Preserve retired tank history outside live operations
+
+**Decision:** Add a bounded `Active -> Retired` tank lifecycle after the core
+final-hardening fixes. Retired tanks leave live fleet, public, monitoring, and
+equipment-control workflows while retaining their readings, alerts, species
+assignments, device/command history, configuration, and owned media for
+authorized historical review. Permanent deletion remains separate and requires
+retirement first. Reactivation is deferred.
+
+**Reason:** Hard deletion is relationally consistent but irreversibly removes
+operational evidence that remains useful when a physical tank is taken out of
+service. A two-state lifecycle retains that evidence without introducing a
+general asset-management system.
+
+**Consequences:** Implementation requires an Alembic migration, dedicated
+administrator lifecycle endpoint, active/retired query behavior, write/control
+guards, public-page shutdown, device deactivation, UI history access, and new
+regression coverage. This is project-owner direction and is not represented as
+a direct quote or recorded answer from JRed.
+
+## 2026-08-21 — Persist unattended tank-level monitoring outages in-app
+
+**Decision:** Add one persistent monitoring-outage incident per eligible active
+tank after a configurable grace period that defaults to 15 minutes without a
+fresh accepted reading. Keep the existing 90-second request-time Offline rule.
+A fresh accepted reading automatically resolves the incident. Delivery remains
+in-app only.
+
+**Reason:** Request-time Offline status protects against showing stale Normal
+data but cannot record an overnight outage while nobody uses the dashboard. A
+tank-level incident matches the operational question even when a tank has
+multiple registered devices and avoids creating duplicate device alarms.
+
+**Consequences:** Implementation requires explicit monitoring-expectation
+eligibility, an idempotent background detector, a dedicated persistence/API/UI
+contract, recovery integration in reading ingestion, and retirement/device
+lifecycle handling. Push, email, SMS, on-call routing, and enterprise
+observability remain deferred. This is project-owner direction and is not
+represented as a direct quote or recorded answer from JRed.
+
+## 2026-08-22 — Implement bounded persistent monitoring incidents
+
+**Decision:** Implement the 2026-08-21 monitoring decision as a dedicated
+`MonitoringIncident` model and in-app API/UI slice. Use a tank-level detector
+with a 900-second default grace period, one active row per eligible active tank,
+idempotent recovery on accepted readings, and explicit `monitoring_disabled` or
+`tank_retired` terminal reasons. Preserve the 90-second request-time Offline
+rule and analytics reporting-gap reconstruction as separate concerns.
+
+**Reason:** The approved scope is now sufficiently specified to ship without
+introducing external notification delivery, generalized scheduling, or an
+enterprise job system. Database uniqueness and writer serialization make
+multiple detector workers safe for SQLite development and PostgreSQL deployment.
+
+**Consequences:** Migration `0013_persistent_monitoring_incidents` must be
+applied before workers start. Deployment validation must still exercise restart,
+late accepted readings, and PostgreSQL locking with the safe operational
+checklist.
+
+## 2026-08-21 — Leave fish compatibility undecided and notes-only
+
+**Decision:** Do not choose or implement a fish-to-fish compatibility model in
+the final hardening pass. Preserve free-text compatibility notes and the current
+water-only Species Care evaluator until the project owner supplies a later
+direction.
+
+**Reason:** A reliable compatibility workflow needs a deliberately curated
+knowledge model and ownership process. Selecting one prematurely would create
+unsupported biological claims and expand scope beyond the approved hardening
+work.
+
+**Consequences:** No pairwise scores, assignment blocking, structured
+compatibility rules, or new compatibility statuses may enter the implementation
+plan. UI clarity work may explain the current limitation without filling it.
 
 ## 2026-07-27 — Use layered project context
 
@@ -474,6 +549,83 @@ when the bridge is stale or offline. Audit retention, archive/export behavior,
 and system attribution for future scheduler-generated commands remain deferred.
 Production fail-safe hardware behavior, timezone/device-clock management, and
 future scheduler workers require separate design and validation.
+
+## 2026-08-22 — Persist uncertain actuator outcomes and serialize pump dispenses
+
+**Decision:** Add terminal `outcome_unknown` reconciliation for commands that
+were claimed but lack a trustworthy result after a 180-second post-claim
+confirmation window. Keep queue expiry limited to `queued`, reject late bridge
+reports with deterministic `409 Conflict`, and never retry or replay a physical
+request. Block a second `dispense` only for the same registered device and pump
+while the earlier command is executing or uncleared unknown. Record
+administrator physical verification (actor, time, and bounded note) to clear the
+software lock without rewriting the historical outcome; keep Stop available.
+
+**Reason:** A lost bridge/backend report cannot prove that a physical actuator
+did not run. The conservative terminal state prevents duplicate pump dosing
+while still allowing a deliberate, attributable operator decision after local
+inspection. PostgreSQL row locking and SQLite `BEGIN IMMEDIATE` serialize the
+same-device pump check and claim recheck without weakening atomic claim-before-
+execution.
+
+**Consequences:** History/API/UI expose the unknown state and summary count, and
+hardware validation must confirm the 180-second window is longer than the
+bridge's maximum legitimate completion/report path. Automatic dosing, command
+replay, generalized scheduling, and fleet job infrastructure remain deferred.
+
+## 2026-08-22 — Clean owned tank media after committed deletion
+
+**Decision:** Keep tank deletion relationally authoritative and database-first.
+Capture the current hero URL, commit the audit event and cascade, then best-effort
+remove only an AquaLogic-owned local path contained by `MEDIA_ROOT`. Missing,
+external, and out-of-root paths are ignored; post-commit filesystem failures are
+logged without attempting to reverse the committed deletion.
+
+**Reason:** Deleting media before the database transaction can orphan the
+relational reference when a commit fails. Deleting arbitrary or hosted paths
+would exceed AquaLogic's ownership boundary. A committed database delete must
+not be reported as failed solely because local cleanup needs operator follow-up.
+
+**Consequences:** The permanent-delete warning and workflow must distinguish
+relational cleanup from physical hardware decommissioning. Device-resident
+schedules and physical state require manual action. The implemented retired-tank
+lifecycle now gates permanent deletion, but this change does not introduce
+remote teardown.
+
+## 2026-08-22 — Treat hardware movement as reprovisioning
+
+**Decision:** Move equipment by deactivating the old fixed device registration,
+physically moving and verifying the hardware, provisioning a new destination
+registration and one-time key, confirming destination-only readings and
+actuator identity, and recreating only intended device-resident schedules.
+
+**Reason:** Editing `tank_id`, migrating historical readings, reusing keys, or
+assuming firmware state moved would blur historical ownership and could direct
+controls at the wrong physical tank.
+
+**Consequences:** The existing Devices API remains activation/deactivation,
+rotation, and provisioning only. No reassignment, remote firmware reset,
+schedule cloning, or device deletion is added; unresolved physical checks
+remain operator responsibilities.
+
+## 2026-08-22 — Make monitoring and Species Care wording explicit
+
+**Decision:** Present offline or stale sensor values as last-known context and
+derive reporting age from server receipt time. Call the operator alert action
+**Mark handled** while retaining the `/alerts/{alert_id}/resolve` backend route
+and `operator` resolution metadata. Explain operational status as global
+threshold evaluation, label Species Care as water-only advisory guidance, and
+state that exact threshold boundaries remain Normal.
+
+**Reason:** The monitoring, alert, and Species Care engines already implement
+these semantics, but concise UI labels could imply current readings, physical
+recovery, fish compatibility, or inclusive threshold comparisons.
+
+**Consequences:** The change is presentation-only: no freshness window,
+threshold comparison, alert lifecycle, deduplication, or Species Care evaluator
+behavior changes. Fish compatibility remains notes-only and undecided, and the
+authenticated web derives tank-detail age from the existing reading
+`received_at` field without an API migration.
 
 ## Adding a decision
 

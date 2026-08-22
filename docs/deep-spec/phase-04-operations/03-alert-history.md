@@ -1,6 +1,6 @@
 # Alert History
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 Status: Implemented Phase 02 alert lifecycle and current operations history view
 
 ## 1. Purpose
@@ -26,8 +26,16 @@ The authenticated alert routes are:
 | GET | `/alerts/history` | Filter alert history |
 | PUT | `/alerts/{alert_id}/resolve` | Resolve one alert as an operator |
 
-The web route is `/admin/alerts`. Staff and administrators can read and resolve
-alerts. Public viewers cannot access alert history.
+The web route is `/admin/alerts`. Staff and administrators can read and mark
+active-tank alerts handled. Public viewers cannot access alert history. Retired
+tank alert records remain readable from the tank workspace and history route,
+but retirement makes them read-only and an alert cannot be resolved afterward.
+The compatible backend route remains `/alerts/{alert_id}/resolve`.
+
+The same page provides a separate Monitoring outages view backed by
+`GET /monitoring-incidents?state=all`. These rows are not water-quality alerts,
+have no Mark handled action, and are resolved only by an accepted reading or a
+terminal lifecycle reason such as `monitoring_disabled` or `tank_retired`.
 
 ## 4. Alert Identity and Lifecycle
 
@@ -64,16 +72,22 @@ resolution time, resolver ID when applicable, and nullable `resolution_source`.
 
 `resolution_source` is:
 
-- `operator` for a staff or administrator Resolve action;
+- `operator` for a staff or administrator Mark handled action;
 - `system` for automatic normal-reading or threshold-disabled resolution;
 - `null` for unresolved alerts and legacy resolved rows with unknown origin.
+
+The default `/alerts` live queue excludes retired tanks. `/alerts/history` and
+`/tanks/{tank_id}/alerts?include_resolved=true` retain historical rows for
+authorized staff/admin investigation.
 
 ## 6. Current UI Behavior
 
 The alert page provides tank, severity, parameter, state, and date filters. Each
 row shows the condition, tank, severity, creation time, and current state. An
-unresolved alert has a Resolve action. A resolved alert identifies whether it
-was operator-resolved, automatically resolved, or has an unknown legacy source.
+unresolved alert has a Mark handled action. A resolved alert identifies whether
+it was handled by an operator, automatically resolved, or has an unknown legacy
+source. Mark handled removes the alert from the active queue but does not
+confirm water recovery.
 
 Fleet Overview shows a bounded recent unresolved-alert feed and links to the
 full history view. Analytics can display alert markers and events in the
@@ -100,7 +114,9 @@ The current notification surface is in-app only:
 - filtered Alert History.
 
 Email, push, SMS, delivery workers, notification preferences, retries, and
-separate notification history are not implemented.
+separate external notification history are not implemented. The in-app
+monitoring-outage history is intentionally separate and is available through
+its authenticated incident routes.
 
 ## 9. Edge Cases and Permissions
 

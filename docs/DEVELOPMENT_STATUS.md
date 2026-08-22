@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Completed and working locally
 
@@ -50,6 +50,19 @@ Last reviewed: 2026-08-21
   The bridge preserves sensor polling, uses only the registered device key,
   keeps pump testing default-off, and never retries a potentially executed
   hardware call.
+- Goal 1 actuator uncertainty hardening is implemented: claimed commands have a
+  persisted 180-second post-claim confirmation deadline, idempotent
+  `executing -> outcome_unknown` reconciliation, deterministic late-report
+  rejection, same-device/same-pump dispense interlocks, and administrator-only
+  physical-verification clearance with actor/time/note metadata. Stop remains
+  available during the pump lock; no bridge retry or replay path was added.
+- Goal 2 tank deletion cleanup is implemented: permanent deletion captures the
+  current tank hero URL, commits the relational cascade first, and then
+  best-effort removes only contained AquaLogic-owned local media. Missing,
+  external, and out-of-root paths are safe no-ops; post-commit filesystem
+  failures are logged without reversing the committed delete. Both web deletion
+  dialogs enumerate the major relational, media, and public-page consequences
+  without claiming that device-resident schedules or physical state are cleared.
 - Phase 06 access hardening is implemented: staff/admin/public/device permission
   boundaries, authentication lifecycle revocation, setup-link replay/expiry,
   last-administrator protection, security headers, cookie flags, throttling, and
@@ -95,8 +108,10 @@ Last reviewed: 2026-08-21
   layouts, and accessible loading/dialog patterns.
 - Floating-island navigation uses one grouped configuration and adapts from
   flat links to clustered menus as the viewport or navigation count requires.
-- Local typecheck, tests, and production build have been recorded as passing in
-  `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`.
+- Local typecheck, tests, and production build are recorded in the dated
+  validation checkpoints below; the older
+  `docs/WEB_DASHBOARD_IMPLEMENTATION_REPORT.md` is retained as historical
+  context only.
 - Fish species use a grouped directory by default with a remembered compact-list
   alternative, diet badges, hosted or uploaded JPG/PNG/WebP thumbnails,
   care-group/diet/usage filters, readable details, preferred-range editing,
@@ -118,8 +133,9 @@ Last reviewed: 2026-08-21
   workspace. Multiple active devices per tank remain supported; stable sample
   IDs and dissolved-oxygen/ammonia hardware integration remain deferred.
 - Phase 02 web hardening is implemented: threshold forms provide strict-order
-  feedback, deferred parameters remain hidden, and alert history identifies
-  automatic versus operator resolution while retaining the in-app-only
+  feedback and strict/open boundary guidance, deferred parameters remain
+  hidden, and alert history distinguishes automatic recovery from the
+  operator-facing Mark handled action while retaining the in-app-only
   notification surface.
 - Phase 03 species-care contract hardening is implemented: suitability evaluates
   only temperature, pH, and TDS using receipt-time freshness, the public tank
@@ -128,6 +144,24 @@ Last reviewed: 2026-08-21
   workflows. Species assignment remains staff/admin-accessible, audit logged,
   and compatibility notes remain informational with pairwise compatibility
   deferred.
+- Goal 3 monitoring and Species Care UI clarity is implemented: stale/offline
+  values are labeled as last-known context using server receipt age, tank
+  operations explain operational status separately from Species Care, manual
+  alert handling is presented as Mark handled without changing the backend
+  lifecycle, Species Care is explicitly water-only, and strict/open threshold
+  boundaries are explained without algorithm changes.
+- Goal 4 retired-tank lifecycle is implemented: administrators can perform the
+  idempotent one-way `active -> retired` transition with bounded note and audit
+  metadata; retirement forces private visibility, clears the explicit
+  monitoring expectation, deactivates registered devices transactionally, and
+  preserves readings, alerts, assignments, configuration, media, and actuator
+  history. Active/retired/all tank filters, live fleet exclusion, historical
+  analytics opt-in, centralized active-write guards, retired read-only detail,
+  and retirement-before-delete are covered by backend and web tests. Goal 5
+  persistent monitoring incidents are now implemented separately: eligible
+  active tanks receive one idempotently detected outage row after the
+  configurable grace period, accepted readings recover it, and device
+  disablement or retirement resolves it with explicit reasons.
 
 ### Documentation
 
@@ -140,7 +174,19 @@ Last reviewed: 2026-08-21
   actuator routes, bridge translator, web controls, and focused regression
   tests. The docs now distinguish device-resident UV/LED/feeder schedules from
   backend scheduling, record exact command expiry and no-blind-retry behavior,
-  and keep Pump A/B maintenance separate from automatic chemical dosing.
+  and keep Pump A/B maintenance separate from automatic chemical dosing. The
+  current lifecycle also records claimed-but-unconfirmed outcomes as
+  `outcome_unknown` rather than expired or failed, and documents the
+  same-device/same-pump physical-verification lock.
+- Tank decommissioning and device movement documentation is reconciled with the
+  fixed server-side device/tank mapping: operators deactivate the old identity,
+  physically move and verify equipment, provision a new destination identity,
+  and recreate only intended device-resident schedules. Permanent deletion
+  remains a separate destructive operation and does not imply hardware cleanup.
+- Goal 5 persistent unattended monitoring incidents are documented across the
+  API, architecture, domain, workflow, Phase 02/04 guidance, and packet 09.
+  The in-app history is distinct from water-quality alerts and analytics gap
+  reconstruction; external notification delivery remains deferred.
 
 ### Mobile
 
@@ -152,13 +198,28 @@ Last reviewed: 2026-08-21
 
 - Staff tank workspace is implemented locally: `/admin/tanks/:tankId` adds
   live operations, dynamic Species Care, assignment management, and a shared
-  configuration drawer; browser regression remains to be completed.
-
-- Run a complete browser regression pass after the latest web refactor.
+  configuration drawer. Automated web regression is recorded below; an
+  interactive browser smoke and responsive/accessibility review remains a
+  manual follow-up.
 - Perform the one-device/one-tank UV/LED/feeder and controlled Pump A/B hardware
   test using the temporary dashboard/API tunnel and confirm local-only ESP32
   access. Verify the configured firmware-reported mL dose completes before the
   bridge timeout. Pump testing must use empty syringes or water only.
+- Validate Goal 1 timing and safety on hardware: allow a normal command to
+  complete within the bridge's permitted timing without becoming unknown,
+  exercise a deliberately interrupted report path, confirm the dashboard shows
+  the pump lock and keeps Stop available, record physical verification, and
+  confirm no duplicate dispense occurs. Use empty syringes or water only.
+- Validate Goal 5 in a bounded deployment scenario: apply migration `0013`,
+  start one detector worker, confirm an eligible outage persists once, restart
+  the worker without duplicating the incident, submit an accepted reading, and
+  confirm the incident resolves while any water-quality alert from that same
+  reading remains independent. PostgreSQL locking behavior remains a target
+  deployment validation item.
+- Complete the physical tank-decommissioning checklist before any permanent
+  deletion involving registered equipment: disable schedules, stop and verify
+  equipment locally, deactivate the old device, confirm no further readings or
+  commands arrive, and provision a new identity if hardware is reused.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
 - Reconcile the Flutter app with the backend API contract before implementing
@@ -167,6 +228,8 @@ Last reviewed: 2026-08-21
 
 ## Planned
 
+- External monitoring notifications, delivery workers, and escalation remain
+  deferred.
 - Backend client integration for the Flutter app.
 - Additional sensor hardware and production-grade actuator safety controls;
   pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
@@ -191,6 +254,9 @@ Last reviewed: 2026-08-21
 - The mobile application is not a backend-connected client.
 - Actuator state is last-known state from the bridge; a stale/offline bridge does
   not imply the physical actuator is off.
+- `outcome_unknown` is intentionally conservative: it records that a claimed
+  command may have executed, not that it definitely did or did not. Production
+  hardware timing and emergency-stop behavior remain pending validation.
 - Tunnel infrastructure is temporary test infrastructure only. The ESP32 must
   remain on the tester's private Wi-Fi and is never publicly exposed.
 - WebSocket streaming is not implemented.
@@ -199,6 +265,49 @@ Last reviewed: 2026-08-21
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-08-22
+
+- Goal 1 focused backend tests: `pytest -q tests/test_actuators.py` passed with
+  19 tests, including file-backed SQLite concurrent reconciliation; the final
+  complete backend suite passed with 124 tests.
+- Goal 4 lifecycle coverage passed in the final backend suite, including
+  retirement blocking for executing/uncleared actuator work, idempotent
+  retirement, active/retired/all filtering, historical analytics opt-in,
+  retired read-only behavior, device deactivation, permanent-delete gating,
+  audit metadata, and media-preserving history.
+- Goal 5 focused monitoring tests: `pytest -q tests/test_monitoring_incidents.py`
+  passed with 11 tests, covering controllable grace-period boundaries,
+  detector re-entry/restart idempotence, first-device and reactivation grace,
+  accepted-reading recovery without water-alert suppression, invalid/heartbeat
+  non-recovery, multi-device eligibility, retirement/deletion lifecycle,
+  authenticated pagination/filtering, and concurrent file-backed SQLite
+  detector cycles.
+- Alembic validation: an isolated SQLite upgrade reached the current head,
+  including `0011_actuator_uncertain_outcomes`, `0012_retired_tank_lifecycle`,
+  and `0013_persistent_monitoring_incidents`; the migrations preserve existing
+  command rows and backfill confirmation deadlines only for rows already in
+  `executing`. Existing active-device tanks receive a fresh monitoring
+  expectation at `0012`; `0013` adds the incident table and unresolved-row
+  uniqueness index without inventing historical outage rows.
+- Bridge suite: `pytest -q` in `bridge` passed with 45 tests; the existing
+  one-shot hardware-call and no-blind-retry behavior remains covered.
+- Web validation: `npm run typecheck`, `npm test` (98 tests across 24 files),
+  and `npm run build` all passed.
+- Repository validation: `git diff --check` passed, and the local Markdown-link
+  audit resolved every current documentation target.
+- Goal 2 focused backend media/integrity/permission/tank tests passed with 22
+  tests; affected web tank deletion tests passed with 6 tests. Database-first
+  commit failure, missing/external/out-of-root media, post-commit unlink
+  failure, owned-file cleanup, cascade behavior, and staff denial are covered.
+- Goal 3 focused web tests passed with 15 tests across formatting, fleet,
+  alerts, tank workspace, and thresholds. No backend contract or migration
+  change was required because authenticated tank operations already expose
+  reading `received_at` and fleet already exposes `reporting_age_seconds`.
+- Physical hardware validation remains pending. The safe one-device/one-tank
+  UV/LED/feeder, water-only or empty-syringe Pump A/B, actuator-uncertainty,
+  and tank-decommissioning checklist is recorded in
+  `ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 
 ## Validation checkpoint — 2026-08-21
 

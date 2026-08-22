@@ -32,7 +32,7 @@ const response = (): AnalyticsResponse => ({
     bucket_seconds: 900,
     timezone: 'Asia/Manila',
   },
-  tanks: [{ id: 1, name: 'Tank A' }],
+  tanks: [{ id: 1, name: 'Tank A', lifecycle: 'active' }],
   fleet_series: [
     {
       timestamp: '2026-07-26T00:00:00Z',

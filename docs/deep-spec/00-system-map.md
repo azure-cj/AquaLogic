@@ -37,7 +37,7 @@ Tank Status
   ↓
 Alert
   ↓
-Notification
+In-app alert surface
 ```
 
 ## Equipment Flow
@@ -67,4 +67,6 @@ Command History / Audit
 - The bridge should not decide whether water is safe.
 - Staff authentication and device authentication are separate concerns.
 - Stale or missing readings must not be treated as normal readings.
+- Alerts are persistent operational records; the current notification surface
+  is in-app only. Email, push, SMS, and delivery infrastructure are deferred.
 - Breeding-specific management is deferred.

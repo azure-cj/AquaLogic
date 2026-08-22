@@ -156,6 +156,9 @@ $env:DATABASE_URL = 'sqlite:///./aqualogic.db'
 $env:DEMO_SENSOR_ENABLED = 'true'
 $env:DEMO_SENSOR_INSTANCE = 'true'
 $env:DEMO_SENSOR_INTERVAL_SECONDS = '30'
+$env:MONITORING_INCIDENTS_ENABLED = 'true'
+$env:MONITORING_OUTAGE_GRACE_SECONDS = '900'
+$env:MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = '60'
 alembic upgrade head
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```

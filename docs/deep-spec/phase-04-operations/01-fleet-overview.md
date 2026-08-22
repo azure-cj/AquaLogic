@@ -1,6 +1,6 @@
 # Fleet Overview
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 Status: Implemented current operations view; scale hardening deferred
 
 ## 1. Purpose
@@ -16,13 +16,16 @@ healthy, which tank needs attention, what is wrong, and how recent the data is.
 
 ## 3. Current Implementation
 
-The authenticated `GET /fleet` route is available to staff and administrators.
+The authenticated `GET /fleet` route is available to staff and administrators;
+it excludes retired tanks so the fleet remains a live-operations view.
 The web route is `/admin/fleet`. It currently combines:
 
 - total tank count and Normal, Warning, Critical, and Offline counts;
 - a tank-health table with location, current temperature, pH, reporting age,
   assigned-species count, and Species Care status;
 - active warning and critical alert counts per tank;
+- active monitoring-outage count/marker per tank, linked to the separate
+  monitoring-outage history;
 - a recent unresolved-alert feed with links to Alert History;
 - selectable 24-hour, 7-day, and 30-day reporting-uptime summaries;
 - status filters for all tanks and tanks needing action.
@@ -30,6 +33,9 @@ The web route is `/admin/fleet`. It currently combines:
 The fleet page refreshes fleet, unresolved-alert, and uptime data every 30
 seconds. Loading, error, and empty-alert states are visible in the page rather
 than being represented as healthy fleet data.
+
+Stale values remain visible as last-known context rather than current readings;
+the reporting age shown to staff is derived from server `received_at`.
 
 ## 4. Actors and Permissions
 
@@ -70,6 +76,10 @@ Species Care is advisory context only. Its `suitable`, `attention`, and
 5. The operator uses the tank or alert workspace for the authorized follow-up
    action.
 
+Retired tank history is reached from the tank directory's explicit Retired or
+All lifecycle filter, not from the live fleet. Historical analytics can opt
+retired tanks in explicitly with `include_retired=true`.
+
 ## 7. Backend and API Behavior
 
 `GET /fleet` returns one summary per tank, ordered by tank name. The response
@@ -80,6 +90,8 @@ species count.
 
 The endpoint does not paginate the fleet and does not expose device keys,
 threshold internals, raw security events, or public-only response data.
+The monitoring-outage count is a summary only; incident history is queried from
+the dedicated authenticated monitoring-incident endpoints.
 
 ## 8. UI States and Edge Cases
 

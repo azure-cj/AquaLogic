@@ -17,13 +17,13 @@ Lock down:
 - Water Status
 - Freshness
 - Alert Lifecycle
-- Notifications
+- Notifications (current surface: in-app only; external delivery deferred)
 
 ## Phase 3 — Species Care
 Lock down:
 - Species Profiles
 - Water Suitability
-- Fish-to-Fish Compatibility
+- Fish-to-Fish Compatibility (notes-only; structured compatibility deferred)
 - Tank Assignment
 
 Breeding remains deferred.

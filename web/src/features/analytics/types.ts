@@ -85,7 +85,7 @@ export type AnalyticsResponse = {
     bucket_seconds: number;
     timezone: string;
   };
-  tanks: Array<{ id: number; name: string; }>;
+  tanks: Array<{ id: number; name: string; lifecycle: 'active' | 'retired'; }>;
   fleet_series: AnalyticsPoint[];
   previous_fleet_series: AnalyticsPoint[];
   tank_series: TankSeries[];

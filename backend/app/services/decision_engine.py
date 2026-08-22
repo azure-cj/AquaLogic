@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, ThresholdRevision
 from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
+from app.services.monitoring_incidents import resolve_active_monitoring_incident
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
 PUBLIC_PARAMETERS = ("temperature", "ph", "turbidity", "tds")
@@ -149,6 +150,13 @@ def ingest_reading(
                 "reason": reason,
             },
         )
+    resolve_active_monitoring_incident(
+        db,
+        tank_id,
+        reason="reporting_recovered",
+        resolved_at=reading.received_at,
+        recovery_reading=reading,
+    )
     db.commit()
     db.refresh(reading)
     return reading

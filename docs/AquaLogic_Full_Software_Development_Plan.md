@@ -1,5 +1,9 @@
 # AquaLogic — Full Software Development Plan
 
+Status: **Historical plan** — superseded for current implementation status and
+contracts by `docs/INDEX.md`, `docs/DEVELOPMENT_STATUS.md`, and the canonical
+architecture/API/deep-spec documents below them.
+
 ---
 
 ## Project Overview

@@ -105,7 +105,10 @@ alert markers, reporting gaps, and comparison information. Alert markers can
 open the relevant alert context.
 
 Analytics is diagnostic and read-only. It does not edit thresholds, resolve
-alerts, create suitability results, or send notifications.
+alerts, create suitability results, or send notifications. Persistent
+monitoring-outage incidents do not replace reporting-gap reconstruction: gap
+diagnostics remain derived from receipt-time buckets, while incident history is
+an authenticated operational record available in the monitoring-outage view.
 
 ## 8. Security and Data Boundaries
 

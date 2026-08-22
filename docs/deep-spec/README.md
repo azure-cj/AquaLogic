@@ -38,3 +38,15 @@ The bridge is therefore part of the current architecture and should be documente
 6. Access and platform
 
 Breeding-specific management is deferred for now.
+
+## Final hardening package
+
+Phases 01–06 are implemented. The remaining external stress-review findings are
+organized in [`FINAL-HARDENING-REVIEW.md`](FINAL-HARDENING-REVIEW.md) and its
+linked `final-hardening/` work packets. This is a cross-cutting final hardening
+roadmap, not a seventh feature phase.
+
+Implementation agents should use the focused packet for source anchors, required
+behavior, invariants, tests, acceptance criteria, and non-goals. Items marked
+client decision required or deferred must not be added to an implementation
+plan without explicit approval.

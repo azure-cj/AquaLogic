@@ -1,7 +1,7 @@
 # AquaLogic Domain Model
 
 Status: Current backend model summary
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Entities
 
@@ -20,6 +20,7 @@ Last reviewed: 2026-08-21
 | ActuatorCommand | Admin audit and lifecycle record for one physical UV, LED, feeder, or guarded pump-maintenance command | Belongs to one registered device/tank and optionally an actor user |
 | ActuatorState | Latest validated local state for one actuator | Unique per registered device and actuator; may be stale when the bridge is unavailable |
 | ActuatorStateHistory | Append-only bridge state report | Belongs to one device/tank/actuator and may reference a command |
+| MonitoringIncident | Tank-level interval where expected accepted reporting stopped | One unresolved row per eligible active tank; resolves automatically on accepted reporting, monitoring disablement, or retirement |
 
 Species-care suitability is intentionally derived rather than persisted. For
 each tank assignment, the approved evaluation compares the latest fresh reading
@@ -104,6 +105,27 @@ AquaLogic stores the configuration command and latest reported state but does
 not create a command for each autonomous event. Last-known actuator state does
 not guarantee current physical state when the bridge is stale or offline.
 
+Actuator command status is `queued`, `executing`, `succeeded`, `failed`,
+`expired`, or terminal `outcome_unknown`. The unknown state is reached only
+after an atomic claim when the 180-second post-claim confirmation deadline
+passes; it is not queue expiry and is never replayed. A same-device,
+same-pump `dispense` remains interlocked while executing or uncleared unknown.
+Administrator physical verification records actor, time, and bounded note,
+clears only the software lock, and does not rewrite the historical outcome.
+Late bridge reports are rejected with `409 Conflict`.
+
+Monitoring incidents are not water-quality Alerts. An active tank with at least
+one active registered device becomes monitoring-expected at the first
+zero-to-one device transition and keeps that expectation while any active
+device remains. After the 900-second default unattended grace (strictly longer
+than the 90-second Offline rule), the background detector persists one active
+incident per tank. The baseline is the later of `monitoring_expected_at` and
+the latest accepted `SensorReading.received_at`. An accepted reading resolves
+the interval as `reporting_recovered` and records its reading ID; the last
+device deactivation resolves it as `monitoring_disabled`; retirement resolves
+it as `tank_retired`. These transitions are UTC/server-time based and produce
+no manual resolution action or external notification.
+
 ## Invariants to preserve
 
 - Tank names are unique.
@@ -122,7 +144,9 @@ not guarantee current physical state when the bridge is stale or offline.
 - Only administrators can queue or read actuator commands and state; staff
   receives 403 for actuator command, state, and history APIs.
 - A registered device's key maps to one server-side tank; device requests never
-  supply an arbitrary tank ID.
+  supply an arbitrary tank ID. Physical movement follows the [canonical
+  deactivation and move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank);
+  the fixed mapping and historical ownership are never edited.
 - Sensor readings retain nullable `device_id` provenance and non-null
   server-generated `received_at`; manual readings have no source device.
 - Operational freshness and latest-reading selection use `received_at` with a
@@ -134,6 +158,22 @@ not guarantee current physical state when the bridge is stale or offline.
 - Device connection status is derived as online, offline, or disabled from
   activation and the 90-second last-seen window. Multiple active devices per
   tank remain supported for the current release.
+- A tank derives lifecycle from nullable `retired_at`: `active` when null and
+  `retired` otherwise. Retirement records the administrator, bounded optional
+  note, and timestamp; it is one-way in this release.
+- Retirement forces the tank private, clears its monitoring expectation,
+  deactivates every registered device in the same transaction, and preserves
+  readings, alerts, assignments, configuration, media, actuator commands, and
+  state history. The public projection and live fleet exclude retired tanks.
+- Tank deletion is a second administrator-only action available only after
+  retirement. It cascades dependent readings, alerts, assignments, registered
+  devices, and actuator records, then removes an AquaLogic-owned local hero
+  image after the database commit. External URLs and paths outside the
+  configured media root are never treated as owned files.
+- Tank retirement/deletion does not clear device-resident schedules, firmware
+  configuration, or physical equipment state; hardware decommissioning is an
+  operator workflow. Retirement is blocked by executing or uncleared unknown
+  actuator work, and the administrator must follow the hardware checklist.
 - A queued actuator command must expire before execution, and a device must
   claim it before any physical call. Final command reports are idempotent.
 - Actuator actions are limited to UV, normal LED, feeder, and the explicit
@@ -153,3 +193,7 @@ not guarantee current physical state when the bridge is stale or offline.
 
 - Tank species assignment and removal are staff/admin operations recorded in the
   audit trail; assignment history remains audit-only.
+
+The current release has tank retirement fields and a dedicated persistent
+monitoring-incident entity. Monitoring incidents remain separate from Alert
+rows and are never synthesized as water-quality parameters.

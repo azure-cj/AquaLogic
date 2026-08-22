@@ -1,5 +1,10 @@
 # AquaLogic web dashboard implementation report
 
+Status: **Historical checkpoint** — this report predates the final hardening
+changes and is not the current route, migration, test-count, or release-status
+contract. Use `docs/DEVELOPMENT_STATUS.md`, canonical docs, and source/tests for
+current evidence; the report is retained for implementation history.
+
 Last updated: August 18, 2026
 
 ## Current checkpoint

@@ -1,6 +1,6 @@
 # Tank Workspace
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 Status: Implemented current staff workspace; equipment expansion owned by Phase 05
 
 ## 1. Purpose
@@ -29,10 +29,19 @@ resource and operations snapshot to present:
 - Normal, Warning, Critical, or Offline operational status;
 - reporting age and observation-time context;
 - unresolved tank alerts;
+- a distinct monitoring-outage history showing active/resolved reporting
+  incidents, last accepted report, duration, and terminal reason;
 - assigned species and derived Species Care results;
 - assignment and removal controls;
 - a compact actuator snapshot with navigation to the dedicated Phase 05 control
   center where authorized.
+
+The directory defaults to active tanks and provides explicit Retired and All
+filters. A retired tank remains readable as historical detail: it shows the
+retirement timestamp, administrator and note when available, last-known
+readings, retained alerts/assignments/configuration/media, and administrator
+actuator history. It does not run live Species Care or expose operational
+controls.
 
 Customer assignment remains internal operational metadata. It does not create a
 customer login, customer portal, or tank-ownership restriction.
@@ -41,9 +50,10 @@ customer login, customer portal, or tank-ownership restriction.
 
 - Staff may read tank details and operations, review species care, and assign or
   remove species.
-- Administrators may do everything staff can do and may create, update, delete,
-  and publish tanks, manage public tank imagery, submit manual readings, and
-  perform other administrator-owned mutations.
+- Administrators may do everything staff can do and may create, retire, update
+  active tanks, permanently delete retired tanks, and publish active tanks;
+  they may manage active tank imagery, submit manual readings, and perform
+  other administrator-owned mutations.
 - Actuator commands, state, and history remain administrator-only under Phase
   05.
 - Public viewers receive only the separate privacy-safe public tank projection.
@@ -62,7 +72,8 @@ user-facing workflows.
 
 Species Care compares the latest fresh reading with assigned-species preferences
 for temperature, pH, and TDS. It is advisory and never creates, resolves, or
-modifies operational alerts.
+modifies operational alerts. The UI explains operational status separately from
+Species Care and labels stale values as last-known context.
 
 ## 6. Main Workflows
 
@@ -87,7 +98,9 @@ modifies operational alerts.
 1. An administrator opens the configuration drawer.
 2. The administrator edits approved tank and public-profile fields.
 3. Validation and confirmation guard destructive or visibility-changing actions.
-4. The backend records the appropriate audit event.
+4. The backend records the appropriate audit event. Retirement is a separate
+   administrator-only action; it deactivates registered devices transactionally
+   and requires actuator uncertainty to be physically cleared first.
 
 ## 7. Backend Interfaces
 
@@ -100,6 +113,8 @@ The workspace consumes the following staff routes:
 - `POST /tanks/{tank_id}/fish`
 - `DELETE /tanks/{tank_id}/fish/{fish_id}`
 - `GET /tanks/{tank_id}/alerts`
+- `GET /tanks/{tank_id}/monitoring-incidents`
+- `POST /tanks/{tank_id}/retire` (administrator only)
 
 Administrator mutations remain on the tank, sensor, media, threshold, device,
 and actuator routes owned by their respective specifications. No new tank
@@ -111,18 +126,24 @@ workspace route is introduced by this documentation pass.
 - A missing tank returns a not-found state.
 - A tank without readings displays Offline and unavailable parameter context.
 - A stale reading remains visible as historical context but cannot produce a
-  confident Normal or Suitable result.
+  confident Normal or Suitable result; the UI labels the displayed values as
+  last-known context.
 - An empty species assignment list prompts staff to add a species.
 - Duplicate assignments, missing resources, and failed mutations show explicit
   backend errors.
 - Destructive, public-visibility, assignment-removal, and actuator actions use
   confirmation where applicable.
+- Retired is a lifecycle state, not Offline. Retired detail is read-only,
+  public access is disabled, and permanent deletion is offered only from that
+  retired workflow with the expanded historical/media warning.
 
 ## 9. History and Audit
 
 Tank metadata changes, public-visibility changes, species assignments/removals,
 manual readings, alert resolution, and actuator actions are audited by the
 owning backend workflows. The tank workspace is not a separate history store.
+Monitoring incidents are persisted by the backend and are read through the
+dedicated incident route.
 
 ## 10. Approved Hardening
 

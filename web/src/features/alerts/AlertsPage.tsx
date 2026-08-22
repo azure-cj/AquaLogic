@@ -26,12 +26,13 @@ import {
 } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import './styles.css';
+import { MonitoringIncidentHistory } from '@/features/monitoring/MonitoringIncidentViews';
 
 const currentReleaseAlertParameters = new Set<string>(metricOptions.map((metric) => metric.key));
 
 export function resolutionLabel(source: Alert['resolution_source']): string {
   if (source === 'system') return 'Automatically resolved';
-  if (source === 'operator') return 'Resolved by operator';
+  if (source === 'operator') return 'Handled by operator';
   return 'Resolved';
 }
 
@@ -50,6 +51,7 @@ export function Alerts() {
   const [tankId, setTankId] = useState(urlParams.get('tank_id') ?? '');
   const [after, setAfter] = useState(inputDate(urlParams.get('created_after')));
   const [before, setBefore] = useState(inputDate(urlParams.get('created_before')));
+  const [historyMode, setHistoryMode] = useState<'alerts' | 'monitoring'>(urlParams.get('view') === 'monitoring' ? 'monitoring' : 'alerts');
   const [notice, setNotice] = useState('');
   const filters = new URLSearchParams();
   if (severity) filters.set('severity', severity);
@@ -72,7 +74,7 @@ export function Alerts() {
   const resolve = useMutation({
     mutationFn: (id: number) => api(`/alerts/${id}/resolve`, { method: 'PUT' }),
     onSuccess: () => {
-      setNotice('Alert marked as resolved.');
+      setNotice('Alert marked as handled.');
       client.invalidateQueries({ queryKey: ['alerts'] });
     },
   });
@@ -93,13 +95,20 @@ export function Alerts() {
       <PageHeader
         eyebrow="Fleet history"
         title="Alert history"
-        description="Filter, investigate, and resolve water-quality events across the fleet."
+        description="Filter, investigate, and mark water-quality events handled across the fleet."
         actions={
           <button className="button button-secondary" type="button" onClick={clear}>
             <X size={16} /> Clear filters
           </button>
         }
       />
+      <div className="monitoring-incident-mode" role="tablist" aria-label="Operational history type">
+        <button type="button" className={historyMode === 'alerts' ? 'active' : ''} role="tab" aria-selected={historyMode === 'alerts'} onClick={() => setHistoryMode('alerts')}>Water-quality alerts</button>
+        <button type="button" className={historyMode === 'monitoring' ? 'active' : ''} role="tab" aria-selected={historyMode === 'monitoring'} onClick={() => setHistoryMode('monitoring')}>Monitoring outages</button>
+      </div>
+      {historyMode === 'monitoring' ? (
+        <MonitoringIncidentHistory tankId={tankId ? Number(tankId) : undefined} />
+      ) : <>
       {notice && <Notice>{notice}</Notice>}
       <Panel className="filter-panel">
         <div className="filter-grid">
@@ -155,6 +164,9 @@ export function Alerts() {
         title="Recorded events"
         description={`${visibleAlerts.length} alert${visibleAlerts.length === 1 ? '' : 's'} match the current filters`}
       >
+        <p className="alert-handling-note">
+          Mark handled removes an alert from the active queue. It does not confirm that water conditions have recovered; a later abnormal reading may create another alert.
+        </p>
         {alerts.isLoading ? (
           <LoadingState label="Loading alert history…" />
         ) : alerts.isError ? (
@@ -194,10 +206,11 @@ export function Alerts() {
                       type="button"
                       disabled={resolve.isPending && resolve.variables === alert.id}
                       onClick={() => resolve.mutate(alert.id)}
+                      aria-label={`Mark ${alert.parameter.replaceAll('_', ' ')} alert handled; this does not confirm water recovery`}
                     >
                       {resolve.isPending && resolve.variables === alert.id
-                        ? 'Resolving…'
-                        : 'Resolve'}
+                        ? 'Marking handled…'
+                        : 'Mark handled'}
                     </button>
                   )}
                 </span>
@@ -208,6 +221,7 @@ export function Alerts() {
           <EmptyState title="No alerts found" message="Adjust the filters to broaden the results." />
         )}
       </Panel>
+      </>}
     </section>
   );
 }

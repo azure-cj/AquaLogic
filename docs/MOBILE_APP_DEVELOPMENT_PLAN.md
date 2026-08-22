@@ -1,5 +1,8 @@
 # AquaLogic Mobile App Development Plan
 
+Status: **Historical plan** — the Flutter app remains a local demo prototype;
+current implementation and scope are defined by `docs/DEVELOPMENT_STATUS.md`.
+
 ## Goal
 
 Build AquaLogic as a real Android mobile app where the phone provides the main user interface and the ESP32 acts as the hardware controller for sensors and aquarium devices.

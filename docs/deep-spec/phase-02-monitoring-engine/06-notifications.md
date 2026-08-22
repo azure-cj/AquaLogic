@@ -28,9 +28,14 @@ In-app alert surfaces
 Automatic resolutions remain visible in alert history and are recorded in the
 administrator-only audit stream.
 
+The in-app Alerts area also exposes a distinct Monitoring outages history backed
+by persistent tank-level monitoring incidents. It is not an alert severity,
+does not claim water-quality recovery, and has no manual-resolve action. An
+accepted reading resolves the outage incident automatically; external delivery
+remains outside this phase.
+
 ## 3. Deferred behavior
 
 Email, push, SMS, notification preferences, delivery workers, provider
 configuration, retry policy, and separate notification history are not part of
 Phase 02. They require a separate notification design and operational boundary.
-

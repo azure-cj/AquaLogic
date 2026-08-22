@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Read first
 
@@ -9,6 +9,7 @@ Last reviewed: 2026-08-21
 - [`../API_CONTRACT.md`](../API_CONTRACT.md)
 - [`../DEVELOPMENT_STATUS.md`](../DEVELOPMENT_STATUS.md)
 - [`../WEB_DASHBOARD_IMPLEMENTATION_REPORT.md`](../WEB_DASHBOARD_IMPLEMENTATION_REPORT.md)
+  (historical checkpoint only)
 
 ## Important locations
 
@@ -18,6 +19,9 @@ Last reviewed: 2026-08-21
 - `web/src/features/tanks/ActuatorControlPanel.tsx`: admin-only UV, normal LED,
   feeder, and guarded Pump A/B manual-test controls, bridge freshness,
   last-known state, confirmations, and command audit history.
+- `web/src/features/tanks/TankRetireDialog.tsx`: administrator confirmation for
+  the one-way active-to-retired lifecycle, including bounded operational notes
+  and the hardware decommissioning warning.
 - `web/src/features/tanks/ActuatorControlPage.tsx`: dedicated administrator
   actuator workspace route that reuses the shared control panel in full mode.
 - `web/src/features/tanks/ActuatorDirectoryPage.tsx`: administrator-only tank
@@ -57,10 +61,12 @@ Last reviewed: 2026-08-21
   status, fixed tank mapping, activation controls, and confirmation-gated
   one-time key rotation. The browser never persists device keys.
 - Threshold and alert surfaces use strict threshold-boundary behavior, display
-  disabled parameters as unavailable, and label resolved alerts as
-  operator-resolved or automatically resolved when the additive API metadata is
-  present. The current notification surface is in-app only; external delivery
-  controls are deferred.
+  disabled parameters as unavailable, and explain that exact boundaries remain
+  Normal. The operator-facing alert action is **Mark handled**; its legacy
+  `/alerts/{alert_id}/resolve` route and `operator` resolution metadata remain
+  unchanged, while automatic history continues to say automatically resolved.
+  Manual handling does not confirm water recovery. The current notification
+  surface is in-app only; external delivery controls are deferred.
 - `/admin/*`: authenticated staff/admin experience.
 
 Backend authorization remains authoritative. Do not rely on route visibility as a
@@ -84,16 +90,26 @@ authenticated directory responses expose supported preferred temperature, pH,
 and TDS ranges plus safe assigned-tank summaries; the UI provides explicit
 care-group, diet, and usage filters, a read-only details drawer, an admin edit
 form for those ranges, and a species-photo editor with hosted URL or local
-JPG/PNG/WebP upload support. Species Care compares assigned species with the
-tank's latest supported reading and labels suitable, needs-attention, and
-insufficient-data states. Ammonia and dissolved oxygen remain deferred and are
-not rendered as current-release species checks.
+JPG/PNG/WebP upload support. Species Care is explicitly water-only: it compares
+assigned species preferences with temperature, pH, and TDS and does not assess
+fish compatibility, stocking density, temperament, or breeding. Its labels and
+filters use water context, and stale comparisons are presented as last-known
+context. Ammonia and dissolved oxygen remain deferred and are not rendered as
+current-release species checks.
 
 `/admin/tanks/:tankId` is the staff tank workspace. It independently polls
 operations and Species Care, owns assignment management, and uses the shared
 configuration drawer via `?edit=1`. The directory uses `?edit=:tankId` for
-configuration only. Do not reuse or alter operational-health badges for
-species preference results.
+configuration only. Operational status uses global monitoring thresholds;
+Species Care is an advisory comparison against assigned-species water
+preferences. Do not reuse or alter operational-health badges for species
+preference results. Offline readings remain visible as last-known values and
+reporting age is derived from server receipt time, never observation time.
+The tank directory defaults to active tanks and exposes Retired/All filters.
+Retired detail is explicitly read-only: it retains historical readings,
+alerts, assignments, configuration/media, and administrator actuator history,
+uses Retired rather than Offline as its lifecycle state, hides live controls,
+and exposes permanent deletion only after retirement.
 
 The tank workspace keeps a compact administrator-only actuator snapshot with
 bridge freshness, last-known actuator states, safe quick actions, and a link to
@@ -109,6 +125,20 @@ entry beside **Thresholds**. Its chooser lists tanks from the authenticated
 tank directory and links to the selected tank’s focused control route; it does
 not select a device or bypass the backend’s fixed device-to-tank mapping.
 
+The administrator retirement dialog explains that the tank leaves live and
+public operations, disables registered devices, and retains history; it asks
+for an optional bounded note and points to the hardware checklist. The
+retired detail's permanent-delete warning then enumerates the same relational,
+media, and public-page consequences. Both administrator tank deletion entry
+points use the expanded warning:
+sensor readings, alerts, equipment command/state history, device registrations,
+species assignments, the uploaded tank image, and the public tank page are
+removed, and the action cannot be undone. The warning does not claim that
+ESP32 schedules or physical equipment state are cleared; operators must follow
+the [tank decommissioning workflow](../WORKFLOWS.md#tank-deletion-and-hardware-decommissioning)
+before deletion. The separate [device move workflow](../WORKFLOWS.md#moving-equipment-to-another-tank)
+uses new provisioning rather than reassignment.
+
 Ammonia and dissolved oxygen are deferred from the current software release
 and are hidden from the thresholds UI, along with other demo-facing controls.
 They remain nullable in API responses for future integration, but are not
@@ -121,7 +151,8 @@ authenticated user is known to be an admin. It polls the admin-only actuator
 status route and the bounded, paginated history route, shows last-known state plus bridge
 online/offline freshness, and requires a confirmation dialog before **Feed now**.
 History provides newest-first page metadata, previous/next navigation, and
-actuator/status filters, and fixed-device lifecycle summary counts. The audit
+actuator/status filters, and fixed-device lifecycle summary counts including
+`outcome_unknown`. The audit
 explanation is available from a keyboard-accessible custom tooltip rendered at
 the document level so panel overflow cannot clip it, keeping the history header
 compact. Larger row typography, human-readable actuator/action labels, and
@@ -140,6 +171,13 @@ authorization remains authoritative and returns 403 for staff actuator requests.
 Pump cards are explicitly labeled as manual dry-run tests, require an online
 bridge, show the firmware-reported configured dispense volume in mL, show a
 visible Stop action, and require confirmation before Dispense/Test or Retract.
+An executing or uncleared `outcome_unknown` same-device/same-pump dispense
+lock disables only another Dispense/Test action. Stop remains available;
+Retract remains a deliberate maintenance action and does not clear the lock.
+Administrators can record physical verification through a confirmation-gated
+action; the UI
+keeps the historical command Outcome unknown and explains that verification
+does not prove the exact dose.
 The UI explains that the tester bridge must have `pump_manual_test_enabled:
 true` only during empty-syringe or water-only checks; pump schedules, pH
 auto-dose, and automatic dosing are not rendered. The current firmware does not

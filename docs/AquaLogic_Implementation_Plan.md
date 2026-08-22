@@ -1,5 +1,8 @@
 ## Plan: AquaLogic Software Implementation
 
+Status: **Historical plan** — use only for original intent and milestones;
+current behavior is defined by `docs/DEVELOPMENT_STATUS.md` and source/tests.
+
 Build AquaLogic as a software-first system that delivers value before hardware integration arrives. The first release should include a FastAPI backend, a Flutter staff app, a React customer web app, a shared database, mock sensor data, a rule-based decision engine, and the scheduling and alert workflows needed for day-to-day operations at JRed Aquatics. Hardware integration with ESP32 and Raspberry Pi is treated as a later extension point and should not block the software core.
 
 **Steps**

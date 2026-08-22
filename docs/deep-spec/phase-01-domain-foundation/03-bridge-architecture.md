@@ -2,7 +2,7 @@
 
 ## Status
 
-**Implemented Phase 01 bridge hardening** — reviewed 2026-08-21.
+**Implemented Phase 01 bridge hardening** — reviewed 2026-08-22.
 
 ## 1. Purpose
 Define the bridge that currently allows the remotely located hardware team and software team to integrate and test AquaLogic.
@@ -23,6 +23,14 @@ The current bridge is the owner-operated Python process at
 translates the four installed sensor fields, then posts them to the backend
 with `X-Device-Key`. The backend supplies the fixed tank mapping and remains
 responsible for persistence, freshness, thresholds, alerts, and public status.
+For tank deletion or a physical move, the bridge is stopped or reconfigured by
+the operator only after the old registration is deactivated; the canonical
+[hardware workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank) requires
+a new destination registration and key rather than editing the server mapping.
+The bridge configuration contains a device key and local ESP32 endpoint, not a
+tank selector. After reprovisioning, the operator must confirm the new
+device/tank identity from fresh server-side readings before equipment controls
+or device-resident schedules are restored.
 
 ## 4. Bridge Responsibilities
 The bridge should be responsible for:

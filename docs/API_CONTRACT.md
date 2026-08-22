@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -33,8 +33,9 @@ minutes. Password changes and resets revoke existing sessions.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET/POST | `/tanks` | Staff list; admin creates |
-| GET/PUT/DELETE | `/tanks/{tank_id}` | Staff reads; admin updates or deletes |
+| GET/POST | `/tanks` | Staff list (active by default; `lifecycle=active|retired|all`); admin creates |
+| GET/PUT/DELETE | `/tanks/{tank_id}` | Staff reads; admin updates active tanks or permanently deletes retired tanks |
+| POST | `/tanks/{tank_id}/retire` | Admin-only, idempotent one-way transition to retired; deactivates registered devices and preserves history |
 | POST | `/tanks/{tank_id}/hero-image` | Admin-only; upload a JPG, PNG, or WebP hero image up to 5 MB |
 | GET | `/tanks/{tank_id}/species-suitability` | Derive staff-only species-care suitability from the latest reading |
 | POST/DELETE | `/tanks/{tank_id}/fish` and `/tanks/{tank_id}/fish/{fish_id}` | Manage tank/species assignments |
@@ -47,7 +48,9 @@ minutes. Password changes and resets revoke existing sessions.
 | GET | `/alerts` | List active or all alerts |
 | GET | `/alerts/history` | Filter alert history |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
-| PUT | `/alerts/{alert_id}/resolve` | Resolve an alert |
+| PUT | `/alerts/{alert_id}/resolve` | Legacy route used by the UI's **Mark handled** action; closes the alert record without confirming water recovery |
+| GET | `/monitoring-incidents` | Staff/admin paginated monitoring-outage history; defaults to active and supports tank, state, and start-time filters |
+| GET | `/tanks/{tank_id}/monitoring-incidents` | Staff/admin paginated monitoring-outage history for one tank |
 | POST | `/devices` | Admin-only one-time device provisioning; returns a key once and fixes the device to one tank |
 | GET | `/devices` | Admin-only sanitized device inventory with derived online/offline/disabled status |
 | GET | `/devices/{device_id}` | Admin-only sanitized device detail |
@@ -55,8 +58,45 @@ minutes. Password changes and resets revoke existing sessions.
 | POST | `/devices/{device_id}/rotate-key` | Admin-only one-time replacement key; invalidates the previous key |
 | POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
 | POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, feeder, or guarded pump-maintenance command for the tank's registered bridge device |
+| POST | `/tanks/{tank_id}/actuators/commands/{command_id}/clear-uncertainty` | Admin-only; record physical verification for an `outcome_unknown` command without rewriting its historical status |
 | GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, feeder, and pump state |
 | GET | `/tanks/{tank_id}/actuators/history` | Admin-only; read paginated command audit history with actor, timestamps, status, result, and error |
+
+Retirement is administrator-only and one-way (`active -> retired`). It records
+`retired_at`, the retiring administrator, and an optional bounded note, forces
+the tank private, clears its monitoring expectation, deactivates all registered
+devices in the same transaction, and records one `tank.retire` audit event.
+Repeated retirement returns the existing retired representation without
+repeating side effects. Retirement is rejected while actuator work is executing
+or an `outcome_unknown` command still lacks physical verification. It does not
+erase device-resident schedules or physical state; follow the hardware
+decommissioning checklist first.
+
+Authenticated tank lists default to active and support `lifecycle=retired` and
+`lifecycle=all`. `/fleet` and default analytics exclude retired tanks. Historical
+analytics can include them with `include_retired=true`, and retired detail,
+readings, alerts, configuration, media, and authorized actuator history remain
+readable. Retired tanks are never returned by the public route. Operational
+writes, device ingestion/reactivation, actuator command creation, assignments,
+manual readings, and configuration/media edits are rejected with a stable
+retired/read-only conflict. Permanent tank deletion is administrator-only and
+only available after retirement; it then cascades the tank's
+sensor readings, alerts, species assignments, registered devices, actuator
+commands, and actuator state history. An AquaLogic-owned local uploaded hero
+image is removed only after the database commit succeeds. Missing files are
+idempotent; external HTTPS image URLs and paths outside the configured media
+root are never deleted. A post-commit filesystem failure is logged without
+rolling back the committed deletion. The operation does not clear ESP32
+schedules, firmware configuration, or physical equipment state. Follow the
+[tank deletion and hardware decommissioning workflow](WORKFLOWS.md#tank-deletion-and-hardware-decommissioning)
+before using the retirement or permanent-deletion endpoint. Persistent
+monitoring incidents are separate from water-quality alerts: the detector opens
+one active row per eligible tank after the configured 900-second default grace,
+accepted readings resolve it as `reporting_recovered`, last-device deactivation
+resolves it as `monitoring_disabled`, and retirement resolves it as
+`tank_retired`. The authenticated incident routes are paginated and expose
+interval/receipt context without device credentials. No manual resolution or
+external notification route exists.
 
 The device-key bridge routes are not browser routes:
 
@@ -73,7 +113,7 @@ The device-key bridge routes are not browser routes:
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
-| GET | `/analytics/fleet` | Staff | Fleet/tank trends, historical threshold context, alert events, comparisons, and uptime |
+| GET | `/analytics/fleet` | Staff | Fleet/tank trends, historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
 | GET | `/thresholds` | Staff | Read threshold configuration |
 | PUT | `/thresholds/{parameter}` | Admin | Update one parameter threshold |
 | GET/POST | `/customers` | Staff reads; admin creates |
@@ -141,27 +181,38 @@ use a hosted species-photo URL through the existing `photo_url` field.
   expose a raw key or key hash. Deactivation immediately rejects device-key
   ingestion and actuator routes. Multiple active devices per tank remain
   supported, with explicit selection required where an operation needs one.
+  Physical movement is handled as deactivation plus new provisioning; key
+  rotation replaces credentials for the same fixed mapping and is not a
+  reassignment. Follow the [canonical move/reprovisioning workflow](WORKFLOWS.md#moving-equipment-to-another-tank)
+  for physical confirmation and schedule recreation.
 
 - Actuator command APIs are admin-only. Staff actuator command, state, and
   history requests receive `403`; the web UI does not fetch those endpoints for
   staff accounts. Commands use a server-generated ID, a server-selected fixed
   device/tank mapping, a validated payload, and a short expiry. Lifecycle
-  status is `queued`, `executing`, `succeeded`, `failed`, or `expired`.
+  status is `queued`, `executing`, `succeeded`, `failed`, `expired`, or
+  `outcome_unknown`. `outcome_unknown` means the command was claimed and may
+  have reached equipment, but no trustworthy terminal result arrived within
+  the confirmation window; it is not a retryable or expired state.
 
 - Normal UV, LED, and feeder commands default to a 120-second queue expiry and
   accept at most 300 seconds. Pump maintenance commands default to 20 seconds
   and may not exceed 30 seconds. A queued command must be claimed by the
   registered bridge before any physical request; expired commands are never
   delivered. There is no automatic hardware retry or retry endpoint. An
-  operator must inspect the equipment before creating a new command.
+  operator must inspect the equipment before creating a new command. The server
+  confirmation window is 180 seconds from claim, independent of queue expiry;
+  it covers the bridge's permitted 120-second pump completion wait, bounded
+  request/report time, and scheduling/network margin.
 
 - `GET /tanks/{tank_id}/actuators/history` accepts `page` (default `1`),
   `page_size` (default `10`, maximum `50`), and optional exact-match
   `actuator` (`uv`, `led`, `feeder`, `pump_a`, or `pump_b`) and `status` (`queued`, `executing`,
-  `succeeded`, `failed`, or `expired`) filters. It returns
+  `succeeded`, `failed`, `expired`, or `outcome_unknown`) filters. It returns
   `{items, page, page_size, total, total_pages, has_previous, has_next,
   summary}` ordered newest first. `summary` contains fixed-device totals for
-  `total`, `queued`, `executing`, `succeeded`, `failed`, and `expired`, so the
+  `total`, `queued`, `executing`, `succeeded`, `failed`, `expired`, and
+  `outcome_unknown`, so the
   dashboard can preserve useful lifecycle context while filters are active. The
   web dashboard uses the pagination metadata for previous/next controls instead
   of loading an unbounded audit list.
@@ -173,7 +224,17 @@ use a hosted species-photo URL through the existing `photo_url` field.
   /device-ingestion/actuators/{command_id}/failed`, and `POST
   /device-ingestion/actuator-state`. It verifies that every command belongs to
   the authenticated device's fixed tank. Duplicate claims/final reports are
-  idempotent and cannot requeue a finalized command.
+  idempotent and cannot requeue a finalized command. A late success/failure
+  report after `outcome_unknown` returns deterministic `409 Conflict`, is
+  recorded as late evidence rejection once per distinct report, and never
+  overwrites the unknown status.
+
+- A same-device, same-pump `dispense` is rejected with `409` while another
+  dispense for that pump is `executing` or uncleared `outcome_unknown`. Pump A
+  does not block Pump B or a different registered device. `stop` and `retract`
+  remain queueable. An administrator can call the uncertainty-clearance route
+  with an optional bounded note; the response remains `outcome_unknown` and
+  exposes the verifier, verification time, and note.
 
 - v1 accepts UV (`on`, `off`, `timer`, `schedule`), normal LED (`on`,
   `off`, `timer`, `schedule`), and feeder (`feed_now`, `config`, `schedule`)
@@ -210,12 +271,14 @@ use a hosted species-photo URL through the existing `photo_url` field.
   private local Wi-Fi and is never publicly exposed.
 
 - Alert responses include nullable `resolution_source`: `operator` for a
-  manual Resolve action, `system` for automatic resolution, and `null` for
+  manual **Mark handled** action, `system` for automatic resolution, and `null` for
   unresolved or legacy records with unknown history. Automatic resolution is
   triggered by a fresh normal reading for the same parameter or by the first
   usable reading after that parameter's threshold is disabled. It records an
   administrator-only `alert.auto_resolve` audit event; there is no separate
-  notification-delivery API.
+  notification-delivery API. Manual handling removes the record from the
+  active queue but does not confirm that water conditions recovered; a later
+  abnormal reading may create a new alert incident.
 
 - Threshold updates are administrator-only, require strict ordering of supplied
   bounds, and apply prospectively to the next valid reading. Exact warning and
@@ -226,6 +289,11 @@ use a hosted species-photo URL through the existing `photo_url` field.
 - CORS is configured from `CORS_ORIGINS`; production rejects wildcard CORS.
 - Demo ingestion requires both `DEMO_SENSOR_ENABLED` and
   `DEMO_SENSOR_INSTANCE` to be enabled.
+- Persistent monitoring incidents require `MONITORING_INCIDENTS_ENABLED=true`
+  in production, use `MONITORING_OUTAGE_GRACE_SECONDS=900` by default, and run
+  an idempotent detector every `MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS=60`
+  seconds. The grace must remain strictly greater than the 90-second Offline
+  freshness window.
 - Pagination is not yet available on the main list endpoints and is a known
   scaling limitation.
 - Authenticated `GET /fish` and `GET /fish/{id}` responses include species care
@@ -247,16 +315,22 @@ use a hosted species-photo URL through the existing `photo_url` field.
   The response includes per-parameter reasons, range values, a reading freshness
   reference, and `no_species_assigned` for empty tanks. Preferred temperature,
   pH, and TDS minimums may be omitted or equal to their maximums, but cannot
-  exceed them.
+  exceed them. The result is advisory water-only guidance; it does not assess
+  fish-to-fish compatibility, stocking density, temperament, or breeding behavior.
 - `GET /tanks/{tank_id}/operations` returns one internally consistent, UTC
   evaluated operational snapshot: latest reading (or `null`), six
   threshold-backed parameter statuses, and unresolved persisted alerts newest
   first. A missing reading is `offline` with `unavailable` parameters; a stale
-  reading is `offline` with `offline` parameters.
+  reading is `offline` with `offline` parameters. When a reading exists, its
+  `received_at` is the server receipt time available to authenticated clients;
+  the web derives reporting age from it. `timestamp` remains the observation
+  time and is not freshness evidence.
 - `GET /tanks/{tank_id}` adds the optional minimal `customer` summary while
   retaining `customer_id` and assigned `fish_species`. `GET /fleet` adds the
-  lightweight derived `species_care_status` and `assigned_species_count`; it
-  does not expose per-species checks.
+  lightweight derived `species_care_status` and `assigned_species_count`, plus
+  `reporting_age_seconds` calculated from the latest reading's server
+  `received_at`; `last_reading_at` remains the observation timestamp. It does
+  not expose per-species checks.
 - `GET /analytics/fleet` accepts `range=24h|7d|30d|custom`,
   `bucket=auto|15m|1h|6h|1d`, and up to three repeated `tank_id` values.
   Custom requests require ISO `start` and `end` values, are limited to 30 days,

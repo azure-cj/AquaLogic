@@ -24,6 +24,7 @@ class FleetTankRead(BaseModel):
     reporting_age_seconds: int | None = None
     active_warning_count: int
     active_critical_count: int
+    active_monitoring_incident_count: int
     species_care_status: Literal["suitable", "attention", "unavailable"]
     assigned_species_count: int
 

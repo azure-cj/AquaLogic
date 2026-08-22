@@ -42,3 +42,8 @@ class SensorReading(Base):
 
     tank: Mapped["Tank"] = relationship("Tank", back_populates="sensor_readings")
     alerts: Mapped[list["Alert"]] = relationship("Alert", back_populates="reading")
+    monitoring_recovery_incidents: Mapped[list["MonitoringIncident"]] = relationship(
+        "MonitoringIncident",
+        back_populates="recovery_reading",
+        foreign_keys="MonitoringIncident.recovery_reading_id",
+    )

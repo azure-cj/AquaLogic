@@ -29,8 +29,31 @@ afterEach(() => vi.clearAllMocks());
 describe('alert history', () => {
   it('labels automatic, operator, and legacy resolutions', () => {
     expect(resolutionLabel('system')).toBe('Automatically resolved');
-    expect(resolutionLabel('operator')).toBe('Resolved by operator');
+    expect(resolutionLabel('operator')).toBe('Handled by operator');
     expect(resolutionLabel(null)).toBe('Resolved');
+  });
+
+  it('uses Mark handled wording and explains that it does not confirm recovery', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') return [];
+      return [{
+        id: 2,
+        tank_id: 4,
+        parameter: 'temperature',
+        severity: 'warning',
+        message: 'Temperature is outside its warning threshold',
+        is_resolved: false,
+        created_at: '2026-08-21T10:00:00Z',
+        resolved_at: null,
+        resolution_source: null,
+      }];
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /Mark temperature alert handled/i })).toBeInTheDocument();
+    expect(screen.getByText(/does not confirm that water conditions have recovered/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Resolve$/ })).not.toBeInTheDocument();
   });
 
   it('renders an automatic resolution from the API', async () => {

@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.dependencies import require_admin, require_staff
-from app.models import Alert, SensorReading, Tank, ThresholdConfig, ThresholdRevision, User
+from app.models import Alert, MonitoringIncident, SensorReading, Tank, ThresholdConfig, ThresholdRevision, User
 from app.schemas.analytics import AnalyticsResponse
 from app.schemas.dashboard import FleetTankRead
 from app.schemas.threshold import ThresholdRead, ThresholdUpdate
@@ -17,7 +17,7 @@ router = APIRouter(tags=["dashboard"])
 
 @router.get("/fleet", response_model=list[FleetTankRead])
 def fleet(db: Session = Depends(get_db), _: User = Depends(require_staff)):
-    tanks = db.scalars(select(Tank).options(selectinload(Tank.customer), selectinload(Tank.fish_species)).order_by(Tank.name)).all()
+    tanks = db.scalars(select(Tank).options(selectinload(Tank.customer), selectinload(Tank.fish_species)).where(Tank.retired_at.is_(None)).order_by(Tank.name)).all()
     result = []
     now = datetime.now(timezone.utc)
     for tank in tanks:
@@ -26,7 +26,12 @@ def fleet(db: Session = Depends(get_db), _: User = Depends(require_staff)):
         if stamp and stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
         unresolved = list(db.scalars(select(Alert).where(Alert.tank_id == tank.id, Alert.is_resolved.is_(False))).all())
         care = evaluate_tank_species_suitability(tank, reading, evaluated_at=now)
-        result.append({"id": tank.id, "public_id": tank.public_id, "name": tank.name, "location": tank.location, "customer": {"id": tank.customer.id, "name": tank.customer.name} if tank.customer else None, "latest_reading": reading, "status": status_for_reading(db, reading, evaluated_at=now), "last_reading_at": reading.timestamp if reading else None, "reporting_age_seconds": round((now-stamp).total_seconds()) if stamp else None, "active_warning_count": sum(a.severity.value == "warning" for a in unresolved), "active_critical_count": sum(a.severity.value == "critical" for a in unresolved), "species_care_status": care["status"], "assigned_species_count": len(tank.fish_species)})
+        active_monitoring_incident_count = db.scalar(
+            select(func.count())
+            .select_from(MonitoringIncident)
+            .where(MonitoringIncident.tank_id == tank.id, MonitoringIncident.resolved_at.is_(None))
+        ) or 0
+        result.append({"id": tank.id, "public_id": tank.public_id, "name": tank.name, "location": tank.location, "customer": {"id": tank.customer.id, "name": tank.customer.name} if tank.customer else None, "latest_reading": reading, "status": status_for_reading(db, reading, evaluated_at=now), "last_reading_at": reading.timestamp if reading else None, "reporting_age_seconds": round((now-stamp).total_seconds()) if stamp else None, "active_warning_count": sum(a.severity.value == "warning" for a in unresolved), "active_critical_count": sum(a.severity.value == "critical" for a in unresolved), "active_monitoring_incident_count": int(active_monitoring_incident_count), "species_care_status": care["status"], "assigned_species_count": len(tank.fish_species)})
     return result
 
 @router.get("/thresholds", response_model=list[ThresholdRead])
@@ -63,6 +68,7 @@ def analytics(
     end: datetime | None = None,
     bucket: str = Query("auto", pattern="^(auto|15m|1h|6h|1d)$"),
     tank_id: list[int] = Query(default=[]),
+    include_retired: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(require_staff),
 ):
@@ -96,10 +102,12 @@ def analytics(
         bucket_seconds = 900 if duration_seconds <= 86_400 else 3_600 if duration_seconds <= 7 * 86_400 else 21_600
     if (duration_seconds + bucket_seconds - 1) // bucket_seconds > 1_000:
         raise HTTPException(422, "Selected resolution would produce more than 1,000 buckets")
-    known_ids = set(db.scalars(select(Tank.id).where(Tank.id.in_(tank_id))).all()) if tank_id else set()
+    scope_filter = () if include_retired else (Tank.retired_at.is_(None),)
+    known_stmt = select(Tank.id).where(Tank.id.in_(tank_id), *scope_filter) if tank_id else None
+    known_ids = set(db.scalars(known_stmt).all()) if known_stmt is not None else set()
     missing = [value for value in tank_id if value not in known_ids]
     if missing:
-        raise HTTPException(422, f"Unknown tank selection: {missing[0]}")
+        raise HTTPException(422, "Retired tank selections require include_retired=true" if not include_retired else f"Unknown tank selection: {missing[0]}")
     return build_fleet_analytics(
         db,
         range_name=range,
@@ -107,4 +115,5 @@ def analytics(
         end=end,
         bucket_seconds=bucket_seconds,
         selected_tank_ids=tank_id,
+        include_retired=include_retired,
     )

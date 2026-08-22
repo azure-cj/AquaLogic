@@ -1,7 +1,7 @@
 # AquaLogic Project Context
 
 Status: Current product context
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-22
 
 ## Purpose
 
@@ -33,6 +33,10 @@ can validate operations before the ESP32 hardware deployment is complete.
   admin-only UV, normal LED, fish-feeder, and guarded Pump A/B manual-test
   commands without exposing the ESP32 to the internet. Pump tests are limited
   to empty syringes or water; schedules and pH auto-dose remain deferred.
+- Claimed actuator commands that lose trustworthy confirmation become the
+  persistent `outcome_unknown` state; the same-device/same-pump dispense lock,
+  administrator physical verification, and no-blind-retry rule are part of the
+  current safety boundary.
 
 ## Current scope
 
@@ -53,6 +57,12 @@ can validate operations before the ESP32 hardware deployment is complete.
 - Raspberry Pi deployment and production PostgreSQL validation.
 - Scheduling, hardware safety interlocks, and richer automation workflows.
 - Pagination and database-level analytics for larger fleets.
+- The owner-approved Active-to-Retired tank lifecycle is current behavior: it
+  retains history outside live operations and requires retirement before
+  permanent deletion. Persistent in-app tank-level monitoring outage incidents
+  are current packet-09 behavior after a configurable 15-minute grace period.
+- Fish compatibility remains notes-only and undecided; no pairwise evaluator or
+  assignment blocking is part of the current product.
 
 ### Out of scope unless explicitly added
 

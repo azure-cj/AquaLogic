@@ -14,9 +14,10 @@ from swagger_ui_bundle import swagger_ui_path
 
 from .config import settings
 from .database import Base, engine
-from .routes import alerts, auth, dashboard, devices, fish, management, public, security, sensors, species_suitability, tanks
+from .routes import alerts, auth, dashboard, devices, fish, management, monitoring_incidents, public, security, sensors, species_suitability, tanks
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
+from .services.monitoring_incidents import start_monitoring_incident_detector
 
 # Ensure all SQLAlchemy models are registered before metadata is used.
 from . import models  # noqa: F401
@@ -35,7 +36,12 @@ async def lifespan(_: FastAPI):
         finally:
             db.close()
     start_demo_generator()
-    yield
+    detector = start_monitoring_incident_detector()
+    try:
+        yield
+    finally:
+        if detector is not None:
+            detector.stop()
 
 
 app = FastAPI(
@@ -178,3 +184,4 @@ app.include_router(public.router)
 app.include_router(management.router)
 app.include_router(dashboard.router)
 app.include_router(security.router)
+app.include_router(monitoring_incidents.router)

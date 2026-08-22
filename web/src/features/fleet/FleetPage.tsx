@@ -9,9 +9,11 @@ import {
   LoadingState,
   PageHeader,
   Panel,
-  StatusBadge
+  StatusBadge,
+  statusLabel,
 } from '@/shared/components/admin-ui';
 import {
+  formatReportingAge,
   formatReading as reading,
   relativeTime
 } from '@/shared/utils/formatting';
@@ -86,7 +88,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
         <div className="data-head">
           <span>Tank</span>
           <span>Status</span>
-          <span>Species Care</span>
+          <span>Species Care (water)</span>
           <span>Temperature</span>
           <span>pH</span>
           <span>Reporting</span>
@@ -107,14 +109,27 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
             </span>
             <StatusBadge value={tank.status} />
             <span><StatusBadge value={tank.species_care_status ?? 'unavailable'} /><small>{tank.assigned_species_count ?? 0} assigned</small></span>
-            <span className="metric-cell">
+            <span
+              className="metric-cell"
+              aria-label={`${tank.status === 'offline' && tank.latest_reading?.temperature != null ? 'Last known temperature' : 'Temperature'} ${reading(tank.latest_reading?.temperature, '°C')}`}
+            >
               {reading(tank.latest_reading?.temperature, '°C')}
             </span>
-            <span className="metric-cell">{reading(tank.latest_reading?.ph, '', 1)}</span>
+            <span
+              className="metric-cell"
+              aria-label={`${tank.status === 'offline' && tank.latest_reading?.ph != null ? 'Last known pH' : 'pH'} ${reading(tank.latest_reading?.ph, '', 1)}`}
+            >
+              {reading(tank.latest_reading?.ph, '', 1)}
+            </span>
             <span>
               <strong className={tank.status === 'offline' ? 'text-critical' : ''}>
-                {relativeTime(tank.last_reading_at)}
+                {formatReportingAge(tank.reporting_age_seconds, { offline: tank.status === 'offline' })}
               </strong>
+              {tank.active_monitoring_incident_count > 0 && (
+                <small className="monitoring-incident-marker" aria-label="Monitoring outage recorded">
+                  Monitoring outage recorded
+                </small>
+              )}
               <small>
                 {tank.active_critical_count + tank.active_warning_count
                   ? `${tank.active_critical_count} critical · ${tank.active_warning_count} warning`
@@ -140,16 +155,17 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
             </div>
             <dl>
               <div>
-                <dt>Temp</dt>
+                <dt>{tank.status === 'offline' && tank.latest_reading?.temperature != null ? 'Last known temp' : 'Temperature'}</dt>
                 <dd>{reading(tank.latest_reading?.temperature, '°C')}</dd>
               </div>
               <div>
-                <dt>pH</dt>
+                <dt>{tank.status === 'offline' && tank.latest_reading?.ph != null ? 'Last known pH' : 'pH'}</dt>
                 <dd>{reading(tank.latest_reading?.ph, '')}</dd>
               </div>
             </dl>
-            <small>Last report {relativeTime(tank.last_reading_at)}</small>
-            <small>Species Care: {tank.species_care_status ?? 'unavailable'} · {tank.assigned_species_count ?? 0} assigned</small>
+            <small>{formatReportingAge(tank.reporting_age_seconds, { offline: tank.status === 'offline' })}</small>
+            {tank.active_monitoring_incident_count > 0 && <small className="monitoring-incident-marker">Monitoring outage recorded</small>}
+            <small>Species Care (water): {statusLabel(tank.species_care_status ?? 'unavailable')} · {tank.assigned_species_count ?? 0} assigned</small>
           </Link>
         ))}
       </div>

@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## First-time setup
 
@@ -83,6 +83,105 @@ python bridge\esp32_bridge.py --config bridge\bridge-config.json
 The bridge configuration is local and untracked. The ESP32 URL must remain a
 private local `/data` address; a temporary tunnel may carry only dashboard/API
 traffic. The browser and backend never call the ESP32 directly.
+
+## Tank deletion and hardware decommissioning
+
+Tank retirement and permanent deletion are separate administrator workflows,
+not remote hardware teardown. Retirement is the one-way `active -> retired`
+transition: it makes the tank private, disables all registered devices in the
+same transaction, clears its monitoring expectation, retains history/media, and
+blocks on executing or uncleared-unknown actuator work. It is idempotent and
+audited. Permanent deletion is available only after retirement and performs the
+existing database-first relational/media cleanup. Retirement resolves any active
+persistent monitoring incident as `tank_retired`; no new incident may open for
+the retired tank.
+
+Before retiring or permanently deleting a tank with registered equipment:
+
+1. Identify every registered device and attached actuator for the source tank.
+2. Keep the bridge online and physically inspect the correct hardware.
+3. Disable device-resident schedules through the existing controls where safe.
+4. Stop active equipment and verify the physical result locally.
+5. Record any configuration that must be preserved for another tank.
+6. Deactivate the old registered device/key in **Devices**.
+7. Confirm no fresh readings or actuator commands are arriving under that
+   identity.
+8. Retire the tank only after hardware cleanup is complete. The retired detail
+   remains available for historical review and offers the deliberate permanent
+   delete action.
+9. Permanently delete the tank only after the retired record and retained
+   history/media have been reviewed.
+10. If hardware is reused, follow [Moving equipment to another tank](#moving-equipment-to-another-tank) and provision a new registration for its
+   destination.
+
+The delete transaction cascades the tank's sensor readings, alerts, species
+assignments, registered devices, actuator commands, and actuator state history.
+It also removes an AquaLogic-owned local uploaded tank hero image only after the
+database commit succeeds. Missing files are harmless; external HTTPS image URLs
+and paths outside the configured media root are never deleted. A post-commit
+filesystem failure is logged for operator follow-up and does not roll back or
+misreport the committed database deletion.
+
+Database deletion does not clear ESP32 schedules, firmware configuration, or
+physical actuator state. If the bridge or equipment cannot be reached, defer the
+delete or record the unresolved physical follow-up explicitly; do not treat a
+successful API response as proof of hardware cleanup.
+
+## Moving equipment to another tank
+
+Treat a physical move as a new provisioning event. This is the canonical
+operator runbook for the [device-movement and reprovisioning hardening
+packet](deep-spec/final-hardening/04-device-movement-and-provisioning.md). Do
+not edit `tank_id`, move historical readings, reuse a device identity, or copy
+raw keys:
+
+1. Identify the source tank, registered device, and attached actuators.
+2. Finish or physically verify pending actuator work. An executing or
+   uncleared `outcome_unknown` pump command requires physical inspection and
+   administrator verification before another same-pump dispense; **Stop**
+   remains available during that lock.
+3. Disable device-resident schedules and stop equipment where appropriate.
+   Confirm the physical result locally; deactivation and database deletion do
+   not clear firmware schedules or physical state.
+4. Deactivate the existing device registration in **Devices**.
+5. Stop or disconnect the old bridge configuration and confirm the old key no
+   longer ingests readings or claims commands. The deactivated key returning
+   `401` is expected, but does not prove the equipment stopped.
+6. Physically move and reconnect the hardware. Confirm the destination tank,
+   sensor wiring, actuator labels, pump A/B plumbing, and local power state.
+7. Provision a new device registration for the destination tank as an
+   administrator. Provisioning returns a new key once; it does not change the
+   old device row or its historical ownership.
+8. Configure the bridge with the new one-time key. The bridge has no tank
+   selector; the server-side registration fixes the destination mapping. Keep
+   the key out of logs, screenshots, tickets, and repository files.
+9. Confirm the new identity reports **Online** and a fresh reading shows the
+   new `device_id`, destination `tank_id`, server receipt time, supported units,
+   and plausible values. Confirm no new source-tank reading is arriving under
+   the old identity; identify any other active device explicitly.
+10. Verify sensor identity and UV/LED/feeder/Pump A/B physical identity before
+    controls resume. Treat last-known actuator state as diagnostic context, not
+    physical confirmation.
+11. Recreate only the intended device-resident schedules for the destination,
+    then read back each device status. A successful schedule configuration
+    request does not guarantee every future autonomous event.
+
+The old registration remains inactive as the historical identity. If readings
+appear on the source or on both tanks, stop the bridge and inspect its running
+configuration rather than guessing which data is authoritative. If provisioning
+fails, keep the old identity deactivated while the hardware is at the
+destination. If the hardware is physically returned and fully verified, an
+administrator may reactivate the old registration; a rotated old key must be
+replaced with its one-time rotation response. A newly created destination
+registration can be deactivated, but registrations and historical readings are
+never merged.
+
+Key rotation is a same-device credential replacement only. It invalidates the
+previous key and returns the replacement once; it does not change `tank_id`,
+move readings, or provision a destination identity. For the phase boundaries,
+see the [Phase 01 monitoring-device spec](deep-spec/phase-01-domain-foundation/02-monitoring-device.md),
+[bridge spec](deep-spec/phase-01-domain-foundation/03-bridge-architecture.md),
+and [Phase 05 equipment connection spec](deep-spec/phase-05-equipment-control/01-equipment-connection.md).
 
 ## Validation workflow
 

@@ -2,10 +2,14 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+from .services.reading_freshness import READING_FRESHNESS_SECONDS
+
 
 DEFAULT_JWT_SECRET = "development-only-change-before-production-2026"
 MAX_ACCESS_TOKEN_MINUTES = 15
 MAX_REFRESH_SESSION_DAYS = 7
+DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS = 900
+DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -43,6 +47,9 @@ class Settings:
     max_fish_image_bytes: int
     analytics_uptime_warning: float
     analytics_uptime_critical: float
+    monitoring_incidents_enabled: bool
+    monitoring_outage_grace_seconds: int
+    monitoring_incident_check_interval_seconds: int
 
     @property
     def is_production(self) -> bool:
@@ -68,6 +75,17 @@ def _validate_production(settings: Settings) -> None:
         raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be between 5 and 15 in production")
     if not 1 <= settings.refresh_session_expire_days <= MAX_REFRESH_SESSION_DAYS:
         raise ValueError("REFRESH_SESSION_EXPIRE_DAYS must be between 1 and 7 in production")
+    if not settings.monitoring_incidents_enabled:
+        raise ValueError("Production requires persistent monitoring incidents to remain enabled")
+
+
+def _validate_monitoring(settings: Settings) -> None:
+    if settings.monitoring_outage_grace_seconds <= READING_FRESHNESS_SECONDS:
+        raise ValueError(
+            "MONITORING_OUTAGE_GRACE_SECONDS must be strictly greater than the 90-second reading freshness window"
+        )
+    if settings.monitoring_incident_check_interval_seconds < 1:
+        raise ValueError("MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS must be at least 1 second")
 
 
 @lru_cache
@@ -95,7 +113,18 @@ def get_settings() -> Settings:
         max_fish_image_bytes=int(os.getenv("MAX_FISH_IMAGE_BYTES", os.getenv("MAX_HERO_IMAGE_BYTES", str(5 * 1024 * 1024)))),
         analytics_uptime_warning=float(os.getenv("ANALYTICS_UPTIME_WARNING", "99")),
         analytics_uptime_critical=float(os.getenv("ANALYTICS_UPTIME_CRITICAL", "95")),
+        monitoring_incidents_enabled=_parse_bool(os.getenv("MONITORING_INCIDENTS_ENABLED"), True),
+        monitoring_outage_grace_seconds=int(
+            os.getenv("MONITORING_OUTAGE_GRACE_SECONDS", str(DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS))
+        ),
+        monitoring_incident_check_interval_seconds=int(
+            os.getenv(
+                "MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS",
+                str(DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS),
+            )
+        ),
     )
+    _validate_monitoring(settings)
     if settings.is_production:
         _validate_production(settings)
     return settings

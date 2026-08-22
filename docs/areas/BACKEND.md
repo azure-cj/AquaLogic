@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Read first
 
@@ -24,8 +24,13 @@ Last reviewed: 2026-08-21
   value for the same parameter.
 - `backend/app/services/species_suitability.py`: derived species preference
   checks; keep this policy separate from threshold and alert behavior.
-- `backend/app/routes/tanks.py`: tank detail, configuration, assignments, and
-  the compact `/operations` snapshot contract.
+- `backend/app/routes/tanks.py`: tank detail, active/retired/all directory
+  filters, one-way retirement, configuration, assignments, the compact
+  `/operations` snapshot contract, hero-image upload/replacement, and
+  database-first permanent deletion cleanup for owned local tank media.
+- `backend/app/services/tank_lifecycle.py`: centralized active-tank guards,
+  retirement actuator checks, and SQLite/PostgreSQL mutation-lock ordering;
+  this service also maintains the explicit monitoring-expectation boundary.
 - `backend/app/routes/devices.py`: one-time admin provisioning, sanitized
   administrator device lifecycle management, device-key bridge ingestion, with
   server-side tank mapping, actuator command claiming, final reporting, and
@@ -47,6 +52,12 @@ Last reviewed: 2026-08-21
   device and server receipt timestamp migration with SQLite-safe backfill.
 - `backend/alembic/versions/0010_alert_resolution_source.py`: additive alert
   operator/system resolution metadata migration.
+- `backend/alembic/versions/0011_actuator_uncertain_outcomes.py`: actuator
+  confirmation deadlines, persistent unknown outcomes, and verification audit
+  metadata migration.
+- `backend/alembic/versions/0012_retired_tank_lifecycle.py`: additive tank
+  retirement metadata, monitoring expectation, indexes, and active-row
+  backfill.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.
@@ -63,6 +74,10 @@ Last reviewed: 2026-08-21
 - Keep authorization checks on the backend even when the web UI hides actions.
 - Use Pydantic schemas at API boundaries.
 - Use migrations for schema changes.
+- Route tank-owned writes through the centralized active-tank guard. Retirement
+  is administrator-only, one-way, idempotent, and must lock the tank before
+  deactivating its devices; retired history remains readable without reopening
+  operational writes.
 - Keep actuator routes admin-only for browser users. Device-key routes must
   resolve the device's fixed tank and must not accept a client-selected tank.
 - Treat queued command expiry and `queued -> executing` claiming as part of the
@@ -113,7 +128,26 @@ that the physical actuator is off. Pump commands are rejected rather than
 queued while the fixed bridge is offline, and backend authorization remains
 admin-only. Normal commands default to 120-second expiry with a 300-second
 maximum; pump commands default to 20 seconds with a 30-second maximum. Hardware
-requests are never automatically retried after an ambiguous result.
+requests are never automatically retried after an ambiguous result. A claimed
+command that passes the 180-second post-claim confirmation window becomes
+terminal `outcome_unknown`; reconciliation is shared and idempotent across
+create, read, pending, claim, and report entry points. Same-device/same-pump
+dispense is interlocked while executing or uncleared unknown, with PostgreSQL
+row serialization and SQLite `BEGIN IMMEDIATE`; administrator verification
+records actor/time/note and clears only the software lock. Late bridge reports
+return `409` and do not rewrite the terminal unknown record.
 
 The current database defaults to `backend/aqualogic.db` when the backend is run
 from its directory. It is local state, not a source artifact.
+
+Tank retirement/deletion captures the current lifecycle and hardware boundary.
+Retirement forces private visibility, deactivates registered devices in the
+same transaction, and retains history; it does not erase firmware schedules or
+physical state. Tank deletion captures the current `/api/media/tanks/` hero path, commits the
+relational delete and audit event first, then best-effort removes only a file
+contained by `settings.media_root`. External URLs, missing files, and paths
+outside the media root are ignored; post-commit unlink failures are logged and
+do not make the committed deletion appear to have failed. It does not clear
+device-resident schedules or physical equipment. Follow the decommissioning and
+move/reprovisioning procedures in
+[`../WORKFLOWS.md#moving-equipment-to-another-tank`](../WORKFLOWS.md#moving-equipment-to-another-tank).
