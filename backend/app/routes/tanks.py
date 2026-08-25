@@ -267,7 +267,10 @@ def retire_tank(
 
 @router.delete("/{tank_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tank(tank_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> Response:
-    tank = _get_tank_or_404(db, tank_id)
+    # Permanent deletion is a lifecycle mutation too. Take the same tank lock
+    # used by retirement and device writes before checking/deleting the row so
+    # concurrent delete/retire attempts cannot observe contradictory state.
+    tank = lock_tank_for_mutation(db, tank_id)
     if tank.retired_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

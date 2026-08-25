@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Read first
 
@@ -159,8 +159,8 @@ compact. Larger row typography, human-readable actuator/action labels, and
 expandable details make the audit trail understandable without exposing raw
 configuration. Expired commands have a distinct purple status treatment and a
 `Never sent` badge because they were not delivered to the ESP32. Each row explains whether the command is still
-waiting, may be in progress, reported physical endpoint success, failed, or
-expired before bridge execution. An offline/stale bridge warning explains that
+waiting, may be in progress, reported physical endpoint success, confirmed
+failure, outcome unknown, or expired before bridge execution. An offline/stale bridge warning explains that
 newly queued commands may expire. Control feedback is rendered in a page-level
 toast rail below the floating navigation so it is not clipped by the
 overflow-hidden actuator panel or overlap the navbar; successful queue notices

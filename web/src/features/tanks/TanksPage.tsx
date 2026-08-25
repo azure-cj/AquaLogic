@@ -8,8 +8,11 @@ import {
   Panel,
   SearchField,
   StatusBadge,
+  TankLifecycleBadge,
 } from '@/shared/components/admin-ui';
 import { Brand } from '@/shared/components/Brand';
+import { Dialog, DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogTitle } from '@/shared/components/ui/dialog';
+import { IconTooltip, TooltipProvider } from '@/shared/components/ui/tooltip';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
@@ -25,69 +28,40 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { TankEditorDrawer } from './TankEditorDrawer';
 import { TankRetireDialog } from './TankRetireDialog';
 import { useMe } from '@/shared/hooks/useMe';
 import './styles.css';
 
-function ActionTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  const [dismissed, setDismissed] = useState(false);
-  return (
-    <span
-      className={`action-tooltip${dismissed ? ' is-dismissed' : ''}`}
-      data-tooltip={label}
-      onClick={() => setDismissed(true)}
-      onBlur={() => setDismissed(false)}
-      onMouseEnter={() => setDismissed(false)}
-    >
-      {children}
-    </span>
-  );
-}
-
 function QrModal({
   value,
   onClose,
+  returnFocus,
 }: {
   value: { data: string; tank: Tank } | null;
   onClose: () => void;
+  returnFocus: RefObject<HTMLElement | null>;
 }) {
-  if (!value) return null;
   return (
-    <div className="modal-layer modal-centered qr-modal">
-      <button
-        className="modal-backdrop"
-        type="button"
-        onClick={onClose}
-        aria-label="Close QR code"
-      />
-      <section
-        className="qr-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="qr-title"
-      >
-        <button
+    <Dialog open={Boolean(value)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogPortal>
+        <div className="modal-layer modal-centered qr-modal">
+          <DialogOverlay />
+          {value && <DialogContent className="qr-dialog" onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }}>
+        <DialogClose
           className="icon-button qr-close"
           type="button"
-          onClick={onClose}
           aria-label="Close"
         >
           <X size={20} />
-        </button>
+        </DialogClose>
         <div className="print-label">
           <Brand compact />
           <p>Scan to view live tank information</p>
           <img src={value.data} alt={`QR code for ${value.tank.name}`} />
-          <h2 id="qr-title">{value.tank.name}</h2>
+          <DialogTitle>{value.tank.name}</DialogTitle>
           <span>{value.tank.location}</span>
         </div>
         <div className="dialog-actions no-print">
@@ -106,8 +80,10 @@ function QrModal({
             <Download size={16} /> Download QR
           </a>
         </div>
-      </section>
-    </div>
+          </DialogContent>}
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }
 
@@ -123,6 +99,7 @@ export function Tanks() {
     data: string;
     tank: Tank;
   } | null>(null);
+  const qrTriggerRef = useRef<HTMLElement | null>(null);
   const [retireTarget, setRetireTarget] = useState<Tank | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -158,7 +135,8 @@ export function Tanks() {
     nav('/admin/tanks');
   }, [nav]);
   const publicUrl = (tank: Tank) => `${location.origin}/tank/${tank.public_id}`;
-  const showQr = async (tank: Tank) => {
+  const showQr = async (tank: Tank, trigger: HTMLElement) => {
+    qrTriggerRef.current = trigger;
     setQrPreview({ data: await QRCode.toDataURL(publicUrl(tank)), tank });
   };
   const copyUrl = async (tank: Tank) => {
@@ -192,6 +170,7 @@ export function Tanks() {
   };
 
   return (
+    <TooltipProvider delayDuration={500}>
     <section>
       <PageHeader
         eyebrow="Fleet management"
@@ -278,18 +257,18 @@ export function Tanks() {
                     </span>
                   </span>
                   {tank.lifecycle === 'retired' ? (
-                    <StatusBadge value="retired" />
+                    <TankLifecycleBadge lifecycle="retired" />
                   ) : health ? (
                     <StatusBadge value={health.status} />
                   ) : (
                     <span className="muted">—</span>
                   )}
-                  <span>
-                    <StatusBadge value={tank.is_public ? 'normal' : 'offline'} />
-                    <small>{tank.is_public ? 'Published' : 'Private'}</small>
+                  <span className={`publication-state ${tank.is_public ? 'is-public' : 'is-private'}`}>
+                    <strong>{tank.is_public ? 'Public' : 'Private'}</strong>
+                    <small>{tank.is_public ? 'Published page' : 'Not public'}</small>
                   </span>
                   <span className="row-actions">
-                    {canManage && tank.lifecycle === 'active' && <ActionTooltip label="Edit tank">
+                    {canManage && tank.lifecycle === 'active' && <IconTooltip label="Edit tank">
                       <Link
                         className="icon-button"
                         to={`/admin/tanks?edit=${tank.id}`}
@@ -297,18 +276,18 @@ export function Tanks() {
                       >
                         <Pencil size={16} />
                       </Link>
-                    </ActionTooltip>}
-                    {tank.lifecycle === 'active' && <ActionTooltip label="Show QR code">
+                    </IconTooltip>}
+                    {tank.lifecycle === 'active' && <IconTooltip label="Show QR code">
                       <button
                         className="icon-button"
                         type="button"
-                        onClick={() => showQr(tank)}
+                        onClick={(event) => showQr(tank, event.currentTarget)}
                         aria-label={`Show QR code for ${tank.name}`}
                       >
                         <QrCode size={16} />
                       </button>
-                    </ActionTooltip>}
-                    {tank.lifecycle === 'active' && <ActionTooltip label="Copy public URL">
+                    </IconTooltip>}
+                    {tank.lifecycle === 'active' && <IconTooltip label="Copy public URL">
                       <button
                         className="icon-button"
                         type="button"
@@ -317,8 +296,8 @@ export function Tanks() {
                       >
                         <Copy size={16} />
                       </button>
-                    </ActionTooltip>}
-                    {tank.lifecycle === 'active' && <ActionTooltip label="Preview public page">
+                    </IconTooltip>}
+                    {tank.lifecycle === 'active' && <IconTooltip label="Preview public page">
                       <Link
                         className="icon-button"
                         to={`/tank/${tank.public_id}`}
@@ -328,8 +307,8 @@ export function Tanks() {
                       >
                         <ExternalLink size={16} />
                       </Link>
-                    </ActionTooltip>}
-                    {canManage && tank.lifecycle === 'active' && <ActionTooltip label="Retire tank">
+                    </IconTooltip>}
+                    {canManage && tank.lifecycle === 'active' && <IconTooltip label="Retire tank">
                       <button
                         className="icon-button icon-danger"
                         type="button"
@@ -338,7 +317,7 @@ export function Tanks() {
                       >
                         <Archive size={16} />
                       </button>
-                    </ActionTooltip>}
+                    </IconTooltip>}
                   </span>
                 </div>
               );
@@ -357,7 +336,7 @@ export function Tanks() {
         onClose={closeDrawer}
         onSaved={saved}
       />}
-      <QrModal value={qrPreview} onClose={() => setQrPreview(null)} />
+      <QrModal value={qrPreview} onClose={() => setQrPreview(null)} returnFocus={qrTriggerRef} />
       {canManage && <TankRetireDialog
         tankName={retireTarget?.name ?? 'tank'}
         open={Boolean(retireTarget)}
@@ -366,6 +345,7 @@ export function Tanks() {
         onClose={() => setRetireTarget(null)}
       />}
     </section>
+    </TooltipProvider>
   );
 }
 

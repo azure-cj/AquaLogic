@@ -66,6 +66,7 @@ describe('fleet reporting clarity', () => {
 
     expect(await screen.findByLabelText(/Last known temperature/)).toHaveTextContent('25.0 °C');
     expect(screen.getByLabelText(/Last known pH/)).toHaveTextContent('7.0');
+    expect(screen.getAllByText('Last known').length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText('No report for approximately 13 hours').length).toBeGreaterThan(0);
     expect(screen.getByText('Water suitable')).toBeInTheDocument();
     expect(screen.getByText('Species Care (water)')).toBeInTheDocument();

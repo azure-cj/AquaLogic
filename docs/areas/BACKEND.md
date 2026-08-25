@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Read first
 
@@ -118,7 +118,9 @@ keys or Wi-Fi credentials. The existing generic actuator tables also store the
 manual-test pump lifecycle; no extra migration is needed for this JSON-backed
 extension. UV, LED, and feeder schedules are validated configuration commands
 forwarded once to the ESP32, which owns local execution; AquaLogic does not run
-a scheduler or create one command per autonomous event. Command history is paginated with a bounded
+a command scheduler or create one command per autonomous event. Its existing
+periodic maintenance loop also reconciles overdue actuator commands without a
+browser request. Command history is paginated with a bounded
 `page_size` and optional actuator/status filters so the admin audit view cannot
 grow into an unbounded response. Each history response also includes lifecycle
 counts for the fixed device/tank, independent of the active row filters, so the
@@ -128,7 +130,9 @@ that the physical actuator is off. Pump commands are rejected rather than
 queued while the fixed bridge is offline, and backend authorization remains
 admin-only. Normal commands default to 120-second expiry with a 300-second
 maximum; pump commands default to 20 seconds with a 30-second maximum. Hardware
-requests are never automatically retried after an ambiguous result. A claimed
+requests are never automatically retried after an ambiguous result; confirmed
+pre-dispatch failures remain `failed`, while post-dispatch ambiguity becomes
+`outcome_unknown`. A claimed
 command that passes the 180-second post-claim confirmation window becomes
 terminal `outcome_unknown`; reconciliation is shared and idempotent across
 create, read, pending, claim, and report entry points. Same-device/same-pump

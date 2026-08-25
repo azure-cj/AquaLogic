@@ -2,6 +2,7 @@ import AdminShell from './AdminShell';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminNavigation, adminNavigationItemCount, NAVIGATION_FLAT_ITEM_LIMIT } from './navigation';
@@ -206,5 +207,20 @@ describe('admin shell guards and navigation', () => {
       expect(document.body.scrollLeft).toBe(0);
       expect(main!.scrollLeft).toBe(0);
     });
+  });
+
+  it('uses a modal sheet for mobile navigation and restores focus on Escape', async () => {
+    const user = userEvent.setup();
+    mocked.me.isError = false;
+    mocked.me.data = { name: 'Demo Admin', role: 'admin', must_change_password: false };
+    renderShell();
+
+    const opener = screen.getByRole('button', { name: 'Open navigation' });
+    await user.click(opener);
+    expect(screen.getByRole('dialog', { name: 'Fleet command center' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Fleet command center' })).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
   });
 });

@@ -27,7 +27,6 @@ export function ThemeControl({ className = '' }: { className?: string; }) {
 
   useEffect(() => {
     if (!open) return undefined;
-
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!controlRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -37,7 +36,6 @@ export function ThemeControl({ className = '' }: { className?: string; }) {
         controlRef.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
       }
     };
-
     document.addEventListener('pointerdown', closeOnOutsidePointer);
     document.addEventListener('keydown', closeOnEscape);
     return () => {
@@ -63,15 +61,14 @@ export function ThemeControl({ className = '' }: { className?: string; }) {
         className="theme-control-trigger icon-button"
         type="button"
         aria-label={`Theme: ${modeLabels[mode]}`}
+        title={`Theme: ${modeLabels[mode]}`}
         aria-expanded={open}
         aria-haspopup="menu"
-        title={`Theme: ${modeLabels[mode]}`}
         onClick={() => setOpen((value) => !value)}
       >
         <Icon size={17} aria-hidden="true" />
       </button>
-      {open && (
-        <div className="theme-control-menu" role="menu" aria-label="Choose color theme">
+      {open && <div className="theme-control-menu" role="menu" aria-label="Choose color theme">
           <div className="theme-control-menu-heading">
             <strong>Appearance</strong>
             <small>Choose how AquaLogic looks</small>
@@ -86,6 +83,7 @@ export function ThemeControl({ className = '' }: { className?: string; }) {
                 role="menuitemradio"
                 aria-checked={mode === themeMode}
                 onClick={() => chooseTheme(themeMode)}
+                value={themeMode}
               >
                 <ModeIcon size={16} aria-hidden="true" />
                 <span>
@@ -96,8 +94,7 @@ export function ThemeControl({ className = '' }: { className?: string; }) {
               </button>
             );
           })}
-        </div>
-      )}
+        </div>}
     </div>
   );
 }

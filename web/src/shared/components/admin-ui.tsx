@@ -1,15 +1,36 @@
 import { statusText } from '@/shared/api/client';
-import { AlertTriangle, CheckCircle2, Inbox, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleHelp, CircleOff, CirclePause, CirclePlay, Inbox, Radio, WifiOff, X } from 'lucide-react';
 import {
   FormEvent,
+  cloneElement,
+  type ReactElement,
   ReactNode,
-  RefObject,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogOverlay,
+  AlertDialogPortal,
+  AlertDialogTitle,
+} from '@/shared/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from '@/shared/components/ui/dialog';
 
 export type FleetStatus = 'normal' | 'warning' | 'critical' | 'offline';
 
@@ -36,6 +57,52 @@ export function StatusBadge({ value }: { value: string; }) {
       {statusLabel(value)}
     </span>
   );
+}
+
+/** Water-health state only. It deliberately does not represent lifecycle or device state. */
+export function OperationalStatusBadge({ value }: { value: FleetStatus }) {
+  const icons = { normal: CheckCircle2, warning: AlertTriangle, critical: AlertTriangle, offline: WifiOff };
+  const Icon = icons[value];
+  return (
+    <span className={`status-badge status-${value}`} aria-label={statusText(value)}>
+      <Icon size={13} aria-hidden="true" />
+      {statusLabel(value)}
+    </span>
+  );
+}
+
+/** Tank lifecycle is intentionally neutral: retired is not an offline reading. */
+export function TankLifecycleBadge({ lifecycle }: { lifecycle: 'active' | 'retired' }) {
+  const retired = lifecycle === 'retired';
+  return (
+    <span className={`status-badge ${retired ? 'status-retired' : 'status-normal'}`} aria-label={retired ? 'Tank retired' : 'Tank active'}>
+      {retired ? <CirclePause size={13} aria-hidden="true" /> : <CirclePlay size={13} aria-hidden="true" />}
+      {retired ? 'Retired' : 'Active'}
+    </span>
+  );
+}
+
+export function DeviceConnectionBadge({ status }: { status: 'online' | 'offline' | 'disabled' }) {
+  const definitions = {
+    online: { label: 'Online', className: 'status-normal', Icon: Radio },
+    offline: { label: 'Offline', className: 'status-offline', Icon: WifiOff },
+    disabled: { label: 'Disabled', className: 'status-disabled', Icon: CircleOff },
+  } as const;
+  const { label, className, Icon } = definitions[status];
+  return <span className={`status-badge ${className}`} aria-label={`Device ${label.toLowerCase()}`}><Icon size={13} aria-hidden="true" />{label}</span>;
+}
+
+export function CommandStatusBadge({ status }: { status: 'queued' | 'executing' | 'succeeded' | 'failed' | 'expired' | 'outcome_unknown' }) {
+  const definitions = {
+    queued: ['Queued', 'status-warning', CircleHelp],
+    executing: ['Executing', 'status-command-executing', Radio],
+    succeeded: ['Succeeded', 'status-normal', CheckCircle2],
+    failed: ['Failed', 'status-critical', AlertTriangle],
+    expired: ['Expired', 'status-offline', CircleOff],
+    outcome_unknown: ['Outcome unknown', 'status-command-unknown', CircleHelp],
+  } as const;
+  const [label, className, Icon] = definitions[status];
+  return <span className={`status-badge ${className}`} aria-label={`Command ${label.toLowerCase()}`}><Icon size={13} aria-hidden="true" />{label}</span>;
 }
 
 export type AccountLifecycleStatus = 'active' | 'setup_required' | 'inactive';
@@ -175,6 +242,58 @@ export function Notice({
   );
 }
 
+/**
+ * A compact AquaLogic field composition for forms that need consistent labels,
+ * help, units, and accessible validation without forcing a form-library rewrite.
+ */
+export function FormField({
+  label,
+  children,
+  description,
+  error,
+  required = false,
+  suffix,
+  disabled = false,
+  busy = false,
+  className = '',
+}: {
+  label: string;
+  children: ReactElement<{ id?: string; disabled?: boolean; 'aria-describedby'?: string; 'aria-invalid'?: boolean }>;
+  description?: ReactNode;
+  error?: string;
+  required?: boolean;
+  suffix?: ReactNode;
+  disabled?: boolean;
+  busy?: boolean;
+  className?: string;
+}) {
+  const inputId = useId();
+  const descriptionId = useId();
+  const errorId = useId();
+  const describedBy = [description ? descriptionId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
+  const control = cloneElement(children, {
+    id: children.props.id ?? inputId,
+    disabled: children.props.disabled ?? (disabled || busy),
+    'aria-describedby': children.props['aria-describedby'] ?? describedBy,
+    'aria-invalid': error ? true : children.props['aria-invalid'],
+  });
+  const controlId = control.props.id;
+
+  return (
+    <div className={`form-field field${error ? ' has-error' : ''}${busy ? ' is-busy' : ''}${className ? ` ${className}` : ''}`}>
+      <label className="form-field-label" htmlFor={controlId}>
+        {label}{required && <span className="form-field-required" aria-hidden="true"> *</span>}
+      </label>
+      <div className="form-field-control">
+        {control}
+        {suffix && <span className="form-field-suffix" aria-hidden="true">{suffix}</span>}
+      </div>
+      {description && <small className="form-field-description" id={descriptionId}>{description}</small>}
+      {error && <small className="form-field-error" id={errorId} role="alert">{error}</small>}
+    </div>
+  );
+}
+
 export function Toast({
   message,
   tone = 'success',
@@ -214,57 +333,6 @@ export function Toast({
   );
 }
 
-const focusableSelector =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function useModalFocus(open: boolean, onClose: () => void, ref: RefObject<HTMLElement>) {
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    returnFocus.current = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const frame = window.requestAnimationFrame(() => {
-      const initialFocus = ref.current?.querySelector<HTMLElement>('[data-drawer-close]')
-        ?? ref.current?.querySelector<HTMLElement>(focusableSelector);
-      initialFocus?.focus();
-    });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const items = Array.from(
-        ref.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
-      ).filter((item) => !item.hasAttribute('disabled'));
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      returnFocus.current?.focus();
-    };
-  }, [open, ref]);
-}
-
 function useDeferredDrawerContent(open: boolean) {
   const [ready, setReady] = useState(false);
 
@@ -301,43 +369,42 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
 }) {
-  const drawerRef = useRef<HTMLElement>(null);
-  useModalFocus(open, onClose, drawerRef);
   const contentReady = useDeferredDrawerContent(open);
-  if (!open) return null;
-
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) returnFocus.current = document.activeElement as HTMLElement | null;
+  }, [open]);
   return (
-    <div className="modal-layer">
-      <button
-        className="modal-backdrop"
-        type="button"
-        onClick={onClose}
-        aria-label={`Close ${title}`}
-      />
-      <aside
-        className="drawer"
-        ref={drawerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="drawer-title"
-        data-drawer
-      >
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogPortal>
+        <div className="modal-layer">
+          <DialogOverlay />
+          <DialogContent
+            className="drawer"
+            aria-describedby={description ? 'drawer-description' : undefined}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              returnFocus.current?.focus();
+            }}
+          >
         <header className="drawer-header">
           <div>
             <p className="eyebrow">AquaLogic management</p>
-            <h2 id="drawer-title">{title}</h2>
-            {description && <p>{description}</p>}
+            <DialogTitle>{title}</DialogTitle>
+            {description && <DialogDescription id="drawer-description">{description}</DialogDescription>}
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close" data-drawer-close>
+          <DialogClose className="icon-button" type="button" aria-label="Close" data-drawer-close>
             <X size={20} />
-          </button>
+          </DialogClose>
         </header>
         <div className={`drawer-body${contentReady ? '' : ' drawer-body-deferred'}`} aria-busy={!contentReady}>
           {contentReady ? children : <span className="drawer-loading-line" aria-hidden="true" />}
         </div>
         {footer && <footer className="drawer-footer">{footer}</footer>}
-      </aside>
-    </div>
+          </DialogContent>
+        </div>
+      </DialogPortal>
+    </Dialog>
   );
 }
 
@@ -362,41 +429,35 @@ export function ConfirmDialog({
   tone?: 'danger' | 'primary';
   children?: ReactNode;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  useModalFocus(open, onClose, dialogRef);
-  if (!open) return null;
   return (
-    <div className="modal-layer modal-centered">
-      <button className="modal-backdrop" type="button" onClick={onClose} aria-label="Cancel" />
-      <section
-        className="confirm-dialog"
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-title"
-        aria-describedby="confirm-message"
-      >
+    <AlertDialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <AlertDialogPortal>
+        <div className="modal-layer modal-centered">
+          <AlertDialogOverlay />
+          <AlertDialogContent className="confirm-dialog">
         <span className={`confirm-icon confirm-${tone}`} aria-hidden="true">
           <AlertTriangle size={22} />
         </span>
-        <h2 id="confirm-title">{title}</h2>
-        <p id="confirm-message">{message}</p>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{message}</AlertDialogDescription>
         {children}
         <div className="dialog-actions">
-          <button className="button button-secondary" type="button" onClick={onClose}>
+          <AlertDialogCancel className="button button-secondary" type="button">
             Cancel
-          </button>
-          <button
+          </AlertDialogCancel>
+          <AlertDialogAction
             className={`button ${tone === 'danger' ? 'button-danger' : 'button-primary'}`}
             type="button"
             onClick={onConfirm}
             disabled={busy}
           >
             {busy ? 'Working…' : confirmLabel}
-          </button>
+          </AlertDialogAction>
         </div>
-      </section>
-    </div>
+          </AlertDialogContent>
+        </div>
+      </AlertDialogPortal>
+    </AlertDialog>
   );
 }
 

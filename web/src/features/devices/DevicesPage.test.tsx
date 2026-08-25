@@ -2,6 +2,7 @@ import { api } from '@/shared/api/client';
 import { useMe } from '@/shared/hooks/useMe';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DevicesPage from './DevicesPage';
@@ -113,6 +114,25 @@ describe('DevicesPage', () => {
     expect(screen.getByText('one-time-key')).toBeInTheDocument();
     expect(window.localStorage.getItem('aqualogic-device-key')).toBeNull();
     expect(window.sessionStorage.getItem('aqualogic-device-key')).toBeNull();
+  });
+
+  it('closes the one-time key dialog with Escape and returns focus to its trigger', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useMe).mockReturnValue(meResult('admin'));
+    vi.mocked(api)
+      .mockResolvedValueOnce(devices as never)
+      .mockResolvedValueOnce({ device_key: 'one-time-key', device_id: 'bridge-front', tank_id: 1, rotated_at: '2026-08-21T08:00:00Z' } as never)
+      .mockResolvedValue(devices as never);
+
+    renderPage();
+    const rotate = (await screen.findAllByRole('button', { name: 'Rotate key' }))[0];
+    await user.click(rotate);
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Rotate key' }));
+    expect(await screen.findByRole('dialog', { name: 'New device key' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New device key' })).not.toBeInTheDocument());
+    expect(rotate).toHaveFocus();
   });
 
   it('does not fetch device data for staff users', async () => {

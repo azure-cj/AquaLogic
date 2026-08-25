@@ -1,7 +1,7 @@
 # Pump Maintenance
 
 Status: Implemented guarded maintenance workflow with uncertainty interlock; automatic dosing deferred
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -47,7 +47,9 @@ bridge:
 3. Polls the selected pump until the configured volume move reports complete.
 4. Reports success only when completion is observed.
 5. Uses a bounded completion timeout and may issue one intentional safety-stop
-   request if the dispense does not complete safely.
+   request if the dispense does not complete safely; the command remains
+   `outcome_unknown` because the physical result cannot be inferred from the
+   timeout or stop response.
 
 The reported `volume_ml` is firmware state and is informational to AquaLogic;
 the browser cannot edit it.
@@ -64,10 +66,11 @@ the earlier dispense did not occur.
 - Pump commands default to a 20-second queue expiry and cannot exceed 30
   seconds before bridge claim.
 - Pump commands are rejected with `409` while the bridge is offline.
-- A bridge-reported timeout/failure follows the bridge failure path. If AquaLogic
-  then loses the terminal report past the 180-second confirmation window, the
-  command becomes `outcome_unknown`: physical execution may have occurred and
-  the command is never automatically retried.
+- A confirmed pre-dispatch or explicit non-ambiguous rejection is `failed`. A
+  post-dispatch timeout, lost/malformed response, completion timeout, or
+  state-poll failure is `outcome_unknown`: physical execution may have occurred
+  and the command is never automatically retried. The server's 180-second
+  confirmation deadline remains a second, unattended safety net.
 - The bridge never retries a dispense, stop, or retract request automatically.
 - The one safety stop after an unsafe or incomplete dispense is not a retry of
   the dispense action.

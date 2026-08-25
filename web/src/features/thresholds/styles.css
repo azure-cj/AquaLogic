@@ -1,14 +1,14 @@
 .threshold-list {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.65rem;
 }
 
 .threshold-card {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 13px;
+  border-radius: 11px;
   background: #fff;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 9px rgba(20, 58, 70, .03);
 }
 
 .threshold-card > header {
@@ -16,7 +16,7 @@
   grid-template-columns: auto 1fr auto;
   gap: 0.7rem;
   align-items: center;
-  padding: 0.8rem 1rem;
+  padding: 0.7rem .9rem;
   border-bottom: 1px solid var(--border);
   background: #fbfdfd;
 }
@@ -40,21 +40,53 @@
   grid-template-columns: 0.6fr repeat(4, 1fr) auto;
   gap: 0.7rem;
   align-items: end;
-  padding: 0.9rem 1rem 1rem;
+  padding: 0.72rem .9rem .82rem;
 }
 
-.threshold-fields .field span {
+.threshold-fields .form-field-label {
+  display: block;
   padding-left: 0.45rem;
   border-left: 3px solid var(--border);
 }
 
-.threshold-fields .warning-field span {
+.threshold-fields .warning-field .form-field-label {
   border-color: var(--warning);
 }
 
-.threshold-fields .critical-field span {
+.threshold-fields .critical-field .form-field-label {
   border-color: var(--critical);
 }
+
+.threshold-fields .form-field-control {
+  position: relative;
+}
+
+.threshold-fields .form-field-suffix {
+  position: absolute;
+  top: 50%;
+  right: .65rem;
+  color: var(--muted);
+  font-size: .65rem;
+  font-weight: 750;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.threshold-fields .form-field-control:has(.form-field-suffix) input {
+  padding-right: 2.7rem;
+}
+
+.form-field-description,
+.form-field-error {
+  display: block;
+  font-size: .61rem;
+  line-height: 1.35;
+}
+
+.form-field-description { color: var(--muted); }
+.form-field-error { color: #a23440; font-weight: 700; }
+.form-field.has-error input { border-color: var(--critical); }
+.form-field-required { color: var(--critical); }
 
 @media (max-width: 1023px) {
 

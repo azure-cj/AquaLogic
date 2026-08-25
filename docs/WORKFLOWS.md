@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## First-time setup
 
@@ -114,7 +114,8 @@ Before retiring or permanently deleting a tank with registered equipment:
 10. If hardware is reused, follow [Moving equipment to another tank](#moving-equipment-to-another-tank) and provision a new registration for its
    destination.
 
-The delete transaction cascades the tank's sensor readings, alerts, species
+The delete transaction takes the established tank lifecycle mutation lock, then
+cascades the tank's sensor readings, alerts, species
 assignments, registered devices, actuator commands, and actuator state history.
 It also removes an AquaLogic-owned local uploaded tank hero image only after the
 database commit succeeds. Missing files are harmless; external HTTPS image URLs

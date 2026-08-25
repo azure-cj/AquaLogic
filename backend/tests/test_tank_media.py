@@ -1,12 +1,20 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
+from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
+from app.database import Base, configure_sqlite_foreign_keys
 from app.models import Tank
 from app.models import User
 from app.security import get_password_hash
+from app.security import utc_now
+from app.services.tank_lifecycle import lock_tank_for_mutation
 
 
 PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"demo-image"
@@ -215,3 +223,54 @@ def test_staff_cannot_delete_tank_or_owned_hero_file(client, auth_headers, db_se
     assert denied.status_code == 403
     assert stored_file.is_file()
     stored_file.unlink(missing_ok=True)
+
+
+def test_permanent_delete_lock_serializes_two_concurrent_attempts(tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'tank-delete-concurrency.db'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+        future=True,
+    )
+    configure_sqlite_foreign_keys(engine)
+    Base.metadata.create_all(bind=engine)
+    sessions = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    setup = sessions()
+    try:
+        tank = Tank(name="Concurrent delete tank", location="Test bench", retired_at=utc_now())
+        setup.add(tank)
+        setup.commit()
+        tank_id = tank.id
+    finally:
+        setup.close()
+
+    barrier = Barrier(2)
+    results: list[str | int] = []
+
+    def delete_once() -> None:
+        db = sessions()
+        try:
+            barrier.wait()
+            locked = lock_tank_for_mutation(db, tank_id)
+            db.delete(locked)
+            db.commit()
+            results.append("deleted")
+        except HTTPException as error:
+            db.rollback()
+            results.append(error.status_code)
+        finally:
+            db.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            futures = [workers.submit(delete_once) for _ in range(2)]
+            for future in futures:
+                future.result()
+        assert sorted(results, key=str) == [404, "deleted"]
+        check = sessions()
+        try:
+            assert check.get(Tank, tank_id) is None
+        finally:
+            check.close()
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()

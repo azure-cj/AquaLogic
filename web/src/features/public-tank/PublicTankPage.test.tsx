@@ -93,4 +93,16 @@ describe('public tank experience', () => {
       expect(document.title).toBe('Display Tank A · JRed Aquatics'),
     );
   });
+
+  it('uses truthful water-alert wording without claiming notification or response', async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...tank,
+      status: 'critical',
+      parameter_statuses: { ...tank.parameter_statuses, temperature: 'critical' },
+    });
+    renderPage();
+
+    expect(await screen.findByText('AquaLogic recorded a water-quality alert for this tank.')).toBeInTheDocument();
+    expect(screen.queryByText(/alerts the care team|team has been notified|care team has received|is responding/i)).not.toBeInTheDocument();
+  });
 });

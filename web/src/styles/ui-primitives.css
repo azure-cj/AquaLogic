@@ -1,0 +1,33 @@
+.modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  contain: layout paint;
+}
+
+.modal-layer.modal-centered {
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.aqualogic-tooltip {
+  z-index: 220;
+  max-width: min(260px, calc(100vw - 2rem));
+  padding: .45rem .58rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--navy-900);
+  color: #e7f4f4;
+  box-shadow: var(--shadow-strong);
+  font-family: var(--font-admin-sans);
+  font-size: .67rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aqualogic-tooltip { transition: none; }
+}

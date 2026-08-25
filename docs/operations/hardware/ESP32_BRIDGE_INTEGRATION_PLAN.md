@@ -2,7 +2,7 @@
 
 Status: v1 UV/LED/feeder controls plus Pump A/B manual-test bridge implemented
 for temporary hardware testing
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Goal and boundary
 
@@ -97,6 +97,7 @@ GET  /device-ingestion/actuators/pending
 POST /device-ingestion/actuators/{command_id}/executing
 POST /device-ingestion/actuators/{command_id}/succeeded
 POST /device-ingestion/actuators/{command_id}/failed
+POST /device-ingestion/actuators/{command_id}/outcome-unknown
 POST /device-ingestion/actuator-state
 ```
 
@@ -145,14 +146,18 @@ Each cycle:
    polls its status until the firmware-configured volume completes and makes
    one intentional matching stop request only if the bounded safety timeout is
    reached; and
-6. reports success/failure and refreshes the corresponding local state.
+6. reports success, confirmed failure, or ambiguous physical outcome and
+   refreshes the corresponding local state.
 
 Hardware calls are never retried automatically after a timeout or ambiguous
-response because the actuator may already have run. Backend polling and state
-reporting can use normal connection/backoff handling without reissuing a
-physical command. Pump actions are rejected and reported as failed when
-`pump_manual_test_enabled` is false (the default). Logs contain no device key,
-Wi-Fi information, or sensitive configuration.
+response because the actuator may already have run. A timeout, lost/malformed
+terminal response, completion timeout, or state-poll failure after dispatch is
+reported as `outcome_unknown`; confirmed pre-dispatch or explicit endpoint
+rejection is `failed`. Backend polling and state reporting can use normal
+connection/backoff handling without reissuing a physical command. Pump actions
+are rejected and reported as failed when `pump_manual_test_enabled` is false
+(the default). Logs contain no device key, Wi-Fi information, or sensitive
+configuration.
 
 ## Owner/tester commands
 

@@ -1,7 +1,7 @@
 # Fish Feeder Control
 
 Status: Implemented v1 controls; advanced feeding automation deferred  
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -33,10 +33,10 @@ authority for delivery.
 4. The bridge claims it and makes one exact feeder request.
 5. The bridge reports success or failure and refreshes state when possible.
 
-An uncertain or timed-out request is not automatically sent again. A claimed
-command that loses confirmation beyond the 180-second window becomes
-`outcome_unknown`; an operator must inspect the equipment before issuing a new
-command.
+An uncertain or timed-out request is reported as `outcome_unknown` and is not
+automatically sent again. A claimed command that loses confirmation beyond the
+180-second window is reconciled to the same terminal state; an operator must
+inspect the equipment before issuing a new command.
 
 ## Schedule behavior
 

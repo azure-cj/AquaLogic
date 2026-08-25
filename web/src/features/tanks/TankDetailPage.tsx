@@ -15,7 +15,9 @@ import {
   PageHeader,
   Panel,
   StatusBadge,
+  TankLifecycleBadge,
 } from '@/shared/components/admin-ui';
+import { Dialog, DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogTitle } from '@/shared/components/ui/dialog';
 import {
   formatDate,
   formatReading,
@@ -325,7 +327,7 @@ export function TankDetail() {
             </button>
             </>}
             {canManage && value.lifecycle === 'retired' && <>
-            <StatusBadge value="retired" />
+            <TankLifecycleBadge lifecycle="retired" />
             <button
               className="button button-danger button-quiet-danger"
               type="button"
@@ -348,8 +350,10 @@ export function TankDetail() {
             <span>Loading…</span>
           ) : operations.isError ? (
             <strong>Unavailable</strong>
+          ) : isRetired ? (
+            <TankLifecycleBadge lifecycle="retired" />
           ) : (
-            <StatusBadge value={isRetired ? 'retired' : operationalStatus!} />
+            <StatusBadge value={operationalStatus!} />
           )}
         </div>
         <div className="tank-summary-card">
@@ -673,8 +677,8 @@ export function TankDetail() {
       <MonitoringIncidentTankPanel tankId={id} />
 
       {isRetired ? (
-        isAdmin ? <ActuatorControlPanel tankId={id} variant="full" readOnly /> : <StaffActuatorNotice />
-      ) : isAdmin ? <ActuatorControlPanel tankId={id} variant="summary" /> : <StaffActuatorNotice />}
+        isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="full" readOnly /> : <StaffActuatorNotice />
+      ) : isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="summary" /> : <StaffActuatorNotice />}
 
       <TankEditorDrawer
         open={!isRetired && editing}
@@ -688,32 +692,23 @@ export function TankDetail() {
         }}
       />
 
-      {qr && (
-        <div className="modal-layer modal-centered">
-          <button
-            className="modal-backdrop"
-            type="button"
-            onClick={() => setQr(null)}
-            aria-label="Close QR code"
-          />
-          <section
-            className="qr-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="tank-detail-qr-title"
-          >
-            <h2 id="tank-detail-qr-title">{value.name} public QR code</h2>
+      <Dialog open={Boolean(qr)} onOpenChange={(open) => { if (!open) setQr(null); }}>
+        <DialogPortal>
+          <div className="modal-layer modal-centered">
+            <DialogOverlay />
+            {qr && <DialogContent className="qr-dialog">
+            <DialogTitle>{value.name} public QR code</DialogTitle>
             <img src={qr} alt={`QR code for ${value.name}`} />
-            <button
+            <DialogClose
               className="button button-secondary"
               type="button"
-              onClick={() => setQr(null)}
             >
               Close
-            </button>
-          </section>
-        </div>
-      )}
+            </DialogClose>
+            </DialogContent>}
+          </div>
+        </DialogPortal>
+      </Dialog>
       <ConfirmDialog
         open={Boolean(removing)}
         title={`Remove ${removing?.common_name ?? 'species'}?`}

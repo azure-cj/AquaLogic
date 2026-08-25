@@ -164,6 +164,8 @@ describe('admin actuator controls', () => {
     let dialog = screen.getByRole('alertdialog');
     expect(dialog).toHaveTextContent('Manual check only');
     expect(dialog).toHaveTextContent('configured 1.00 mL dose');
+    expect(dialog).toHaveTextContent('Tank: Tank 1');
+    expect(dialog).toHaveTextContent('esp32-control-01 (online)');
     await user.click(within(dialog).getByRole('button', { name: 'Dispense / test' }));
     await screen.findByText('Syringe Pump A dispense/test request queued. The system will update its status after processing.');
 
@@ -324,9 +326,9 @@ describe('admin actuator controls', () => {
     expect(screen.getByText('Not completed — the equipment did not confirm the action')).toBeInTheDocument();
     expect(screen.getByText('Not sent — the request expired while waiting')).toBeInTheDocument();
     expect(screen.getByText('Never sent')).toBeInTheDocument();
-    expect(screen.getByLabelText('executing')).toBeInTheDocument();
-    expect(screen.getByLabelText('failed')).toBeInTheDocument();
-    expect(screen.getByLabelText('expired')).toBeInTheDocument();
+    expect(screen.getByLabelText('Command executing')).toBeInTheDocument();
+    expect(screen.getByLabelText('Command failed')).toBeInTheDocument();
+    expect(screen.getByLabelText('Command expired')).toBeInTheDocument();
   });
 
   it('warns when commands may expire while the bridge is offline', async () => {

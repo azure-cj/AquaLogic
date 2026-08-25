@@ -96,11 +96,11 @@ const overallCopy: Record<
   },
   warning: {
     label: 'Under monitoring',
-    message: 'A reading needs attention and the team has been notified.',
+    message: 'A reading needs attention based on the latest available water data.',
   },
   critical: {
-    label: 'Staff alerted',
-    message: 'The care team has received an alert and is responding.',
+    label: 'Needs attention',
+    message: 'AquaLogic recorded a water-quality alert for this tank.',
   },
   offline: {
     label: 'Sensor offline',
@@ -405,7 +405,7 @@ export function PublicTank() {
           <div className="visitor-alert-note">
             <ShieldCheck size={18} aria-hidden="true" />
             <p>
-              AquaLogic alerts the care team when a monitored reading leaves its configured range.
+              AquaLogic records a water-quality alert when a monitored reading leaves its configured range.
             </p>
           </div>
         </section>

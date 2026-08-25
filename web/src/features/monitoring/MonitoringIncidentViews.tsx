@@ -6,7 +6,6 @@ import {
   LoadingState,
   Notice,
   Panel,
-  StatusBadge,
 } from '@/shared/components/admin-ui';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
 import { useQuery } from '@tanstack/react-query';
@@ -41,7 +40,9 @@ function IncidentRow({ incident }: { incident: MonitoringIncident }) {
       <div className="monitoring-incident-main">
         <div className="monitoring-incident-heading">
           <strong>{active ? 'Monitoring outage recorded' : 'Monitoring outage'}</strong>
-          <StatusBadge value={active ? 'critical' : 'normal'} />
+          <span className={`monitoring-incident-badge ${active ? 'is-active' : 'is-resolved'}`}>
+            Monitoring outage
+          </span>
         </div>
         <span className="monitoring-incident-tank">{incident.tank_name}</span>
         <dl>

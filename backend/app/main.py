@@ -17,7 +17,7 @@ from .database import Base, engine
 from .routes import alerts, auth, dashboard, devices, fish, management, monitoring_incidents, public, security, sensors, species_suitability, tanks
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
-from .services.monitoring_incidents import start_monitoring_incident_detector
+from .services.monitoring_incidents import start_periodic_maintenance
 
 # Ensure all SQLAlchemy models are registered before metadata is used.
 from . import models  # noqa: F401
@@ -36,12 +36,11 @@ async def lifespan(_: FastAPI):
         finally:
             db.close()
     start_demo_generator()
-    detector = start_monitoring_incident_detector()
+    maintenance = start_periodic_maintenance()
     try:
         yield
     finally:
-        if detector is not None:
-            detector.stop()
+        maintenance.stop()
 
 
 app = FastAPI(

@@ -8,7 +8,7 @@ from app.database import Base, configure_sqlite_foreign_keys
 from app.models import ActuatorCommand, RegisteredDevice, SecurityAuditEvent, Tank, User
 from app.security import get_password_hash
 from app.security import utc_now
-from app.services.actuator_commands import reconcile_actuator_commands
+from app.services.actuator_commands import reconcile_actuator_commands, reconcile_all_actuator_commands
 
 
 LIGHT_STATE = {
@@ -478,6 +478,29 @@ def test_failed_command_reporting_is_preserved(client, auth_headers):
     assert failed.json()["error"] == "ESP32 returned invalid JSON"
 
 
+def test_bridge_unknown_report_blocks_same_pump_but_keeps_stop_available(client, auth_headers):
+    tank = create_tank(client, auth_headers, "Bridge uncertainty report tank")
+    device = register(client, auth_headers, tank["id"], "esp32-unknown-report-01")
+    mark_bridge_online(client, device)
+    command = queue(client, auth_headers, tank["id"], {"actuator": "pump_a", "action": "dispense", "payload": {}}).json()
+    key_headers = {"X-Device-Key": device["device_key"]}
+    path = f"/device-ingestion/actuators/{command['command_id']}"
+    assert client.post(f"{path}/executing", headers=key_headers).status_code == 200
+
+    unknown = client.post(
+        f"{path}/outcome-unknown",
+        headers=key_headers,
+        json={"error": "Physical request timed out after dispatch"},
+    )
+    assert unknown.status_code == 200
+    assert unknown.json()["status"] == "outcome_unknown"
+
+    blocked = queue(client, auth_headers, tank["id"], {"actuator": "pump_a", "action": "dispense", "payload": {}})
+    assert blocked.status_code == 409
+    assert queue(client, auth_headers, tank["id"], {"actuator": "pump_b", "action": "dispense", "payload": {}}).status_code == 201
+    assert queue(client, auth_headers, tank["id"], {"actuator": "pump_a", "action": "stop", "payload": {}}).status_code == 201
+
+
 def test_executing_command_becomes_unknown_after_confirmation_deadline_once(client, auth_headers, db_session):
     tank = create_tank(client, auth_headers, "Unknown outcome tank")
     device = register(client, auth_headers, tank["id"], "esp32-unknown-01")
@@ -597,6 +620,28 @@ def test_concurrent_reconciliation_transitions_and_audits_once(tmp_path):
         check.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
+
+
+def test_autonomous_reconciliation_does_not_require_a_status_request(client, auth_headers, db_session):
+    tank = create_tank(client, auth_headers, "Autonomous reconciliation tank")
+    device = register(client, auth_headers, tank["id"], "esp32-autonomous-reconcile")
+    command = queue(client, auth_headers, tank["id"], {"actuator": "uv", "action": "on", "payload": {}}).json()
+    key_headers = {"X-Device-Key": device["device_key"]}
+    path = f"/device-ingestion/actuators/{command['command_id']}"
+    assert client.post(f"{path}/executing", headers=key_headers).status_code == 200
+    row = db_session.get(ActuatorCommand, command["command_id"])
+    deadline = utc_now() - timedelta(seconds=1)
+    row.confirmation_deadline_at = deadline
+    db_session.commit()
+
+    assert reconcile_all_actuator_commands(db_session, now=utc_now()) == 1
+    db_session.commit()
+    assert db_session.get(ActuatorCommand, command["command_id"]).status == "outcome_unknown"
+    assert reconcile_all_actuator_commands(db_session, now=utc_now()) == 0
+    assert db_session.query(SecurityAuditEvent).filter_by(
+        event_type="actuator.command.outcome_unknown",
+        target_id=command["command_id"],
+    ).count() == 1
 
 
 def test_same_device_pump_dispense_interlock_clearance_and_stop(client, auth_headers, db_session):

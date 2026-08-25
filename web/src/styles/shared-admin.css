@@ -214,7 +214,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 10px rgba(20, 58, 70, 0.035);
 }
 
 .panel-header {
@@ -240,7 +240,8 @@
 .panel-header p {
   margin: 0.25rem 0 0;
   color: var(--muted);
-  font-size: 0.67rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 .stat-icon {
@@ -418,6 +419,11 @@ a.data-row:hover {
 .status-unavailable {
   --badge-color: var(--offline);
 }
+
+.status-retired { --badge-color: var(--status-retired); }
+.status-disabled { --badge-color: var(--status-disabled); }
+.status-command-executing { --badge-color: var(--status-command-executing); }
+.status-command-unknown { --badge-color: var(--status-command-unknown); }
 
 .alert-symbol {
   display: grid;
@@ -697,7 +703,15 @@ a.data-row:hover {
 
 .filter-panel {
   margin-bottom: 1rem;
-  padding: 0.9rem 1rem 1rem;
+  padding: 0.72rem 0.85rem 0.8rem;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.filter-panel .field > span,
+.filter-panel .form-field-label {
+  font-size: 0.68rem;
 }
 
 .field {

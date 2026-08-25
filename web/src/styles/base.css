@@ -1,6 +1,7 @@
 @import '@fontsource-variable/geist/wght.css';
 @import '@fontsource-variable/geist-mono/wght.css';
 @import './tokens.css';
+@import './ui-primitives.css';
 
 @tailwind base;
 @tailwind components;

@@ -1,6 +1,6 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Thresholds from './ThresholdsPage';
 
@@ -42,5 +42,24 @@ describe('Thresholds', () => {
     expect(screen.getByText(/Values must pass a configured boundary to trigger Warning or Critical/i)).toBeInTheDocument();
     expect(screen.getAllByText('Critical below').length).toBe(4);
     expect(screen.getAllByText('Warning above').length).toBe(4);
+  });
+
+  it('associates strict-order validation feedback with the affected threshold inputs', async () => {
+    vi.mocked(api).mockResolvedValue([
+      { parameter: 'temperature', unit: '°C', warning_min: 20, warning_max: 28, critical_min: 18, critical_max: 30, enabled: true },
+    ]);
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'temperature' });
+    const form = heading.closest('form');
+    expect(form).not.toBeNull();
+    const criticalBelow = within(form!).getByLabelText('Critical below');
+    fireEvent.change(criticalBelow, { target: { value: '21' } });
+    fireEvent.submit(form!);
+
+    expect(criticalBelow).toHaveAttribute('aria-invalid', 'true');
+    const errorId = criticalBelow.getAttribute('aria-describedby');
+    expect(errorId).toBeTruthy();
+    expect(document.getElementById(errorId!)).toHaveTextContent('Bounds must be strictly ordered');
   });
 });

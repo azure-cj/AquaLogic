@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## System overview
 
@@ -96,8 +96,9 @@ from current web and backend work.
    data.
 8. Public web clients read a restricted tank view by public ID.
 
-Tank deletion is a database-first administrator operation. The route captures
-the current hero URL, commits the audit event and relational cascade, and only
+Tank deletion is a database-first administrator operation serialized through
+the same tank lifecycle lock as retirement. The route captures the current hero
+URL, commits the audit event and relational cascade, and only
 then attempts to remove an AquaLogic-owned local tank image. The safe media
 helper confines deletion to the configured media root and the `/api/media/tanks/`
 namespace, ignores missing or external files, and logs post-commit filesystem
@@ -128,13 +129,18 @@ and recreate only intended device-resident schedules. See
 For actuator control, an admin queues a server-generated command for the fixed
 device/tank mapping. The bridge fetches only unexpired commands using the
 registered device key, claims one before making the matching allowlisted local
-    GET request, and reports `executing`, `succeeded`, or `failed`. If the
-    confirmation deadline expires from `executing_at`, shared reconciliation
-    persists terminal `outcome_unknown` rather than expiring or retrying the
-    command. The backend records the admin actor, validated payload, queue and
-    confirmation deadlines, timestamps, result/error, physical-verification
-    metadata, and append-only state reports. Staff users receive 403 for actuator command,
-state, and history endpoints.
+GET request, and reports `executing`, `succeeded`, `failed`, or
+`outcome_unknown`. The bridge uses `failed` only for confirmed pre-dispatch or
+explicit non-ambiguous rejection; post-dispatch timeout, lost/malformed
+response, completion timeout, and state-poll failure are ambiguous and report
+`outcome_unknown`. If the confirmation deadline expires from `executing_at`,
+shared reconciliation persists terminal `outcome_unknown` rather than
+expiring or retrying the command. A single process-local periodic maintenance
+loop runs that same idempotent reconciler without requiring a browser request.
+The backend records the admin actor, validated payload, queue and confirmation
+deadlines, timestamps, result/error, physical-verification metadata, and
+append-only state reports. Staff users receive 403 for actuator command, state,
+and history endpoints.
 
 The ESP32 bridge is temporary test infrastructure. It polls the local firmware
 `/data` endpoint and forwards four installed sensors, then polls pending admin

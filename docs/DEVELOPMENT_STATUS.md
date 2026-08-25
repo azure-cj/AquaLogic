@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Completed and working locally
 
@@ -55,12 +55,17 @@ Last reviewed: 2026-08-22
   `executing -> outcome_unknown` reconciliation, deterministic late-report
   rejection, same-device/same-pump dispense interlocks, and administrator-only
   physical-verification clearance with actor/time/note metadata. Stop remains
-  available during the pump lock; no bridge retry or replay path was added.
+  available during the pump lock; post-dispatch bridge failures are now
+  reported as `outcome_unknown` rather than generic `failed`, and the existing
+  periodic maintenance loop reconciles overdue commands without a browser
+  request. No bridge retry or replay path was added.
 - Goal 2 tank deletion cleanup is implemented: permanent deletion captures the
   current tank hero URL, commits the relational cascade first, and then
   best-effort removes only contained AquaLogic-owned local media. Missing,
   external, and out-of-root paths are safe no-ops; post-commit filesystem
-  failures are logged without reversing the committed delete. Both web deletion
+  failures are logged without reversing the committed delete. Permanent
+  deletion now takes the same SQLite/PostgreSQL lifecycle lock as retirement.
+  Both web deletion
   dialogs enumerate the major relational, media, and public-page consequences
   without claiming that device-resident schedules or physical state are cleared.
 - Phase 06 access hardening is implemented: staff/admin/public/device permission
@@ -150,6 +155,11 @@ Last reviewed: 2026-08-22
   alert handling is presented as Mark handled without changing the backend
   lifecycle, Species Care is explicitly water-only, and strict/open threshold
   boundaries are explained without algorithm changes.
+- Final terminology polish is implemented: public pages describe recorded
+  water-quality attention without claiming notification or human response,
+  private publication is separate from Offline monitoring, monitoring incidents
+  use an explicit outage label, and Fleet desktop visibly marks stale readings
+  as last known.
 - Goal 4 retired-tank lifecycle is implemented: administrators can perform the
   idempotent one-way `active -> retired` transition with bounded note and audit
   metadata; retirement forces private visibility, clears the explicit
@@ -177,7 +187,9 @@ Last reviewed: 2026-08-22
   and keep Pump A/B maintenance separate from automatic chemical dosing. The
   current lifecycle also records claimed-but-unconfirmed outcomes as
   `outcome_unknown` rather than expired or failed, and documents the
-  same-device/same-pump physical-verification lock.
+  same-device/same-pump physical-verification lock. Bridge uncertainty reports,
+  autonomous reconciliation, and permanent-delete concurrency are now included
+  in the current implementation record.
 - Tank decommissioning and device movement documentation is reconciled with the
   fixed server-side device/tank mapping: operators deactivate the old identity,
   physically move and verify equipment, provision a new destination identity,
@@ -207,7 +219,7 @@ Last reviewed: 2026-08-22
   bridge timeout. Pump testing must use empty syringes or water only.
 - Validate Goal 1 timing and safety on hardware: allow a normal command to
   complete within the bridge's permitted timing without becoming unknown,
-  exercise a deliberately interrupted report path, confirm the dashboard shows
+  exercise a deliberately interrupted/ambiguous report path, confirm the dashboard shows
   the pump lock and keeps Stop available, record physical verification, and
   confirm no duplicate dispense occurs. Use empty syringes or water only.
 - Validate Goal 5 in a bounded deployment scenario: apply migration `0013`,

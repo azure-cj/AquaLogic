@@ -456,13 +456,13 @@
     transition: transform 200ms ease, opacity 200ms ease;
   }
 
-  .nav-open .mobile-nav-drawer {
+  .mobile-nav-drawer[data-state='open'] {
     transform: translateY(0) scale(1);
     opacity: 1;
     pointer-events: auto;
   }
 
-  .nav-open .nav-scrim {
+  .nav-scrim[data-state='open'] {
     position: fixed;
     inset: 0;
     z-index: 98;
@@ -482,9 +482,23 @@
     margin: 0 0 0.15rem 0;
   }
 
+  .mobile-drawer-header h2,
   .mobile-drawer-header strong {
+    margin: 0;
     font-size: 1.05rem;
     color: #f5fbfc;
+  }
+
+  .mobile-drawer-header {
+    position: relative;
+    padding-right: 2.5rem;
+  }
+
+  .mobile-nav-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    color: #d6e9eb;
   }
 
   .mobile-drawer-nav {

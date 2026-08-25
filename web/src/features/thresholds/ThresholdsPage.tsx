@@ -5,7 +5,8 @@ import {
   LoadingState,
   Notice,
   PageHeader,
-  Panel
+  Panel,
+  FormField,
 } from '@/shared/components/admin-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -31,10 +32,12 @@ export function Thresholds() {
   const [saving, setSaving] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [errorParameter, setErrorParameter] = useState('');
   const save = async (event: FormEvent<HTMLFormElement>, threshold: Threshold) => {
     event.preventDefault();
     setSaving(threshold.parameter);
     setError('');
+    setErrorParameter('');
     const form = new FormData(event.currentTarget);
     const numberValue = (name: string) =>
       form.get(name) === '' ? null : Number(form.get(name));
@@ -46,6 +49,7 @@ export function Thresholds() {
     ].filter((value): value is number => value !== null);
     if (bounds.some((value, index) => index > 0 && bounds[index - 1] >= value)) {
       setError('Bounds must be strictly ordered from critical low to critical high.');
+      setErrorParameter(threshold.parameter);
       setSaving('');
       return;
     }
@@ -65,6 +69,7 @@ export function Thresholds() {
       client.invalidateQueries({ queryKey: ['thresholds'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save thresholds');
+      setErrorParameter(threshold.parameter);
     } finally {
       setSaving('');
     }
@@ -119,47 +124,42 @@ export function Thresholds() {
                 </label>
               </header>
               <div className="threshold-fields">
-                <label className="field unit-field">
-                  <span>Unit</span>
+                <FormField label="Unit" className="unit-field" description="Displayed with this parameter.">
                   <input name="unit" defaultValue={threshold.unit} aria-label="Unit" />
-                </label>
-                <label className="field critical-field">
-                  <span>Critical below</span>
+                </FormField>
+                <FormField label="Critical below" className="critical-field" suffix={threshold.unit} error={errorParameter === threshold.parameter ? error : undefined}>
                   <input
                     name="critical_min"
                     type="number"
                     step="any"
                     defaultValue={threshold.critical_min ?? ''}
                   />
-                </label>
-                <label className="field warning-field">
-                  <span>Warning below</span>
+                </FormField>
+                <FormField label="Warning below" className="warning-field" suffix={threshold.unit} error={errorParameter === threshold.parameter ? error : undefined}>
                   <input
                     name="warning_min"
                     type="number"
                     step="any"
                     defaultValue={threshold.warning_min ?? ''}
                   />
-                </label>
-                <label className="field warning-field">
-                  <span>Warning above</span>
+                </FormField>
+                <FormField label="Warning above" className="warning-field" suffix={threshold.unit} error={errorParameter === threshold.parameter ? error : undefined}>
                   <input
                     name="warning_max"
                     type="number"
                     step="any"
                     defaultValue={threshold.warning_max ?? ''}
                   />
-                </label>
-                <label className="field critical-field">
-                  <span>Critical above</span>
+                </FormField>
+                <FormField label="Critical above" className="critical-field" suffix={threshold.unit} error={errorParameter === threshold.parameter ? error : undefined}>
                   <input
                     name="critical_max"
                     type="number"
                     step="any"
                     defaultValue={threshold.critical_max ?? ''}
                   />
-                </label>
-                <button className="button button-primary" disabled={saving === threshold.parameter}>
+                </FormField>
+                <button className="button button-primary" aria-busy={saving === threshold.parameter} disabled={saving === threshold.parameter}>
                   {saving === threshold.parameter ? (
                     'Saving…'
                   ) : (

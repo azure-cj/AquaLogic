@@ -273,7 +273,7 @@ def test_pump_dispense_waits_for_configured_volume_without_retrying_dispense():
     assert succeeded.call_args.args[2]["completion_observed"] is True
 
 
-def test_invalid_pump_safety_stop_reports_failure_without_retrying():
+def test_pump_completion_timeout_reports_unknown_and_safety_stop_is_not_a_retry():
     config = {
         "esp32_data_url": "http://192.168.1.50/data",
         "aqualogic_backend_url": "https://api.example/api",
@@ -285,7 +285,7 @@ def test_invalid_pump_safety_stop_reports_failure_without_retrying():
     pending = command("pump_b", "dispense", {})
     with patch.object(bridge, "_pending_commands", return_value=[pending]), \
         patch.object(bridge, "_mark_executing"), \
-        patch.object(bridge, "_report_failed") as failed, \
+        patch.object(bridge, "_report_outcome_unknown") as unknown, \
         patch.object(bridge, "refresh_actuator_states"), \
         patch.object(bridge, "fetch_json", side_effect=[
             pump_status(dose_count=2),
@@ -303,7 +303,7 @@ def test_invalid_pump_safety_stop_reports_failure_without_retrying():
         "http://192.168.1.50/syringeB/status",
         "http://192.168.1.50/syringeB/stop",
     ]
-    failed.assert_called_once()
+    unknown.assert_called_once()
 
 
 def test_pump_actions_are_failed_without_hardware_call_when_disabled():
@@ -347,7 +347,7 @@ def test_pump_stop_and_retract_are_single_exact_requests():
     assert succeeded.call_count == 2
 
 
-def test_timeout_reports_failure_without_retrying_hardware():
+def test_physical_request_timeout_reports_unknown_without_retrying_hardware():
     config = {
         "esp32_data_url": "http://192.168.1.50/data",
         "aqualogic_backend_url": "https://api.example/api",
@@ -357,15 +357,15 @@ def test_timeout_reports_failure_without_retrying_hardware():
     pending = command("feeder", "feed_now", {})
     with patch.object(bridge, "_pending_commands", return_value=[pending]), \
         patch.object(bridge, "_mark_executing"), \
-        patch.object(bridge, "_report_failed") as failed, \
+        patch.object(bridge, "_report_outcome_unknown") as unknown, \
         patch.object(bridge, "refresh_actuator_states"), \
         patch.object(bridge, "fetch_json", side_effect=bridge.URLError("offline")) as fetch:
         assert bridge.process_pending_actuator_commands(config) == 0
     fetch.assert_called_once_with("http://192.168.1.50/feeder/feed", 1.0)
-    failed.assert_called_once()
+    unknown.assert_called_once()
 
 
-def test_invalid_firmware_response_is_failed_without_a_second_request():
+def test_malformed_terminal_response_reports_unknown_without_a_second_request():
     config = {
         "esp32_data_url": "http://192.168.1.50/data",
         "aqualogic_backend_url": "https://api.example/api",
@@ -375,12 +375,52 @@ def test_invalid_firmware_response_is_failed_without_a_second_request():
     pending = command("led", "off", {})
     with patch.object(bridge, "_pending_commands", return_value=[pending]), \
         patch.object(bridge, "_mark_executing"), \
-        patch.object(bridge, "_report_failed") as failed, \
+        patch.object(bridge, "_report_outcome_unknown") as unknown, \
         patch.object(bridge, "refresh_actuator_states"), \
         patch.object(bridge, "fetch_json", return_value={"unexpected": True}) as fetch:
         bridge.process_pending_actuator_commands(config)
     fetch.assert_called_once()
+    unknown.assert_called_once()
+
+
+def test_pre_dispatch_pump_status_failure_remains_confirmed_failed():
+    config = {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "key",
+        "timeout_seconds": 1,
+        "pump_manual_test_enabled": True,
+    }
+    pending = command("pump_a", "dispense", {})
+    with patch.object(bridge, "_pending_commands", return_value=[pending]), \
+        patch.object(bridge, "_mark_executing"), \
+        patch.object(bridge, "_report_failed") as failed, \
+        patch.object(bridge, "_report_outcome_unknown") as unknown, \
+        patch.object(bridge, "fetch_json", side_effect=bridge.URLError("status unavailable")) as fetch:
+        assert bridge.process_pending_actuator_commands(config) == 0
+    assert fetch.call_args_list[0].args[0] == "http://192.168.1.50/syringeA/status"
     failed.assert_called_once()
+    unknown.assert_not_called()
+
+
+def test_explicit_firmware_client_rejection_remains_confirmed_failed():
+    config = {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "key",
+        "timeout_seconds": 1,
+    }
+    pending = command("led", "off", {})
+    rejection = bridge.HTTPError("http://192.168.1.50/led/off", 400, "rejected", {}, None)
+    with patch.object(bridge, "_pending_commands", return_value=[pending]), \
+        patch.object(bridge, "_mark_executing"), \
+        patch.object(bridge, "_report_failed") as failed, \
+        patch.object(bridge, "_report_outcome_unknown") as unknown, \
+        patch.object(bridge, "refresh_actuator_states"), \
+        patch.object(bridge, "fetch_json", side_effect=rejection):
+        assert bridge.process_pending_actuator_commands(config) == 0
+    failed.assert_called_once()
+    unknown.assert_not_called()
 
 
 def test_config_rejects_public_esp32_address(tmp_path):

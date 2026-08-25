@@ -71,6 +71,7 @@ describe('monitoring incident history', () => {
     renderPage();
 
     expect(await screen.findByText('Monitoring outage recorded')).toBeInTheDocument();
+    expect(screen.getAllByText('Monitoring outage').length).toBeGreaterThan(0);
     expect(screen.getByText('Reporting recovered automatically')).toBeInTheDocument();
     expect(screen.getByText(/separate from water-quality alerts/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /resolve|handled/i })).not.toBeInTheDocument();

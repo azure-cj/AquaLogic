@@ -1,7 +1,7 @@
 # ESP32 bridge hardware-test runbook
 
 Status: Temporary local-first sensor and actuator test procedure
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Safety and scope
 
@@ -17,8 +17,11 @@ Last reviewed: 2026-08-22
   command and keep the visible Stop control ready.
 - The tester-only `pump_manual_test_enabled` setting defaults to `false` and
   must be `true` only during a controlled empty/water motor test.
-- Hardware calls are one-shot. A timeout may mean the actuator already ran, so
-  the bridge reports the failure and does not retry that physical command.
+- Hardware calls are one-shot. A timeout, lost response, malformed terminal
+  response, or completion/state-poll failure after dispatch may mean the
+  actuator already ran, so the bridge reports `Outcome unknown` and does not
+  retry that physical command. Confirmed pre-dispatch or explicit endpoint
+  rejection remains `Failed`.
 - If the bridge loses the terminal report after claiming a command, AquaLogic
   may later show `Outcome unknown` after its 180-second confirmation window.
   Do not issue another same-pump dispense until the equipment has been
@@ -127,8 +130,8 @@ shows the firmware-reported configured volume in mL; **Dispense / test** starts
 that configured dose rather than selecting a seconds or milliseconds cutoff.
 The bridge waits for the matching status route to report completion. If the
 configured move does not complete before `pump_completion_timeout_seconds`,
-the bridge sends one intentional safety stop and reports failure; it never
-retries dispense. Return the flag to `false` after testing.
+the bridge sends one intentional safety stop and reports `Outcome unknown`; it
+never retries dispense. Return the flag to `false` after testing.
 
 ## Dashboard verification
 
@@ -159,8 +162,10 @@ retries dispense. Return the flag to `false` after testing.
 
 ## Failure checks
 
-- Invalid ESP32 JSON or an invalid actuator response creates a failed command
-  report and does not trigger a second hardware request.
+- Invalid ESP32 JSON or an invalid actuator response after the physical request
+  is attempted creates an `Outcome unknown` report and does not trigger a
+  second hardware request. Invalid command/payload validation before dispatch
+  remains a confirmed `Failed` report.
 - An unreachable ESP32 does not create a fabricated sensor reading. A command
   that may have timed out is not automatically retried.
 - An unreachable backend prevents new command delivery/reporting but does not

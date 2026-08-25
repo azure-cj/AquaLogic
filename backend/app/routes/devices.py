@@ -53,6 +53,7 @@ from app.services.actuator_commands import (
     UNKNOWN_OUTCOME_MESSAGE,
     active_pump_dispense,
     confirmation_deadline,
+    mark_actuator_command_outcome_unknown,
     reconcile_actuator_commands,
     serialize_pump_mutation,
 )
@@ -994,6 +995,59 @@ def mark_actuator_command_failed(
         target_id=command.command_id,
         details={"device_id": device.id, "tank_id": device.tank_id, "error": safe_error},
     )
+    db.commit()
+    db.refresh(command)
+    return _command_read(db, command)
+
+
+@router.post("/device-ingestion/actuators/{command_id}/outcome-unknown", response_model=ActuatorCommandRead)
+def mark_actuator_command_outcome_unknown_report(
+    command_id: str,
+    payload: ActuatorCommandFailure,
+    request: Request,
+    x_device_key: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """Record bridge uncertainty after a physical request may have begun."""
+
+    device = _authenticate_device(x_device_key, request, db)
+    command = _get_device_command(db, device, command_id)
+    now = utc_now()
+    _reconcile_device_commands(db, device.id, request, now)
+    db.expire(command)
+    db.refresh(command)
+    safe_error = _sanitize_bridge_text(payload.error) or UNKNOWN_OUTCOME_MESSAGE
+    safe_result = _sanitize_bridge_value(payload.result)
+    result_json = json.dumps(safe_result, separators=(",", ":"), sort_keys=True) if safe_result else None
+    if command.status == "outcome_unknown":
+        _reject_late_report(
+            db,
+            request,
+            command,
+            kind="outcome_unknown",
+            value={"error": safe_error, "result": safe_result},
+            device=device,
+        )
+    if command.status != "executing":
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot record unknown outcome in {command.status} state",
+        )
+    transitioned = mark_actuator_command_outcome_unknown(
+        db,
+        command,
+        now=now,
+        request=request,
+        error_message=safe_error,
+        result_json=result_json,
+    )
+    if not transitioned:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Actuator command outcome changed before the uncertainty report was recorded",
+        )
     db.commit()
     db.refresh(command)
     return _command_read(db, command)

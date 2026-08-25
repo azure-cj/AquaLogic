@@ -14,11 +14,11 @@
   overflow: hidden;
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
   color: var(--text);
   text-align: left;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 9px rgba(20, 58, 70, 0.035);
 }
 
 .stat-card::before {
@@ -33,7 +33,7 @@
 .stat-card:hover,
 .stat-card.active {
   border-color: color-mix(in srgb, var(--status-color, var(--teal-600)) 34%, var(--border));
-  box-shadow: 0 12px 28px rgba(20, 58, 70, 0.1);
+  box-shadow: 0 7px 18px rgba(20, 58, 70, 0.075);
 }
 
 .stat-card.active::before {
@@ -110,6 +110,22 @@
     minmax(180px, 1.7fr) minmax(82px, 0.72fr) minmax(112px, 0.85fr) minmax(72px, 0.68fr)
     minmax(50px, 0.48fr) minmax(120px, 1.05fr) 18px;
 }
+
+.fleet-table .metric-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .18rem;
+}
+
+.fleet-table .metric-context {
+  color: var(--muted);
+  font-size: .7rem;
+  font-weight: 700;
+}
+
+.fleet-reporting-offline { color: var(--offline); }
+.fleet-table .monitoring-incident-marker { color: #9a6410; }
 
 .alert-feed {
   display: grid;

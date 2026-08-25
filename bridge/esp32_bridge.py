@@ -38,6 +38,10 @@ class BridgeError(ValueError):
     pass
 
 
+class AmbiguousPhysicalOutcome(BridgeError):
+    """The physical endpoint may have received or started the request."""
+
+
 def safe_error(error: BaseException) -> str:
     """Keep network/configuration details, keys, and URLs out of logs/results."""
     if isinstance(error, HTTPError):
@@ -435,6 +439,17 @@ def _report_failed(config: dict, command_id: str, error: str) -> None:
         raise BridgeError("AquaLogic returned an invalid failure acknowledgement")
 
 
+def _report_outcome_unknown(config: dict, command_id: str, error: str) -> None:
+    response = _post_json(
+        _backend_url(config, f"/device-ingestion/actuators/{command_id}/outcome-unknown"),
+        _device_headers(config),
+        {"error": error[:500]},
+        float(config["timeout_seconds"]),
+    )
+    if not isinstance(response, dict) or response.get("status") != "outcome_unknown":
+        raise BridgeError("AquaLogic returned an invalid uncertainty acknowledgement")
+
+
 def report_actuator_state(config: dict, actuator: str, state: dict[str, Any], command_id: str | None = None) -> None:
     response = _post_json(
         _backend_url(config, "/device-ingestion/actuator-state"),
@@ -502,6 +517,24 @@ def _stop_pump_once(config: dict, actuator: str) -> dict[str, Any]:
     return {"path": stop_path, "response": stop_response}
 
 
+def _physical_request(config: dict, translated: dict[str, Any]) -> object:
+    """Call the physical endpoint and classify only clear HTTP rejections."""
+
+    try:
+        return fetch_json(
+            _esp32_url(config, translated["path"], translated["query"]),
+            float(config["timeout_seconds"]),
+        )
+    except HTTPError as error:
+        if 400 <= error.code < 500:
+            # An explicit client error from the allowlisted endpoint is the
+            # only post-claim response treated as a confirmed rejection.
+            raise BridgeError(f"ESP32 explicitly rejected the actuator request with HTTP {error.code}") from error
+        raise AmbiguousPhysicalOutcome(safe_error(error)) from error
+    except (BridgeError, URLError, TimeoutError, OSError) as error:
+        raise AmbiguousPhysicalOutcome(safe_error(error)) from error
+
+
 def _wait_for_configured_pump_dose(
     config: dict,
     actuator: str,
@@ -544,12 +577,9 @@ def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dic
             raise BridgeError("A syringe pump is already active; dispense was not started")
         initial_pump_status = pump_statuses[translated["actuator"]]
 
-    raw_response = fetch_json(
-        _esp32_url(config, translated["path"], translated["query"]),
-        float(config["timeout_seconds"]),
-    )
+    raw_response = _physical_request(config, translated)
     if raw_response != translated["expected"]:
-        raise BridgeError("ESP32 returned an invalid actuator response")
+        raise AmbiguousPhysicalOutcome("ESP32 returned an invalid actuator response after dispatch")
 
     result: dict[str, Any] = {"path": translated["path"], "response": raw_response}
     if translated["actuator"] in PUMP_ACTUATORS and translated["action"] == "dispense":
@@ -558,8 +588,15 @@ def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dic
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
             # A stop is an intentional one-shot safety action after a
             # physical dispense has started. It is never a retry of dispense.
-            result["safety_stop"] = _stop_pump_once(config, translated["actuator"])
-            raise error
+            try:
+                result["safety_stop"] = _stop_pump_once(config, translated["actuator"])
+            except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as stop_error:
+                LOG.warning(
+                    "Pump safety stop was not confirmed for %s (%s)",
+                    translated["actuator"],
+                    safe_error(stop_error),
+                )
+            raise AmbiguousPhysicalOutcome(safe_error(error)) from error
     return result
 
 
@@ -604,10 +641,32 @@ def process_pending_actuator_commands(config: dict) -> int:
 
         try:
             result = _execute_translated_command(config, translated)
+        except AmbiguousPhysicalOutcome as error:
+            # A post-dispatch timeout, lost response, malformed response, or
+            # completion-monitoring failure may mean the physical request ran.
+            # Report uncertainty and never retry any hardware request.
+            try:
+                _report_outcome_unknown(config, translated["command_id"], safe_error(error))
+            except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as report_error:
+                LOG.warning(
+                    "Could not report unknown actuator command %s: %s",
+                    translated["command_id"],
+                    safe_error(report_error),
+                )
+            try:
+                refresh_actuator_states(config, command_id=translated["command_id"])
+            except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as refresh_error:
+                LOG.warning(
+                    "Could not refresh state after uncertain actuator command %s: %s",
+                    translated["command_id"],
+                    safe_error(refresh_error),
+                )
+            LOG.warning("Actuator command %s has an unknown physical outcome: %s", translated["command_id"], safe_error(error))
+            continue
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
-            # A timeout may mean a physical request already ran, so the bridge
-            # reports failure and never retries any hardware request. Pump
-            # dispense additionally has one intentional safety-stop request.
+            # Validation, pre-dispatch pump checks, disabled pump testing, and
+            # explicit endpoint rejection are confirmed failures. They never
+            # trigger a second physical request.
             try:
                 _report_failed(config, translated["command_id"], safe_error(error))
             except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as report_error:

@@ -87,11 +87,7 @@ export function ActuatorDirectoryPage() {
                     <small>{tank.location}{tank.customer ? ` · ${tank.customer.name}` : ''}</small>
                   </div>
                 </div>
-                <div className="actuator-tank-scope">
-                  <span><small>Control scope</small><strong>Selected tank only</strong></span>
-                  <span><small>Access</small><strong>Available to admins</strong></span>
-                </div>
-                <p className="actuator-tank-card-copy">Review equipment status before sending an administrator action.</p>
+                <p className="actuator-tank-card-copy">Open the equipment workspace to review connection status and command history.</p>
                 <div className="actuator-tank-card-actions">
                   <Link className="button button-primary button-small" to={`/admin/tanks/${tank.id}/actuators`}>
                     Open controls <ArrowRight size={14} />

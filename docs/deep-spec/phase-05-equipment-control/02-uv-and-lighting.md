@@ -1,7 +1,7 @@
 # UV and Lighting Controls
 
 Status: Implemented v1 controls; production hardware hardening deferred  
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -70,10 +70,11 @@ Deactivation or database deletion does not erase the firmware-resident schedule.
 
 - Invalid action/payload combinations are rejected before delivery.
 - Commands that remain queued past their expiry are not returned to the bridge.
-- A bridge-reported failure is recorded as failed; if AquaLogic loses the
-  terminal report after claim and the 180-second confirmation window passes, the
-  command becomes `outcome_unknown` rather than expired or automatically
-  repeated.
+- A confirmed pre-dispatch or explicit non-ambiguous bridge rejection is
+  recorded as failed. If the physical request may have begun and the bridge
+  times out, loses or cannot parse the terminal response, the command is
+  reported or reconciled as `outcome_unknown` rather than expired, failed, or
+  automatically repeated.
 - A stale state report does not prove that the light is physically off.
 
 ## Approved hardening and clarification

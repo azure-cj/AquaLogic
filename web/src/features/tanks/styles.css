@@ -659,12 +659,15 @@
 .command-status { display: grid; min-width: 0; gap: .35rem; justify-items: start; }
 .command-status-badges { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .35rem; }
 .actuator-history-row .status-badge { min-height: 28px; padding: .35rem .6rem; font-size: .72rem; }
-.actuator-history-row .status-queued { --badge-color: #bd841d; }
-.actuator-history-row .status-executing { --badge-color: #4c8eb2; }
-.actuator-history-row .status-succeeded { --badge-color: #3a9a73; }
-.actuator-history-row .status-failed { --badge-color: #bd5360; }
-.actuator-history-row .status-expired { --badge-color: #8068a3; }
-.actuator-history-row .status-outcome_unknown { --badge-color: #b84d59; }
+.publication-state { display: inline-flex; flex-direction: column; gap: .2rem; }
+.publication-state strong { font-size: .78rem; }
+.publication-state small { color: var(--muted); }
+.actuator-history-row .status-warning { --badge-color: #bd841d; }
+.actuator-history-row .status-command-executing { --badge-color: #4c8eb2; }
+.actuator-history-row .status-normal { --badge-color: #3a9a73; }
+.actuator-history-row .status-critical { --badge-color: #bd5360; }
+.actuator-history-row .status-offline { --badge-color: #8068a3; }
+.actuator-history-row .status-command-unknown { --badge-color: #7762a8; }
 .command-expired-badge { display: inline-flex; min-height: 28px; align-items: center; padding: .35rem .55rem; border: 1px solid #d7c5e5; border-radius: 999px; background: #f5effa; color: #6f4f8c; font-size: .68rem; font-weight: 800; }
 .command-status-detail { color: var(--muted); font-size: .7rem; line-height: 1.35; }
 .actuator-history-action { display: grid; min-width: 0; gap: .22rem; align-content: center; }
@@ -695,6 +698,19 @@
 .actuator-staff-notice strong, .actuator-staff-notice small { display: block; }
 .actuator-staff-notice strong { color: var(--text); font-size: .78rem; }
 .actuator-staff-notice small { margin-top: .25rem; font-size: .7rem; line-height: 1.45; }
+
+/* Final operational polish: restrained nested surfaces keep equipment actions primary. */
+.actuator-tank-grid { gap: .7rem; padding: .85rem; }
+.actuator-tank-card { gap: .7rem; padding: .9rem; border-radius: 10px; box-shadow: none; }
+.actuator-summary-card,
+.actuator-card { border-radius: 10px; box-shadow: none; }
+.actuator-control-page-context { display: flex; align-items: baseline; gap: .65rem; margin-bottom: .85rem; padding: .7rem .85rem; border-left: 3px solid var(--teal-600); background: var(--surface-soft); }
+.actuator-meta-grid span { padding: .48rem 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.pump-configured-dose { border-left: 3px solid var(--teal-600); border-radius: 7px; }
+.pump-disabled-note { padding: .5rem .6rem; border-left: 2px solid #d79b32; color: #805b12; background: #fff8e7; }
+.pump-action-grid .button:disabled { border-color: #d7e1e3; background: #eef3f4; color: #83949a; box-shadow: none; opacity: 1; }
+.actuator-history-summary { gap: .35rem; padding: .45rem .15rem; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.actuator-history-summary .summary-unknown { border-color: #7762a8; }
 
 @media (max-width: 1120px) {
   .actuator-tank-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

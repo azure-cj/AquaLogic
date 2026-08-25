@@ -2,7 +2,7 @@
 
 Classification: **Implemented P0 safety record**
 Status: Implemented in current backend/web behavior
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Objective
 
@@ -42,7 +42,12 @@ The implementation already provides important safety properties:
 - Shared reconciliation is called before creation, status/history reads,
   pending fetches, claim, and report operations. It conditionally finalizes
   overdue executing rows as `outcome_unknown` and records the transition audit
-  once, including under concurrent workers.
+  once, including under concurrent workers. The same reconciler also runs from
+  the existing periodic maintenance loop without a browser request.
+- The bridge reports `failed` only for confirmed pre-dispatch or explicit
+  non-ambiguous rejection. Post-dispatch timeout, lost/malformed response,
+  completion timeout, and state-poll failure report `outcome_unknown`; a pump
+  timeout may issue one safety stop but never a dispense retry.
 - Same-device/same-pump dispense admission and claim checks are serialized;
   an uncleared unknown outcome blocks another dispense while Stop remains
   available. Administrator physical verification records actor, UTC time, and
@@ -80,7 +85,7 @@ not silently overwrite it; see late reports below.
 | `succeeded` | Equipment execution/acceptance was confirmed according to the command contract. |
 | `executing` | The equipment action may be underway. |
 | `outcome_unknown` | Physical execution may have occurred; verify equipment before another potentially duplicative action. |
-| `failed` | AquaLogic did not confirm successful completion. Failure does not universally prove that no physical action occurred. |
+| `failed` | AquaLogic has trustworthy evidence of a pre-dispatch or explicit non-ambiguous rejection. |
 
 Do not reuse `expired` for a claimed command. Queue expiry proves non-delivery;
 execution confirmation timeout does not.
@@ -129,12 +134,12 @@ constant and document its rationale. The initial value must be conservatively
 greater than the bridge's maximum legitimate processing time. Hardware tests
 must validate that normal commands do not age into unknown prematurely.
 
-This pass does not require a continuously running worker solely for command
-reconciliation. A small shared reconciliation service may run opportunistically
-before command creation, status/history reads, and device pending/claim/report
-operations. This is acceptable because same-pump creation must reconcile before
-checking the safety lock. If a general scheduler is introduced, it must call the
-same idempotent service rather than implement a second transition policy.
+The implementation uses one lightweight process-local periodic maintenance loop
+already shared with unattended monitoring-incident detection. It calls the same
+idempotent reconciliation service used before command creation,
+status/history reads, and device pending/claim/report operations. Sessions are
+created and closed per cycle, shutdown stops and joins the loop, and no Redis,
+Celery, generalized scheduler, or second transition policy is introduced.
 
 ## Same-pump dispense interlock
 

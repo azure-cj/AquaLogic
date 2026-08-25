@@ -114,15 +114,17 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               aria-label={`${tank.status === 'offline' && tank.latest_reading?.temperature != null ? 'Last known temperature' : 'Temperature'} ${reading(tank.latest_reading?.temperature, '°C')}`}
             >
               {reading(tank.latest_reading?.temperature, '°C')}
+              {tank.status === 'offline' && tank.latest_reading?.temperature != null && <small className="metric-context">Last known</small>}
             </span>
             <span
               className="metric-cell"
               aria-label={`${tank.status === 'offline' && tank.latest_reading?.ph != null ? 'Last known pH' : 'pH'} ${reading(tank.latest_reading?.ph, '', 1)}`}
             >
               {reading(tank.latest_reading?.ph, '', 1)}
+              {tank.status === 'offline' && tank.latest_reading?.ph != null && <small className="metric-context">Last known</small>}
             </span>
             <span>
-              <strong className={tank.status === 'offline' ? 'text-critical' : ''}>
+              <strong className={tank.status === 'offline' ? 'fleet-reporting-offline' : ''}>
                 {formatReportingAge(tank.reporting_age_seconds, { offline: tank.status === 'offline' })}
               </strong>
               {tank.active_monitoring_incident_count > 0 && (

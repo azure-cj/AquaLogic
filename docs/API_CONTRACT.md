@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -105,7 +105,8 @@ The device-key bridge routes are not browser routes:
 | GET | `/device-ingestion/actuators/pending` | Registered device key | Fetch unexpired commands for that exact device |
 | POST | `/device-ingestion/actuators/{command_id}/executing` | Registered device key | Claim one command before any ESP32 call |
 | POST | `/device-ingestion/actuators/{command_id}/succeeded` | Registered device key | Idempotently report a completed local call |
-| POST | `/device-ingestion/actuators/{command_id}/failed` | Registered device key | Report a local validation, timeout, or response failure |
+| POST | `/device-ingestion/actuators/{command_id}/failed` | Registered device key | Report a confirmed validation, pre-dispatch, or explicit non-ambiguous rejection |
+| POST | `/device-ingestion/actuators/{command_id}/outcome-unknown` | Registered device key | Report that a physical request may have begun but no trustworthy terminal result is available |
 | POST | `/device-ingestion/actuator-state` | Registered device key | Store refreshed local actuator state |
 
 ## Operations and administration
@@ -194,6 +195,8 @@ use a hosted species-photo URL through the existing `photo_url` field.
   `outcome_unknown`. `outcome_unknown` means the command was claimed and may
   have reached equipment, but no trustworthy terminal result arrived within
   the confirmation window; it is not a retryable or expired state.
+  `failed` is reserved for a confirmed pre-dispatch failure or explicit
+  non-ambiguous hardware rejection; it is not a generic timeout bucket.
 
 - Normal UV, LED, and feeder commands default to a 120-second queue expiry and
   accept at most 300 seconds. Pump maintenance commands default to 20 seconds
@@ -221,13 +224,21 @@ use a hosted species-photo URL through the existing `photo_url` field.
   /device-ingestion/actuators/pending`, `POST
   /device-ingestion/actuators/{command_id}/executing`, `POST
   /device-ingestion/actuators/{command_id}/succeeded`, `POST
-  /device-ingestion/actuators/{command_id}/failed`, and `POST
+  /device-ingestion/actuators/{command_id}/failed`, `POST
+  /device-ingestion/actuators/{command_id}/outcome-unknown`, and `POST
   /device-ingestion/actuator-state`. It verifies that every command belongs to
   the authenticated device's fixed tank. Duplicate claims/final reports are
   idempotent and cannot requeue a finalized command. A late success/failure
   report after `outcome_unknown` returns deterministic `409 Conflict`, is
   recorded as late evidence rejection once per distinct report, and never
   overwrites the unknown status.
+
+- The bridge uses `failed` only for a trustworthy pre-dispatch or explicit
+  rejection. A timeout, lost response, malformed terminal response, completion
+  timeout, or state-polling failure after a physical request may have begun is
+  reported as `outcome_unknown`. The bridge makes no blind retry; a pump
+  completion timeout may still receive one intentional safety stop, which does
+  not prove the original dispense outcome.
 
 - A same-device, same-pump `dispense` is rejected with `409` while another
   dispense for that pump is `executing` or uncleared `outcome_unknown`. Pump A

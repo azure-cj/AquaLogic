@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models import MonitoringIncident, RegisteredDevice, SensorReading, Tank
 from app.services.auth_security import audit_event
+from app.services.actuator_commands import reconcile_all_actuator_commands
 from app.security import utc_now
 
 
@@ -88,6 +89,12 @@ def resolve_active_monitoring_incident(
 class DetectorResult:
     eligible_tanks: int
     created_incidents: int
+
+
+@dataclass(frozen=True)
+class MaintenanceResult:
+    actuator_unknown_transitions: int
+    monitoring: DetectorResult | None
 
 
 def _begin_detector_transaction(db: Session) -> None:
@@ -213,8 +220,27 @@ def detect_monitoring_incidents(
         raise
 
 
+def run_periodic_maintenance(*, evaluated_at: datetime | None = None) -> MaintenanceResult:
+    """Run unattended actuator reconciliation and monitoring detection together."""
+
+    now = _aware(evaluated_at) or utc_now()
+    with SessionLocal() as db:
+        actuator_unknown_transitions = reconcile_all_actuator_commands(db, now=now)
+        monitoring = (
+            detect_monitoring_incidents(db, evaluated_at=now)
+            if settings.monitoring_incidents_enabled
+            else None
+        )
+        if monitoring is None:
+            db.commit()
+        return MaintenanceResult(
+            actuator_unknown_transitions=actuator_unknown_transitions,
+            monitoring=monitoring,
+        )
+
+
 @dataclass
-class MonitoringDetectorHandle:
+class PeriodicMaintenanceHandle:
     stop_event: threading.Event
     thread: threading.Thread
 
@@ -223,28 +249,37 @@ class MonitoringDetectorHandle:
         self.thread.join(timeout=max(1, settings.monitoring_incident_check_interval_seconds + 1))
 
 
-def start_monitoring_incident_detector() -> MonitoringDetectorHandle | None:
-    """Start one process-local periodic loop; DB idempotence handles many workers."""
+def start_periodic_maintenance() -> PeriodicMaintenanceHandle:
+    """Start one process-local loop for unattended safety maintenance."""
 
-    if not settings.monitoring_incidents_enabled:
-        return None
     stop_event = threading.Event()
 
     def _loop() -> None:
         while not stop_event.is_set():
-            with SessionLocal() as db:
-                try:
-                    result = detect_monitoring_incidents(db, evaluated_at=utc_now())
-                    if result.created_incidents:
-                        logger.info(
-                            "Monitoring incident detector recorded %s tank outage(s)",
-                            result.created_incidents,
-                        )
-                except Exception:
-                    db.rollback()
-                    logger.exception("Monitoring incident detector cycle failed")
+            try:
+                result = run_periodic_maintenance(evaluated_at=utc_now())
+                if result.actuator_unknown_transitions:
+                    logger.info(
+                        "Actuator maintenance reconciled %s unknown outcome(s)",
+                        result.actuator_unknown_transitions,
+                    )
+                if result.monitoring and result.monitoring.created_incidents:
+                    logger.info(
+                        "Monitoring incident detector recorded %s tank outage(s)",
+                        result.monitoring.created_incidents,
+                    )
+            except Exception:
+                logger.exception("Periodic maintenance cycle failed")
             stop_event.wait(settings.monitoring_incident_check_interval_seconds)
 
-    thread = threading.Thread(target=_loop, name="aqualogic-monitoring-incidents", daemon=True)
+    thread = threading.Thread(target=_loop, name="aqualogic-periodic-maintenance", daemon=True)
     thread.start()
-    return MonitoringDetectorHandle(stop_event=stop_event, thread=thread)
+    return PeriodicMaintenanceHandle(stop_event=stop_event, thread=thread)
+
+
+def start_monitoring_incident_detector() -> PeriodicMaintenanceHandle | None:
+    """Compatibility wrapper for callers that only enable incident detection."""
+
+    if not settings.monitoring_incidents_enabled:
+        return None
+    return start_periodic_maintenance()

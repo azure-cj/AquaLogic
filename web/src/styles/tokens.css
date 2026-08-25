@@ -20,6 +20,35 @@
   --shadow: 0 10px 30px rgba(20, 58, 70, 0.07);
   --shadow-strong: 0 22px 48px rgba(20, 58, 70, 0.18);
   --sidebar-width: 248px;
+  /* shadcn-compatible aliases: AquaLogic remains the source palette. */
+  --background: var(--canvas);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--teal-700);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-soft);
+  --secondary-foreground: var(--text);
+  --muted-surface: var(--surface-soft);
+  --muted-foreground: var(--muted);
+  --accent: var(--teal-100);
+  --accent-foreground: var(--teal-700);
+  --destructive: var(--critical);
+  --destructive-foreground: #ffffff;
+  --input: var(--input-background);
+  --ring: var(--teal-600);
+  --radius: 9px;
+  --status-normal: var(--normal);
+  --status-warning: var(--warning);
+  --status-critical: var(--critical);
+  --status-offline: var(--offline);
+  --status-retired: #697a82;
+  --status-disabled: #667983;
+  --status-command-executing: #187da6;
+  --status-command-unknown: #7762a8;
+  --status-monitoring-incident: #b4681c;
 }
 @media (max-width: 1279px) {
   :root {

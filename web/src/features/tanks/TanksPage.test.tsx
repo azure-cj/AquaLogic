@@ -1,12 +1,16 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useMe } from '@/shared/hooks/useMe';
 import Tanks from './TanksPage';
+
+vi.mock('qrcode', () => ({
+  default: { toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,qr') },
+}));
 
 vi.mock('@/shared/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/api/client')>();
@@ -24,7 +28,7 @@ const tanks = [
     name: 'Display tank',
     location: 'Front room',
     description: null,
-    is_public: true,
+    is_public: false,
     customer_id: null,
     feeding_schedule: null,
     public_care_notes: null,
@@ -93,7 +97,22 @@ function renderPage() {
         /registered devices will be disabled, while readings, alerts, assignments, equipment history, configuration, and media remain available/i,
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('Not public')).toBeInTheDocument();
     expect(within(dialog).getByText(/Follow the hardware decommissioning checklist first/i)).toBeInTheDocument();
     expect(within(dialog).queryByText(/delete|erase|physical state/i)).not.toBeInTheDocument();
+  });
+
+  it('closes the QR dialog with Escape and restores focus to the QR action', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const qrAction = await screen.findByRole('button', { name: 'Show QR code for Display tank' });
+    await user.click(qrAction);
+    expect(await screen.findByRole('dialog', { name: 'Display tank' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Display tank' })).not.toBeInTheDocument());
+    expect(qrAction).toHaveFocus();
   });
 });

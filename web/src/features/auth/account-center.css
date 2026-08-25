@@ -107,7 +107,7 @@
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  padding: 1rem;
+  padding: .85rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -157,14 +157,16 @@
 .account-meta-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0;
   margin: 0;
-  padding: 1rem;
+  padding: .4rem 1rem;
 }
 
 .account-meta-grid div {
   display: grid;
   gap: 0.22rem;
+  padding: .65rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .account-meta-grid dt,
@@ -232,18 +234,19 @@
 .account-metric-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.7rem;
-  padding: 1rem;
+  gap: 0;
+  padding: .35rem 1rem .7rem;
 }
 
 .account-metric-card {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
-  padding: 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: 13px;
-  background: var(--surface-soft);
+  padding: .75rem .85rem;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .account-metric-icon {
@@ -271,29 +274,29 @@
 
 .account-metric-card small {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   line-height: 1.35;
 }
+
+.account-metric-card:last-child { border-right: 0; }
 
 .account-destination {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.85rem;
   align-items: center;
-  min-height: 92px;
-  margin: 0.9rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
+  min-height: 78px;
+  margin: 0;
+  padding: .85rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text);
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .account-destination:hover {
-  border-color: #b7ced2;
-  box-shadow: 0 8px 20px rgba(20, 58, 70, 0.08);
-  transform: translateY(-1px);
+  background: var(--surface-soft);
 }
 
 .account-destination:focus-visible {
@@ -307,7 +310,7 @@
   height: 2.7rem;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--teal-100);
   color: var(--teal-700);
 }
@@ -352,6 +355,8 @@
   .account-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .account-metric-card:nth-child(2n) { border-right: 0; }
 
   .account-access-popover-panel {
     right: auto;

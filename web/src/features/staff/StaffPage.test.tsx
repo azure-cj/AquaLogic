@@ -100,6 +100,8 @@ describe('StaffPage', () => {
     expect(await screen.findByText('Chrome on Windows')).toBeInTheDocument();
     expect(await screen.findByText('Password reset issued')).toBeInTheDocument();
 
+    // The Radix modal drawer makes background actions inert until it is closed.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Issue new setup link' }));
     const confirmation = screen.getByRole('alertdialog');
     expect(confirmation).toHaveTextContent('Issue a new setup link for Pending Staff?');

@@ -19,7 +19,7 @@ import {
   ErrorState,
   LoadingState,
   Panel,
-  StatusBadge,
+  CommandStatusBadge,
   Toast,
 } from '@/shared/components/admin-ui';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
@@ -541,7 +541,7 @@ function ActuatorSummary({
   );
 }
 
-export function ActuatorControlPanel({ tankId, variant = 'full', readOnly = false }: { tankId: number; variant?: ActuatorControlPanelVariant; readOnly?: boolean }) {
+export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readOnly = false }: { tankId: number; tankName?: string; variant?: ActuatorControlPanelVariant; readOnly?: boolean }) {
   const fullView = variant === 'full';
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
@@ -873,7 +873,7 @@ export function ActuatorControlPanel({ tankId, variant = 'full', readOnly = fals
                     <div className="actuator-history-row" key={command.command_id}>
                       <span className={`command-status command-${command.status}`}>
                         <span className="command-status-badges">
-                          <StatusBadge value={command.status} />
+                          <CommandStatusBadge status={command.status} />
                           {command.status === 'expired' && <span className="command-expired-badge">Never sent</span>}
                         </span>
                         <small className="command-status-detail">{commandStatusDescription[command.status]}</small>
@@ -936,8 +936,8 @@ export function ActuatorControlPanel({ tankId, variant = 'full', readOnly = fals
         open={pumpConfirmation !== null}
         title={pumpConfirmation?.action === 'dispense' ? `Start ${confirmedPumpLabel} test?` : `Retract ${confirmedPumpLabel}?`}
         message={pumpConfirmation?.action === 'dispense'
-          ? `Manual check only. This will start the ${confirmedPumpLabel} configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The system waits for completion and uses a bounded safety timeout. Confirm the syringe is empty or contains water and keep your hand near Stop.`
-          : `This will start the ${confirmedPumpLabel} retract action. Confirm the setup is safe and the pump is not handling chemicals.`}
+          ? `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). Manual check only: this will start the ${confirmedPumpLabel} configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The system waits for completion and uses a bounded safety timeout. Do not repeat the command if its physical outcome becomes uncertain; confirm the syringe is empty or contains water and keep your hand near Stop.`
+          : `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). This starts the ${confirmedPumpLabel} retract action. Confirm the setup is safe and the pump is not handling chemicals; Stop remains immediately available.`}
         confirmLabel={pumpConfirmation?.action === 'dispense' ? 'Dispense / test' : 'Retract'}
         tone={pumpConfirmation?.action === 'dispense' ? 'primary' : 'danger'}
         busy={pumpConfirmation ? busy === `${pumpConfirmation.actuator}:${pumpConfirmation.action}` : false}

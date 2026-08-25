@@ -12,6 +12,7 @@ import {
   ChevronDown,
   LogOut,
   Menu,
+  X,
 } from 'lucide-react';
 import {
   Suspense,
@@ -32,6 +33,7 @@ import {
 import { Brand } from '@/shared/components/Brand';
 import { RouteLoading } from '@/shared/components/RouteLoading';
 import { ThemeControl } from '@/shared/components/ThemeControl';
+import { Sheet, SheetClose, SheetContent, SheetOverlay, SheetPortal, SheetTitle } from '@/shared/components/ui/sheet';
 import { useMe } from '@/shared/hooks/useMe';
 import {
   adminNavigation,
@@ -64,6 +66,7 @@ export function AdminShell() {
   const [openCluster, setOpenCluster] = useState<string | null>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
   const adminMainRef = useRef<HTMLElement>(null);
+  const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const alertQuery = useQuery({
     queryKey: ['alerts', 'nav-unresolved'],
     queryFn: () => api<Alert[]>('/alerts/history?resolved=false'),
@@ -169,13 +172,6 @@ export function AdminShell() {
 
   return (
     <div className={`admin-shell ${mobileNav ? 'nav-open' : ''}`}>
-      <button
-        className="nav-scrim"
-        type="button"
-        aria-label="Close navigation"
-        onClick={() => setMobileNav(false)}
-      />
-
       <div className="floating-island-wrapper">
         <header className="floating-island">
           <Link className="island-brand" to="/admin/fleet" aria-label="AquaLogic fleet overview">
@@ -233,6 +229,7 @@ export function AdminShell() {
               </button>
             </div>
             <button
+              ref={mobileNavTriggerRef}
               className="icon-button mobile-menu"
               type="button"
               aria-label="Open navigation"
@@ -245,10 +242,21 @@ export function AdminShell() {
         </header>
       </div>
 
-      <aside className="mobile-nav-drawer" aria-label="Mobile navigation drawer">
+      <Sheet open={mobileNav} onOpenChange={setMobileNav}>
+        <SheetPortal>
+          <div className="modal-layer mobile-navigation-layer">
+            <SheetOverlay className="nav-scrim" />
+            <SheetContent
+              className="mobile-nav-drawer"
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                mobileNavTriggerRef.current?.focus();
+              }}
+            >
         <div className="mobile-drawer-header">
           <p className="eyebrow">Live operations</p>
-          <strong>{pageTitles[segment] ?? 'AquaLogic admin'}</strong>
+          <SheetTitle>{pageTitles[segment] ?? 'AquaLogic admin'}</SheetTitle>
+          <SheetClose className="icon-button mobile-nav-close" type="button" aria-label="Close navigation"><X size={18} /></SheetClose>
         </div>
         <nav className="mobile-drawer-nav" aria-label="Mobile menu navigation">
           {visibleNavigation.map((group) => {
@@ -278,7 +286,10 @@ export function AdminShell() {
             <LogOut size={18} />
           </button>
         </div>
-      </aside>
+            </SheetContent>
+          </div>
+        </SheetPortal>
+      </Sheet>
 
       <main className="admin-main" ref={adminMainRef}>
         <div className="admin-content">

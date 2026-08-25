@@ -1,7 +1,7 @@
 # Feeding Schedules
 
 Status: Implemented device-resident configuration; scheduling expansion deferred  
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -50,8 +50,9 @@ schedule state.
   is never delivered.
 - The application does not silently claim that a failed update replaced the
   device's existing schedule.
-- A bridge timeout or ambiguous request is reported as failed and is not
-  automatically retried.
+- A confirmed pre-dispatch rejection is reported as failed. A timeout, lost or
+  malformed response after dispatch, or other ambiguous request is reported as
+  `outcome_unknown` and is not automatically retried.
 - An operator may issue a new schedule command only after checking the device
   and the currently reported schedule.
 

@@ -1,7 +1,7 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
@@ -626,6 +626,35 @@ threshold comparison, alert lifecycle, deduplication, or Species Care evaluator
 behavior changes. Fish compatibility remains notes-only and undecided, and the
 authenticated web derives tank-detail age from the existing reading
 `received_at` field without an API migration.
+
+## 2026-08-23 — Classify ambiguous bridge failures conservatively and reconcile unattended
+
+**Decision:** Keep `failed` for confirmed pre-dispatch or explicit
+non-ambiguous rejection only. A physical-call timeout, lost or malformed
+terminal response, completion timeout, or state-poll failure is reported as
+`outcome_unknown`; the bridge makes no blind retry and may issue only the
+existing one-shot pump safety stop. Add the device-key uncertainty report
+route, and run the existing idempotent actuator reconciler from the shared
+periodic maintenance loop already used for unattended monitoring incidents.
+Lock permanent tank deletion with the established tank lifecycle mutation
+lock.
+
+**Reason:** A claimed request can reach equipment even when AquaLogic loses the
+response. Treating that branch as ordinary failure bypasses the same-pump
+uncertainty interlock and can permit a duplicate dispense. The small shared
+maintenance loop closes the unattended reconciliation gap without introducing
+a job platform. Deletion must participate in the same SQLite/PostgreSQL
+serialization boundary as retirement to avoid contradictory lifecycle results.
+
+**Consequences:** The API now distinguishes confirmed failure from ambiguous
+physical outcome, while the existing history, verification, late-report, and
+same-pump contracts remain stable. No migration is required because the
+existing `outcome_unknown`, verification, and audit fields already represent
+the state. Hardware validation must exercise normal completion, timeout/late
+report behavior, one-shot safety stop, and duplicate-dispense prevention with
+empty syringes or water only. External notifications, automatic dosing,
+command replay, generalized scheduling, and enterprise job infrastructure
+remain deferred.
 
 ## Adding a decision
 

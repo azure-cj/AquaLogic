@@ -1,7 +1,7 @@
 # Equipment Connection
 
 Status: Implemented local bridge boundary and uncertainty reconciliation; production hardware hardening deferred
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -39,10 +39,12 @@ application presents connection freshness before physical controls are used.
 4. The bridge reports the result and refreshes local actuator state on a
    best-effort basis.
 
-The backend opportunistically reconciles claimed commands before command
-creation, status/history reads, pending fetches, claim, and report operations.
-An executing command that passes its 180-second post-claim confirmation window
-becomes terminal `outcome_unknown`; it is never returned to the bridge queue.
+The backend reconciles claimed commands before command creation, status/history
+reads, pending fetches, claim, and report operations. The existing periodic
+maintenance loop also calls the same idempotent reconciler without a browser
+request. An executing command that passes its 180-second post-claim
+confirmation window becomes terminal `outcome_unknown`; it is never returned
+to the bridge queue.
 
 Light and feeder commands may remain queued while a bridge is unavailable and
 can expire before delivery. Pump maintenance commands require an online bridge

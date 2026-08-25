@@ -79,16 +79,10 @@ export function ActuatorControlPage() {
       ) : (
         <>
           <div className="actuator-control-page-context" role="note">
-            <div>
-              <strong>Focused workspace</strong>
-              <span>Review equipment status, manage schedules, and follow command activity in one place.</span>
-            </div>
-            <div>
-              <strong>Protected command flow</strong>
-              <span>Requests are processed through AquaLogic and remain associated with this tank.</span>
-            </div>
+            <strong>Protected tank workspace</strong>
+            <span>Review connection status, manage schedules, and follow command activity. Every request remains associated with this tank through AquaLogic.</span>
           </div>
-          <ActuatorControlPanel tankId={id} variant="full" />
+          <ActuatorControlPanel tankId={id} tankName={tank.data.name} variant="full" />
         </>
       )}
     </section>

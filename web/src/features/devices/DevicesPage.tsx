@@ -2,6 +2,7 @@ import { api } from '@/shared/api/client';
 import type { DeviceKeyRotation, RegisteredDevice } from '@/shared/api/models';
 import {
   ConfirmDialog,
+  DeviceConnectionBadge,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -10,30 +11,16 @@ import {
   Panel,
   SearchField,
 } from '@/shared/components/admin-ui';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogTitle } from '@/shared/components/ui/dialog';
 import { useMe } from '@/shared/hooks/useMe';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound, Power, RefreshCw, Router, ShieldAlert } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import './styles.css';
 
 type LifecycleTarget = { device: RegisteredDevice; nextActive: boolean };
-
-const statusLabels: Record<RegisteredDevice['status'], string> = {
-  online: 'Online',
-  offline: 'Offline',
-  disabled: 'Disabled',
-};
-
-function DeviceStatus({ status }: { status: RegisteredDevice['status']; }) {
-  return (
-    <span className={`device-status device-status-${status}`}>
-      <span className="status-dot" aria-hidden="true" />
-      {statusLabels[status]}
-    </span>
-  );
-}
 
 export function DevicesPage() {
   const me = useMe();
@@ -47,6 +34,7 @@ export function DevicesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [rotation, setRotation] = useState<DeviceKeyRotation | null>(null);
   const [copied, setCopied] = useState(false);
+  const rotationTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const devices = useQuery({
     queryKey: ['devices'],
@@ -165,10 +153,10 @@ export function DevicesPage() {
                   <tr key={device.device_id}>
                     <td><div className="device-identity"><span className="device-icon" aria-hidden="true"><Router size={17} /></span><span><strong>{device.device_id}</strong><small>Registered bridge</small></span></div></td>
                     <td><strong>{device.tank_name}</strong><small>Tank {device.tank_id}</small></td>
-                    <td><DeviceStatus status={device.status} /></td>
+                    <td><DeviceConnectionBadge status={device.status} /></td>
                     <td><strong>{device.last_seen_at ? relativeTime(device.last_seen_at) : 'Never'}</strong><small>{device.last_seen_at ? formatDate(device.last_seen_at) : 'No bridge report yet'}</small></td>
                     <td><small>{formatDate(device.created_at)}</small></td>
-                    <td><div className="device-actions"><button className="button button-secondary button-small" type="button" onClick={() => setLifecycleTarget({ device, nextActive: !device.is_active })}><Power size={14} />{device.is_active ? 'Disable' : 'Activate'}</button><button className="button button-secondary button-small" type="button" onClick={() => setRotateTarget(device)}><KeyRound size={14} />Rotate key</button></div></td>
+                    <td><div className="device-actions"><button className="button button-secondary button-small" type="button" onClick={() => setLifecycleTarget({ device, nextActive: !device.is_active })}><Power size={14} />{device.is_active ? 'Disable' : 'Activate'}</button><button className="button button-secondary button-small" type="button" onClick={(event) => { rotationTriggerRef.current = event.currentTarget; setRotateTarget(device); }}><KeyRound size={14} />Rotate key</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -201,19 +189,21 @@ export function DevicesPage() {
         tone="danger"
       />
 
-      {rotation && (
-        <div className="device-key-modal modal-layer" role="dialog" aria-modal="true" aria-labelledby="device-key-title">
-          <button className="modal-backdrop" type="button" aria-label="Close key display" onClick={() => setRotation(null)} />
-          <section className="device-key-card">
+      <Dialog open={Boolean(rotation)} onOpenChange={(open) => { if (!open) setRotation(null); }}>
+        <DialogPortal>
+          <div className="device-key-modal modal-layer modal-centered">
+            <DialogOverlay />
+            {rotation && <DialogContent className="device-key-card" onCloseAutoFocus={(event) => { event.preventDefault(); rotationTriggerRef.current?.focus(); }}>
             <span className="device-key-icon" aria-hidden="true"><KeyRound size={22} /></span>
-            <h2 id="device-key-title">New device key</h2>
-            <p>Copy this key into the bridge now. It cannot be recovered after this window is closed.</p>
+            <DialogTitle>New device key</DialogTitle>
+            <DialogDescription>Copy this key into the bridge now. It cannot be recovered after this window is closed.</DialogDescription>
             <code>{rotation.device_key}</code>
             <button className="button button-primary" type="button" onClick={() => void copyKey()}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? 'Copied' : 'Copy key'}</button>
-            <button className="text-link" type="button" onClick={() => setRotation(null)}>I have saved the key</button>
-          </section>
-        </div>
-      )}
+            <DialogClose className="text-link" type="button">I have saved the key</DialogClose>
+            </DialogContent>}
+          </div>
+        </DialogPortal>
+      </Dialog>
     </section>
   );
 }

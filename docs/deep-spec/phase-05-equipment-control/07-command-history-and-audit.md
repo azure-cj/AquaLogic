@@ -1,7 +1,7 @@
 # Command History and Audit
 
 Status: Implemented bounded administrator history, audit trail, and uncertainty records
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Purpose
 
@@ -45,7 +45,8 @@ The current lifecycle records audit activity for:
 - command queueing
 - command claim/executing transition
 - successful completion
-- reported failure
+- confirmed reported failure
+- bridge-reported ambiguous physical outcome
 - queued-command expiry
 - `executing -> outcome_unknown` reconciliation
 - rejected late bridge reports

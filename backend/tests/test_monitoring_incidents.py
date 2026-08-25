@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import threading
 from threading import Barrier, Thread
 
 import pytest
@@ -11,6 +12,7 @@ from app.database import Base, configure_sqlite_foreign_keys
 from app.models import Alert, MonitoringIncident, RegisteredDevice, SecurityAuditEvent, SensorReading, Tank
 from app.security import hash_opaque_token
 from app.services.decision_engine import ensure_default_thresholds, ingest_reading
+from app.services import monitoring_incidents
 from app.services.monitoring_incidents import detect_monitoring_incidents
 
 
@@ -57,6 +59,25 @@ def test_grace_defaults_above_offline_boundary_and_rejects_unsafe_values():
             **settings.__dict__,
             "monitoring_outage_grace_seconds": 90,
         }))
+
+
+def test_periodic_maintenance_stops_cleanly(monkeypatch):
+    completed = threading.Event()
+    calls = []
+
+    def fake_maintenance(*, evaluated_at=None):
+        calls.append(evaluated_at)
+        completed.set()
+        return monitoring_incidents.MaintenanceResult(actuator_unknown_transitions=0, monitoring=None)
+
+    monkeypatch.setattr(monitoring_incidents, "run_periodic_maintenance", fake_maintenance)
+    handle = monitoring_incidents.start_periodic_maintenance()
+    try:
+        assert completed.wait(timeout=2)
+        assert calls
+    finally:
+        handle.stop()
+    assert not handle.thread.is_alive()
 
 
 def test_detector_respects_grace_creates_one_incident_and_restart_is_idempotent(
@@ -243,6 +264,39 @@ def test_permanent_deletion_after_retirement_cascades_monitoring_incidents(
     assert client.delete(f"/tanks/{tank['id']}", headers=auth_headers).status_code == 204
     db_session.expire_all()
     assert db_session.scalar(select(MonitoringIncident.id)) is None
+
+
+def test_outage_retirement_removes_public_access_rejects_device_and_retains_history_until_delete(
+    client, auth_headers, db_session
+):
+    tank = _tank(client, auth_headers, "Cross-system lifecycle tank")
+    device = _register(client, auth_headers, tank["id"], "cross-system-device")
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    assert client.get(f"/public/tanks/{tank['public_id']}").status_code == 200
+    _make_overdue(db_session, tank["id"], now, seconds=900)
+    assert detect_monitoring_incidents(db_session, evaluated_at=now, grace_seconds=900).created_incidents == 1
+
+    retired = client.post(f"/tanks/{tank['id']}/retire", headers=auth_headers, json={})
+    assert retired.status_code == 200
+    incident = db_session.scalar(select(MonitoringIncident).where(MonitoringIncident.tank_id == tank["id"]))
+    assert incident is not None
+    assert incident.resolution_reason == "tank_retired"
+    assert client.get(f"/public/tanks/{tank['public_id']}").status_code == 404
+    assert client.post(
+        "/device-ingestion/readings",
+        headers={"X-Device-Key": device["device_key"]},
+        json={"temperature": 25, "ph": 7, "turbidity": 2, "tds": 150},
+    ).status_code == 401
+
+    retained_history = client.get(
+        f"/tanks/{tank['id']}/monitoring-incidents?state=all&page=1&page_size=10",
+        headers=auth_headers,
+    )
+    assert retained_history.status_code == 200
+    assert retained_history.json()["total"] == 1
+    assert client.delete(f"/tanks/{tank['id']}", headers=auth_headers).status_code == 204
+    assert db_session.scalar(select(MonitoringIncident.id).where(MonitoringIncident.tank_id == tank["id"])) is None
+    assert db_session.get(RegisteredDevice, device["device_id"]) is None
 
 
 def test_incident_api_is_paginated_staff_read_only_and_distinct_from_alerts(

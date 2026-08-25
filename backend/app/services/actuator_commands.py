@@ -27,6 +27,65 @@ def confirmation_deadline(executing_at: datetime) -> datetime:
     return executing_at + ACTUATOR_CONFIRMATION_WINDOW
 
 
+def mark_actuator_command_outcome_unknown(
+    db: Session,
+    command: ActuatorCommand,
+    *,
+    now: datetime,
+    request: Request | None = None,
+    error_message: str = UNKNOWN_OUTCOME_MESSAGE,
+    result_json: str | None = None,
+) -> bool:
+    """Conditionally finalize one executing command as outcome_unknown.
+
+    Both the autonomous reconciler and the bridge's explicit uncertainty
+    report use this single transition path. The conditional status predicate
+    makes concurrent callers idempotent and keeps the audit event one-shot.
+    """
+
+    changed = db.execute(
+        update(ActuatorCommand)
+        .where(
+            ActuatorCommand.command_id == command.command_id,
+            ActuatorCommand.status == "executing",
+        )
+        .values(
+            status="outcome_unknown",
+            outcome_unknown_at=now,
+            error_message=error_message[:500],
+            result_json=result_json,
+        )
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if changed != 1:
+        return False
+    db.expire(command)
+    db.refresh(command)
+    audit_event(
+        db,
+        request,
+        "actuator.command.outcome_unknown",
+        "success",
+        target_type="actuator_command",
+        target_id=command.command_id,
+        details={
+            "device_id": command.device_id,
+            "tank_id": command.tank_id,
+            "actuator": command.actuator,
+            "action": command.action,
+            "executing_at": command.executing_at.isoformat() if command.executing_at else None,
+            "confirmation_deadline_at": (
+                command.confirmation_deadline_at.isoformat()
+                if command.confirmation_deadline_at
+                else confirmation_deadline(command.executing_at).isoformat()
+                if command.executing_at
+                else None
+            ),
+        },
+    )
+    return True
+
+
 def reconcile_actuator_commands(
     db: Session,
     device_id: str,
@@ -73,43 +132,13 @@ def reconcile_actuator_commands(
     commands = list(db.scalars(candidate_query).all())
     transitioned = 0
     for command in commands:
-        changed = db.execute(
-            update(ActuatorCommand)
-            .where(
-                ActuatorCommand.command_id == command.command_id,
-                ActuatorCommand.status == "executing",
+        transitioned += int(
+            mark_actuator_command_outcome_unknown(
+                db,
+                command,
+                now=current_time,
+                request=request,
             )
-            .values(
-                status="outcome_unknown",
-                outcome_unknown_at=current_time,
-                error_message=UNKNOWN_OUTCOME_MESSAGE,
-            )
-            .execution_options(synchronize_session=False)
-        ).rowcount
-        if changed != 1:
-            continue
-        transitioned += 1
-        db.expire(command)
-        db.refresh(command)
-        audit_event(
-            db,
-            request,
-            "actuator.command.outcome_unknown",
-            "success",
-            target_type="actuator_command",
-            target_id=command.command_id,
-            details={
-                "device_id": command.device_id,
-                "tank_id": command.tank_id,
-                "actuator": command.actuator,
-                "action": command.action,
-                "executing_at": command.executing_at.isoformat() if command.executing_at else None,
-                "confirmation_deadline_at": (
-                    command.confirmation_deadline_at.isoformat()
-                    if command.confirmation_deadline_at
-                    else confirmation_deadline(command.executing_at).isoformat()
-                ),
-            },
         )
     return transitioned
 
@@ -166,4 +195,26 @@ def active_pump_dispense(
         .where(*filters)
         .order_by(ActuatorCommand.requested_at, ActuatorCommand.command_id)
         .limit(1)
+    )
+
+
+def reconcile_all_actuator_commands(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    request: Request | None = None,
+) -> int:
+    """Reconcile every overdue executing command for unattended maintenance."""
+
+    device_ids = list(
+        db.scalars(
+            select(ActuatorCommand.device_id)
+            .where(ActuatorCommand.status == "executing")
+            .distinct()
+            .order_by(ActuatorCommand.device_id)
+        ).all()
+    )
+    return sum(
+        reconcile_actuator_commands(db, device_id, now=now, request=request)
+        for device_id in device_ids
     )

@@ -1,7 +1,7 @@
 # AquaLogic Hardware Integration Contract
 
 Status: Current v1 bridge contract for temporary hardware testing
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 This document is the shared boundary between the ESP32 firmware and the
 software system. The v1 bridge uses the received firmware as a read-only
@@ -119,9 +119,12 @@ and at most one intentional matching safety stop if the configured move does
 not complete. It never retries a request whose execution may already have
 happened.
 
-If the bridge loses a terminal report after claiming a command, the backend
-reconciles it to `outcome_unknown` after the post-claim confirmation window.
-Late reports do not rewrite that history. Same-device/same-pump dispense is
+If a physical request times out, loses its response, returns malformed terminal
+data, or cannot be monitored to completion after dispatch, the bridge reports
+`outcome_unknown`; if the report is lost, the backend reconciles it to the same
+state after the post-claim confirmation window. Confirmed pre-dispatch or
+explicit non-ambiguous rejection is `failed`. Late reports do not rewrite that
+history. Same-device/same-pump dispense is
 blocked while an earlier dispense is executing or uncleared unknown; Stop
 remains available, and administrator physical verification records who checked
 the equipment, when, and any bounded note before clearing only the software
