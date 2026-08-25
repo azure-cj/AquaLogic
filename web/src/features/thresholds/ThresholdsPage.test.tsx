@@ -1,6 +1,9 @@
 import { api } from '@/shared/api/client';
+import { Toaster } from '@/shared/components/ui/sonner';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Thresholds from './ThresholdsPage';
 
@@ -15,12 +18,18 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <Thresholds />
+      <ThemeProvider>
+        <Toaster />
+        <Thresholds />
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  toast.dismiss();
+  vi.clearAllMocks();
+});
 
 describe('Thresholds', () => {
   it('shows only the currently supported operational parameters', async () => {
@@ -61,5 +70,19 @@ describe('Thresholds', () => {
     const errorId = criticalBelow.getAttribute('aria-describedby');
     expect(errorId).toBeTruthy();
     expect(document.getElementById(errorId!)).toHaveTextContent('Bounds must be strictly ordered');
+  });
+
+  it('uses the global toast for successful threshold saves', async () => {
+    vi.mocked(api).mockResolvedValue([
+      { parameter: 'temperature', unit: '°C', warning_min: 20, warning_max: 28, critical_min: 18, critical_max: 30, enabled: true },
+    ]);
+    renderPage();
+
+    const heading = await screen.findByRole('heading', { name: 'temperature' });
+    fireEvent.submit(heading.closest('form')!);
+
+    expect(await screen.findByText('temperature thresholds saved.')).toBeInTheDocument();
+    expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
+    expect(document.querySelector('.notice-success')).not.toBeInTheDocument();
   });
 });

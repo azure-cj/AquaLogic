@@ -1,7 +1,10 @@
 import { api } from '@/shared/api/client';
+import { Toaster } from '@/shared/components/ui/sonner';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Alerts, { resolutionLabel } from './AlertsPage';
@@ -18,13 +21,19 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <Alerts />
+        <ThemeProvider>
+          <Toaster />
+          <Alerts />
+        </ThemeProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  toast.dismiss();
+  vi.clearAllMocks();
+});
 
 describe('alert history', () => {
   it('labels automatic, operator, and legacy resolutions', () => {
@@ -75,5 +84,31 @@ describe('alert history', () => {
     renderPage();
 
     expect(await screen.findByText('Automatically resolved')).toBeInTheDocument();
+  });
+
+  it('uses the global toast after an alert is marked as handled', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') return [];
+      if (path === '/alerts/2/resolve') return {};
+      return [{
+        id: 2,
+        tank_id: 4,
+        parameter: 'temperature',
+        severity: 'warning',
+        message: 'Temperature is outside its warning threshold',
+        is_resolved: false,
+        created_at: '2026-08-21T10:00:00Z',
+        resolved_at: null,
+        resolution_source: null,
+      }];
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Mark temperature alert handled/i }));
+
+    expect(await screen.findByText('Alert marked as handled.')).toBeInTheDocument();
+    expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
+    expect(document.querySelector('.notice-success')).not.toBeInTheDocument();
   });
 });

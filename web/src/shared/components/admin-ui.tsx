@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { createPortal } from 'react-dom';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -291,45 +290,6 @@ export function FormField({
       {description && <small className="form-field-description" id={descriptionId}>{description}</small>}
       {error && <small className="form-field-error" id={errorId} role="alert">{error}</small>}
     </div>
-  );
-}
-
-export function Toast({
-  message,
-  tone = 'success',
-  onDismiss,
-  autoDismissMs = 4_500,
-}: {
-  message: ReactNode;
-  tone?: 'success' | 'warning' | 'error';
-  onDismiss: () => void;
-  autoDismissMs?: number;
-}) {
-  const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
-
-  useEffect(() => {
-    if (!message || autoDismissMs <= 0) return;
-    const timeout = window.setTimeout(() => dismissRef.current(), autoDismissMs);
-    return () => window.clearTimeout(timeout);
-  }, [autoDismissMs, message]);
-
-  if (!message) return null;
-
-  return createPortal(
-    <div
-      className={`admin-toast admin-toast-${tone}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-      aria-live={tone === 'error' ? 'assertive' : 'polite'}
-      aria-atomic="true"
-    >
-      {tone === 'success' ? <CheckCircle2 size={19} aria-hidden="true" /> : <AlertTriangle size={19} aria-hidden="true" />}
-      <span>{message}</span>
-      <button className="admin-toast-dismiss" type="button" onClick={onDismiss} aria-label="Dismiss notification">
-        <X size={16} aria-hidden="true" />
-      </button>
-    </div>,
-    document.body,
   );
 }
 

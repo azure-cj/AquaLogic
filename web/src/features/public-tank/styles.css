@@ -821,22 +821,6 @@
   background: #e6f7f7;
 }
 
-.visitor-toast {
-  position: fixed;
-  z-index: 30;
-  right: 50%;
-  bottom: calc(84px + env(safe-area-inset-bottom));
-  margin: 0;
-  padding: 9px 13px;
-  border-radius: 999px;
-  color: #fff;
-  background: #073f57;
-  box-shadow: 0 8px 24px rgba(2, 49, 65, 0.28);
-  font-size: 0.74rem;
-  font-weight: 750;
-  transform: translateX(50%);
-}
-
 .visitor-state-page {
   display: grid;
   width: min(100%, 440px);

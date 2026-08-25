@@ -20,8 +20,8 @@ import {
   LoadingState,
   Panel,
   CommandStatusBadge,
-  Toast,
 } from '@/shared/components/admin-ui';
+import { notify } from '@/shared/lib/notify';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Info, LockKeyhole, Play, Power, RefreshCw, RotateCcw, Square, Utensils } from 'lucide-react';
@@ -548,7 +548,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
   const [feedConfirmOpen, setFeedConfirmOpen] = useState(false);
   const [pumpConfirmation, setPumpConfirmation] = useState<PumpConfirmation | null>(null);
   const [verificationLock, setVerificationLock] = useState<PumpDispenseLock | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyActuator, setHistoryActuator] = useState<HistoryActuatorFilter>('all');
   const [historyStatus, setHistoryStatus] = useState<HistoryStatusFilter>('all');
@@ -585,7 +584,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     setHistoryActuator('all');
     setHistoryStatus('all');
     setExpandedCommandId(null);
-    setFeedback(null);
     setPumpConfirmation(null);
     setVerificationLock(null);
     setScheduleInitialized(false);
@@ -606,8 +604,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     setScheduleInitialized(true);
   }, [scheduleInitialized, status.data]);
 
-  const clearFeedback = () => setFeedback(null);
-
   const queueCommand = async (
     actuator: ActuatorName,
     action: ActuatorAction,
@@ -616,7 +612,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     expiresInSeconds?: number,
   ) => {
     if (readOnly) return;
-    clearFeedback();
     const key = `${actuator}:${action}`;
     setBusy(key);
     try {
@@ -631,9 +626,9 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
       ]);
       setHistoryPage(1);
       setExpandedCommandId(null);
-      setFeedback({ tone: 'success', message: `${label} request queued. The system will update its status after processing.` });
+      notify.success(`${label} request queued. The system will update its status after processing.`);
     } catch (caught) {
-      setFeedback({ tone: 'error', message: errorMessage(caught, `Could not queue the ${label.toLowerCase()} command.`) });
+      notify.error(errorMessage(caught, `Could not queue the ${label.toLowerCase()} command.`));
     } finally {
       setBusy(null);
     }
@@ -642,7 +637,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
   const clearUncertainty = async () => {
     if (readOnly || !verificationLock) return;
     const key = `clear:${verificationLock.command_id}`;
-    clearFeedback();
     setBusy(key);
     try {
       await api<ActuatorCommand>(`/tanks/${tankId}/actuators/commands/${verificationLock.command_id}/clear-uncertainty`, {
@@ -654,9 +648,9 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
         queryClient.invalidateQueries({ queryKey: ['tank-actuator-history', tankId] }),
       ]);
       setVerificationLock(null);
-      setFeedback({ tone: 'success', message: 'Physical verification recorded. The historical command remains Outcome unknown; the software pump lock is cleared.' });
+      notify.success('Physical verification recorded. The historical command remains Outcome unknown; the software pump lock is cleared.');
     } catch (caught) {
-      setFeedback({ tone: 'error', message: errorMessage(caught, 'Could not record physical verification.') });
+      notify.error(errorMessage(caught, 'Could not record physical verification.'));
     } finally {
       setBusy(null);
     }
@@ -679,12 +673,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
 
   return (
     <>
-      <Toast
-        message={feedback?.message ?? ''}
-        tone={feedback?.tone ?? 'success'}
-        autoDismissMs={feedback?.tone === 'error' ? 0 : 4_500}
-        onDismiss={() => setFeedback(null)}
-      />
       <Panel
         title={readOnly ? 'Equipment history' : fullView ? 'Actuator controls' : 'Actuator snapshot'}
         description={readOnly ? 'Retained administrator command history; retired equipment is read-only' : fullView ? 'Administrator-only controls for this tank’s equipment' : 'Quick equipment controls for this tank'}

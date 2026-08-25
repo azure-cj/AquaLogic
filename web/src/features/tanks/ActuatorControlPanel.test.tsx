@@ -1,4 +1,6 @@
 import { api } from '@/shared/api/client';
+import { Toaster } from '@/shared/components/ui/sonner';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -87,9 +89,12 @@ function renderPanel(variant: 'full' | 'summary' = 'full') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <ActuatorControlPanel tankId={1} variant={variant} />
-      </MemoryRouter>
+      <ThemeProvider>
+        <Toaster />
+        <MemoryRouter>
+          <ActuatorControlPanel tankId={1} variant={variant} />
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -152,7 +157,7 @@ describe('admin actuator controls', () => {
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(call?.[1]?.body).toContain('"device_id":"esp32-control-01"');
     expect(call?.[1]?.body).toContain('"action":"feed_now"');
-    expect(document.querySelector('.admin-toast')).toBeInTheDocument();
+    expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
   });
 
   it('requires confirmation for pump dispense and retract, and queues the configured-volume test command', async () => {

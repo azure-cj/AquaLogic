@@ -1,5 +1,6 @@
 import { api } from '@/shared/api/client';
 import { ThemeControl } from '@/shared/components/ThemeControl';
+import { notify } from '@/shared/lib/notify';
 import { useQuery } from '@tanstack/react-query';
 import {
   Camera,
@@ -194,7 +195,6 @@ function MetricCard({
 
 export function PublicTank() {
   const { publicId = '' } = useParams();
-  const [shareNote, setShareNote] = useState('');
   const [heroFailed, setHeroFailed] = useState(false);
   const query = useQuery({
     queryKey: ['public-tank', publicId],
@@ -281,19 +281,18 @@ export function PublicTank() {
     try {
       if (navigator.share) {
         await navigator.share(shareData);
-        setShareNote('Shared');
+        notify.success('Tank link shared.', { duration: 2_500 });
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(window.location.href);
-        setShareNote('Link copied');
+        notify.success('Tank link copied.', { duration: 2_500 });
       } else {
-        setShareNote('Use your browser menu to share this page');
+        notify.info('Use your browser menu to share this page.', { duration: 4_500 });
       }
     } catch (error) {
       if ((error as DOMException).name !== 'AbortError') {
-        setShareNote('Sharing is unavailable');
+        notify.error('Sharing is unavailable.');
       }
     }
-    window.setTimeout(() => setShareNote(''), 2500);
   };
 
   return (
@@ -344,12 +343,6 @@ export function PublicTank() {
             {timeAgo(tank.latest_reading?.timestamp)}
           </span>
         </section>
-
-        {shareNote && (
-          <p className="visitor-toast" role="status">
-            {shareNote}
-          </p>
-        )}
 
         <section className="visitor-section" aria-labelledby="conditions-title">
           <header className="visitor-section-heading">

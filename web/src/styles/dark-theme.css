@@ -211,25 +211,6 @@
   );
 }
 
-:root[data-theme='dark'] .admin-toast {
-  border-color: #2d6857;
-  background: #17372f;
-  color: #8be0bd;
-  box-shadow: var(--shadow-strong);
-}
-
-:root[data-theme='dark'] .admin-toast-warning {
-  border-color: #795d2c;
-  background: #342917;
-  color: #f5ca78;
-}
-
-:root[data-theme='dark'] .admin-toast-error {
-  border-color: #75434d;
-  background: #3a2028;
-  color: #ffabb2;
-}
-
 :root[data-theme='dark'] .modal-backdrop,
 :root[data-theme='dark'] .nav-scrim {
   background: rgba(1, 8, 13, 0.72);
@@ -792,12 +773,6 @@
 :root[data-theme='dark'] .visitor-nav {
   border-color: var(--visitor-line);
   background: rgba(16, 37, 47, 0.9);
-}
-
-:root[data-theme='dark'] .visitor-toast {
-  border-color: #2d6857;
-  background: #17372f;
-  color: #8be0bd;
 }
 
 /* A short, origin-aware ink bloom gives the theme change a tactile moment. */

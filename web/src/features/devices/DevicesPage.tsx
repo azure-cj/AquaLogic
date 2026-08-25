@@ -13,6 +13,7 @@ import {
 } from '@/shared/components/admin-ui';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogTitle } from '@/shared/components/ui/dialog';
 import { useMe } from '@/shared/hooks/useMe';
+import { notify } from '@/shared/lib/notify';
 import { formatDate, relativeTime } from '@/shared/utils/formatting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound, Power, RefreshCw, Router, ShieldAlert } from 'lucide-react';
@@ -31,7 +32,6 @@ export function DevicesPage() {
   const [lifecycleTarget, setLifecycleTarget] = useState<LifecycleTarget | null>(null);
   const [rotateTarget, setRotateTarget] = useState<RegisteredDevice | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [rotation, setRotation] = useState<DeviceKeyRotation | null>(null);
   const [copied, setCopied] = useState(false);
   const rotationTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -75,17 +75,16 @@ export function DevicesPage() {
   const updateLifecycle = async () => {
     if (!lifecycleTarget) return;
     setBusy(true);
-    setNotice(null);
     try {
       await api<RegisteredDevice>(`/devices/${lifecycleTarget.device.device_id}`, {
         method: 'PATCH',
         body: JSON.stringify({ is_active: lifecycleTarget.nextActive }),
       });
       await queryClient.invalidateQueries({ queryKey: ['devices'] });
-      setNotice(`${lifecycleTarget.device.device_id} is now ${lifecycleTarget.nextActive ? 'active' : 'disabled'}.`);
+      notify.success(`${lifecycleTarget.device.device_id} is now ${lifecycleTarget.nextActive ? 'active' : 'disabled'}.`);
       setLifecycleTarget(null);
     } catch {
-      setNotice('The device state could not be changed. Try again.');
+      notify.error('The device state could not be changed. Try again.');
     } finally {
       setBusy(false);
     }
@@ -94,7 +93,6 @@ export function DevicesPage() {
   const rotateKey = async () => {
     if (!rotateTarget) return;
     setBusy(true);
-    setNotice(null);
     try {
       const result = await api<DeviceKeyRotation>(`/devices/${rotateTarget.device_id}/rotate-key`, { method: 'POST' });
       setRotation(result);
@@ -102,7 +100,7 @@ export function DevicesPage() {
       await queryClient.invalidateQueries({ queryKey: ['devices'] });
       setRotateTarget(null);
     } catch {
-      setNotice('The device key could not be rotated. Try again.');
+      notify.error('The device key could not be rotated. Try again.');
     } finally {
       setBusy(false);
     }
@@ -115,7 +113,7 @@ export function DevicesPage() {
       setCopied(true);
     } catch {
       setCopied(false);
-      setNotice('Copy was unavailable. Select the key and copy it manually.');
+      notify.error('Copy was unavailable. Select the key and copy it manually.');
     }
   };
 
@@ -126,8 +124,6 @@ export function DevicesPage() {
         title="Device management"
         description="Review registered bridge devices, their tank mappings, and reporting health."
       />
-
-      {notice && <Notice tone="warning">{notice}</Notice>}
 
       <div className="devices-scope-note" role="note">
         <ShieldAlert size={18} aria-hidden="true" />

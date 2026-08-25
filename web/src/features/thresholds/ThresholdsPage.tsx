@@ -8,6 +8,7 @@ import {
   Panel,
   FormField,
 } from '@/shared/components/admin-ui';
+import { notify } from '@/shared/lib/notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -30,7 +31,6 @@ export function Thresholds() {
     queryFn: () => api<Threshold[]>('/thresholds'),
   });
   const [saving, setSaving] = useState('');
-  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [errorParameter, setErrorParameter] = useState('');
   const save = async (event: FormEvent<HTMLFormElement>, threshold: Threshold) => {
@@ -65,7 +65,7 @@ export function Thresholds() {
           enabled: form.get('enabled') === 'on',
         }),
       });
-      setNotice(`${threshold.parameter.replaceAll('_', ' ')} thresholds saved.`);
+      notify.success(`${threshold.parameter.replaceAll('_', ' ')} thresholds saved.`);
       client.invalidateQueries({ queryKey: ['thresholds'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save thresholds');
@@ -81,7 +81,6 @@ export function Thresholds() {
         title="Global thresholds"
         description="Changes apply to the next supported sensor reading across all tanks. Values must pass a configured boundary to trigger Warning or Critical; exact boundary values remain within the Normal range."
       />
-      {notice && <Notice>{notice}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
       {query.isLoading ? (
         <Panel>

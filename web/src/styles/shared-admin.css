@@ -621,83 +621,97 @@ a.data-row:hover {
   color: #9d303a;
 }
 
-.admin-toast {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 6rem);
-  right: max(1rem, env(safe-area-inset-right));
-  /* The floating island occupies the first ~5.5rem; stay below it and below its mobile drawer. */
-  z-index: 90;
-  display: flex;
-  width: min(430px, calc(100vw - 2rem));
-  align-items: flex-start;
-  gap: .65rem;
+
+/* Sonner is the shared notification rail. Its palette stays on AquaLogic tokens. */
+[data-sonner-toaster].aqualogic-toaster {
+  --width: min(430px, calc(100vw - 2rem));
+  --border-radius: 12px;
+  --normal-bg: var(--surface);
+  --normal-border: var(--border);
+  --normal-text: var(--text);
+  --success-bg: #edf9f4;
+  --success-border: #bfe2d3;
+  --success-text: #24644f;
+  --info-bg: #eef8fb;
+  --info-border: #c7e3eb;
+  --info-text: #176477;
+  --warning-bg: #fff8e7;
+  --warning-border: #f0d89b;
+  --warning-text: #805b12;
+  --error-bg: #fff2f3;
+  --error-border: #efc4c8;
+  --error-text: #9d303a;
+  z-index: 1200;
+  font-family: var(--font-admin-sans);
+}
+
+:root[data-theme='dark'] [data-sonner-toaster].aqualogic-toaster {
+  --success-bg: #17372f;
+  --success-border: #2d6857;
+  --success-text: #8be0bd;
+  --info-bg: #162f3a;
+  --info-border: #2c5967;
+  --info-text: #8bcad6;
+  --warning-bg: #342917;
+  --warning-border: #795d2c;
+  --warning-text: #f5ca78;
+  --error-bg: #3a2028;
+  --error-border: #75434d;
+  --error-text: #ffabb2;
+}
+
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] {
+  width: var(--width);
+  min-height: 52px;
   padding: .82rem .7rem .82rem .9rem;
-  border: 1px solid #bfe2d3;
-  border-radius: 12px;
-  background: #edf9f4;
-  color: #24644f;
   box-shadow: 0 16px 38px rgba(22, 61, 72, .2);
   font-size: .78rem;
   font-weight: 680;
-  animation: admin-toast-slide-in 220ms ease-out both;
 }
 
-.admin-toast > span {
-  flex: 1;
-  min-width: 0;
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-content] {
+  gap: 2px;
+}
+
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-title] {
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-description] {
   line-height: 1.4;
 }
 
-.admin-toast-warning {
-  border-color: #f0d89b;
-  background: #fff8e7;
-  color: #805b12;
-}
-
-.admin-toast-error {
-  border-color: #efc4c8;
-  background: #fff2f3;
-  color: #9d303a;
-}
-
-.admin-toast-dismiss {
-  display: inline-grid;
-  flex: 0 0 auto;
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-close-button] {
+  position: static;
   width: 28px;
   height: 28px;
-  place-items: center;
-  margin: -.25rem -.2rem 0 0;
-  padding: 0;
+  flex: 0 0 auto;
+  margin: 0 0 0 auto;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: currentColor;
+  transform: none;
 }
 
-.admin-toast-dismiss:hover,
-.admin-toast-dismiss:focus-visible {
-  background: rgba(36, 100, 79, .1);
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-close-button]:hover,
+[data-sonner-toaster].aqualogic-toaster [data-sonner-toast] [data-close-button]:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
   outline: none;
 }
 
-@keyframes admin-toast-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(calc(100% + 1rem));
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+[data-sonner-toaster].aqualogic-toaster .aqualogic-toast-loader {
+  animation: aqualogic-toast-spin 900ms linear infinite;
 }
 
-@media (max-width: 820px) {
-  .admin-toast {
-    top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
-    right: max(.75rem, env(safe-area-inset-right));
-    left: max(.75rem, env(safe-area-inset-left));
-    width: auto;
+@keyframes aqualogic-toast-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 600px) {
+  [data-sonner-toaster].aqualogic-toaster [data-sonner-toast] {
+    width: calc(100vw - 1.5rem);
   }
 }
 
@@ -1028,6 +1042,18 @@ a.data-row:hover {
 .confirm-primary {
   background: var(--teal-100);
   color: var(--teal-700);
+}
+
+.confirm-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 94vw);
+  padding: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow-strong);
+  text-align: center;
 }
 
 .confirm-dialog h2 {

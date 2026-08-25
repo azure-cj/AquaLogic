@@ -1,9 +1,12 @@
 import { api } from '@/shared/api/client';
+import { Toaster } from '@/shared/components/ui/sonner';
+import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { useMe } from '@/shared/hooks/useMe';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DevicesPage from './DevicesPage';
 
@@ -56,9 +59,12 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <DevicesPage />
-      </MemoryRouter>
+      <ThemeProvider>
+        <Toaster />
+        <MemoryRouter>
+          <DevicesPage />
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -67,6 +73,7 @@ describe('DevicesPage', () => {
   beforeEach(() => {
     vi.mocked(api).mockReset();
     vi.mocked(useMe).mockReset();
+    toast.dismiss();
   });
 
   it('shows the administrator device inventory without exposing keys', async () => {
@@ -94,6 +101,8 @@ describe('DevicesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disable device' }));
 
     await waitFor(() => expect(api).toHaveBeenCalledWith('/devices/bridge-front', expect.objectContaining({ method: 'PATCH' })));
+    expect(await screen.findByText('bridge-front is now disabled.')).toBeInTheDocument();
+    expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog', { name: 'Disable this device?' })).not.toBeInTheDocument();
   });
 

@@ -13,9 +13,9 @@ import {
 import { Brand } from '@/shared/components/Brand';
 import { Dialog, DialogClose, DialogContent, DialogOverlay, DialogPortal, DialogTitle } from '@/shared/components/ui/dialog';
 import { IconTooltip, TooltipProvider } from '@/shared/components/ui/tooltip';
+import { notify } from '@/shared/lib/notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2,
   Copy,
   Download,
   Droplets,
@@ -28,7 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type RefObject, useCallback, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { TankEditorDrawer } from './TankEditorDrawer';
 import { TankRetireDialog } from './TankRetireDialog';
@@ -102,16 +102,9 @@ export function Tanks() {
   const qrTriggerRef = useRef<HTMLElement | null>(null);
   const [retireTarget, setRetireTarget] = useState<Tank | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
-  const [notice, setNotice] = useState('');
   const lifecycle = searchParams.get('lifecycle') === 'retired' || searchParams.get('lifecycle') === 'all'
     ? searchParams.get('lifecycle') as 'retired' | 'all'
     : 'active';
-
-  useEffect(() => {
-    if (!notice) return;
-    const timeout = window.setTimeout(() => setNotice(''), 3600);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
 
   const tanks = useQuery({
     queryKey: ['tanks', lifecycle],
@@ -141,7 +134,7 @@ export function Tanks() {
   };
   const copyUrl = async (tank: Tank) => {
     await navigator.clipboard.writeText(publicUrl(tank));
-    setNotice(`Public URL copied for ${tank.name}.`);
+    notify.success(`Public URL copied for ${tank.name}.`);
   };
   const retireTank = async (note: string | null) => {
     if (!retireTarget) return;
@@ -151,18 +144,18 @@ export function Tanks() {
         method: 'POST',
         body: JSON.stringify({ note }),
       });
-      setNotice(`${retireTarget.name} was retired. History is retained.`);
+      notify.success(`${retireTarget.name} was retired. History is retained.`);
       setRetireTarget(null);
       client.invalidateQueries({ queryKey: ['tanks'] });
       client.invalidateQueries({ queryKey: ['fleet'] });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'The tank could not be retired.');
+      notify.error(error instanceof Error ? error.message : 'The tank could not be retired.');
     } finally {
       setRetireBusy(false);
     }
   };
   const saved = () => {
-    setNotice(`Tank ${chosen ? 'updated' : 'created'} successfully.`);
+    notify.success(`Tank ${chosen ? 'updated' : 'created'} successfully.`);
     client.invalidateQueries({ queryKey: ['tanks'] });
     client.invalidateQueries({ queryKey: ['fleet'] });
     if (chosen) client.invalidateQueries({ queryKey: ['tank', chosen.id] });
@@ -186,19 +179,6 @@ export function Tanks() {
           </button>
         ) : undefined}
       />
-      {notice && (
-        <div className="tanks-toast" role="status" aria-live="polite">
-          <CheckCircle2 size={18} aria-hidden="true" />
-          <span>{notice}</span>
-          <button
-            type="button"
-            onClick={() => setNotice('')}
-            aria-label="Dismiss notification"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
-      )}
       <Panel
         title="Registered tanks"
         description={`${visible.length} of ${tanks.data?.length ?? 0} ${lifecycle} tanks`}

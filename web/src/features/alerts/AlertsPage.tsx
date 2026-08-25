@@ -6,11 +6,11 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  Notice,
   PageHeader,
   Panel,
   StatusBadge
 } from '@/shared/components/admin-ui';
+import { notify } from '@/shared/lib/notify';
 import {
   formatDate,
   relativeTime
@@ -52,7 +52,6 @@ export function Alerts() {
   const [after, setAfter] = useState(inputDate(urlParams.get('created_after')));
   const [before, setBefore] = useState(inputDate(urlParams.get('created_before')));
   const [historyMode, setHistoryMode] = useState<'alerts' | 'monitoring'>(urlParams.get('view') === 'monitoring' ? 'monitoring' : 'alerts');
-  const [notice, setNotice] = useState('');
   const filters = new URLSearchParams();
   if (severity) filters.set('severity', severity);
   if (parameter) filters.set('parameter', parameter);
@@ -74,8 +73,11 @@ export function Alerts() {
   const resolve = useMutation({
     mutationFn: (id: number) => api(`/alerts/${id}/resolve`, { method: 'PUT' }),
     onSuccess: () => {
-      setNotice('Alert marked as handled.');
+      notify.success('Alert marked as handled.');
       client.invalidateQueries({ queryKey: ['alerts'] });
+    },
+    onError: () => {
+      notify.error('The alert could not be marked as handled.');
     },
   });
   const visibleAlerts = (alerts.data ?? []).filter((alert) =>
@@ -109,7 +111,6 @@ export function Alerts() {
       {historyMode === 'monitoring' ? (
         <MonitoringIncidentHistory tankId={tankId ? Number(tankId) : undefined} />
       ) : <>
-      {notice && <Notice>{notice}</Notice>}
       <Panel className="filter-panel">
         <div className="filter-grid">
           <label className="field">

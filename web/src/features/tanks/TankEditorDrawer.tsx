@@ -110,7 +110,7 @@ function TankForm({ initial, onDone }: { initial?: Tank; onDone: () => void }) {
       {error && <Notice tone="error">{error}</Notice>}
 
       <div className="form-section">
-        <div>
+        <div className="form-section-heading">
           <h3>Tank identity</h3>
           <p className="form-section-copy">The name and location staff use to identify this installation.</p>
         </div>
@@ -131,7 +131,7 @@ function TankForm({ initial, onDone }: { initial?: Tank; onDone: () => void }) {
       </div>
 
       <div className="form-section">
-        <div>
+        <div className="form-section-heading">
           <h3>Public profile</h3>
           <p className="form-section-copy">Details visitors can see from the tank’s public QR page.</p>
         </div>
@@ -169,7 +169,7 @@ function TankForm({ initial, onDone }: { initial?: Tank; onDone: () => void }) {
       </div>
 
       <div className="form-section">
-        <div>
+        <div className="form-section-heading">
           <h3>Hero image</h3>
           <p className="form-section-copy">Add a wide image for the public tank page. Use a hosted HTTPS image or upload a local image.</p>
         </div>
@@ -218,7 +218,7 @@ function TankForm({ initial, onDone }: { initial?: Tank; onDone: () => void }) {
       </div>
 
       <div className="form-section">
-        <div>
+        <div className="form-section-heading">
           <h3>Public content</h3>
           <p className="form-section-copy">Helpful context for visitors viewing the QR page.</p>
         </div>
@@ -233,7 +233,7 @@ function TankForm({ initial, onDone }: { initial?: Tank; onDone: () => void }) {
       </div>
 
       <div className="form-section form-section-visibility">
-        <div>
+        <div className="form-section-heading">
           <h3>Visibility</h3>
           <p className="form-section-copy">Control whether this tank can be opened from its public QR link.</p>
         </div>
