@@ -23,10 +23,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final dock = find.byKey(const ValueKey('soft-floating-dock'));
+      final fade = find.byKey(const ValueKey('soft-floating-dock-fade'));
       final slide = find.byKey(const ValueKey('soft-floating-dock-slide'));
       final homeScroll = find.byType(CustomScrollView).first;
 
       expect(dock, findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
       expect(tester.getSize(dock), const Size(362, 70));
       expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
 
@@ -35,10 +37,12 @@ void main() {
       expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
       await tester.pump(const Duration(milliseconds: 240));
       expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 0);
 
       await tester.fling(homeScroll, const Offset(0, 80), 1000);
       await tester.pump();
       expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
 
       await tester.drag(homeScroll, const Offset(0, -100));
       await tester.pump(const Duration(milliseconds: 240));

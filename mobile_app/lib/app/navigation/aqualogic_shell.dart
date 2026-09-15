@@ -88,16 +88,22 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
                   ignoring: !_isBottomNavVisible,
                   child: ExcludeSemantics(
                     excluding: !_isBottomNavVisible,
-                    child: AnimatedSlide(
-                      key: const ValueKey('soft-floating-dock-slide'),
-                      offset: _isBottomNavVisible
-                          ? Offset.zero
-                          : const Offset(0, 1.25),
-                      duration: const Duration(milliseconds: 210),
+                    child: AnimatedOpacity(
+                      key: const ValueKey('soft-floating-dock-fade'),
+                      opacity: _isBottomNavVisible ? 1 : 0,
+                      duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
-                      child: _SoftFloatingDock(
-                        selectedIndex: _selectedIndex,
-                        onDestinationSelected: _selectDestination,
+                      child: AnimatedSlide(
+                        key: const ValueKey('soft-floating-dock-slide'),
+                        offset: _isBottomNavVisible
+                            ? Offset.zero
+                            : const Offset(0, 1.25),
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutCubic,
+                        child: _SoftFloatingDock(
+                          selectedIndex: _selectedIndex,
+                          onDestinationSelected: _selectDestination,
+                        ),
                       ),
                     ),
                   ),
