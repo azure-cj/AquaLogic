@@ -1,10 +1,28 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-15
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-09-15 — Use a translating overlay for mobile bottom navigation
+
+**Decision:** Keep the authenticated mobile shell's four destinations—Home,
+Tanks, Alerts, and More—in a custom soft floating dock over the page. Hide and
+restore it with translation after cumulative vertical scroll thresholds rather
+than changing the Scaffold or page layout height.
+
+**Reason:** A floating dock gives the mobile dashboard a calmer, more
+integrated control surface while allowing users to expose content beneath it.
+Transform-only motion preserves scroll position and viewport constraints,
+which prevents the snapping caused by animating an attached navigation bar's
+height.
+
+**Consequences:** The dock must remain mounted, safe-area aware, excluded from
+hit testing while hidden, and visible at the top of a page and after tab
+selection. Shared page padding stays modest; it must not become a permanent
+navigation spacer.
 
 ## 2026-08-21 — Preserve retired tank history outside live operations
 

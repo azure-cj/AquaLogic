@@ -39,9 +39,7 @@ void main() {
         expect(find.text(label), findsWidgets);
       }
       expect(find.text('Control'), findsNothing);
-      final bottomNavOpacity = find.byKey(const ValueKey('bottom-nav-opacity'));
-      expect(find.byType(NavigationBar), findsOneWidget);
-      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 1);
+      expect(find.byKey(const ValueKey('soft-floating-dock')), findsOneWidget);
 
       await tester.drag(
         find.byType(CustomScrollView).first,
@@ -49,15 +47,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 0);
-
-      await tester.drag(
-        find.byType(CustomScrollView).first,
-        const Offset(0, 420),
-      );
-      await tester.pumpAndSettle();
-
-      expect(tester.widget<AnimatedOpacity>(bottomNavOpacity).opacity, 1);
+      expect(find.byKey(const ValueKey('soft-floating-dock')), findsOneWidget);
 
       await tester.tap(find.text('View alert').first);
       await tester.pumpAndSettle();
@@ -70,6 +60,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Your tanks'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('soft-floating-dock-destination-1')),
+        findsOneWidget,
+      );
       expect(find.text('A quick view of every monitored tank'), findsOneWidget);
       expect(find.text('Display Reef A'), findsOneWidget);
       expect(find.text('Quarantine B'), findsOneWidget);

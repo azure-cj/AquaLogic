@@ -74,7 +74,10 @@ Home flow because it duplicated the overview and centered that percentage.
 Implemented locally in the Flutter prototype:
 
 - A four-tab authenticated shell: Home, Tanks, Alerts, and More. Equipment is
-  contextual to an Owner's tank rather than a top-level destination.
+  contextual to an Owner's tank rather than a top-level destination. Its
+  bottom navigation is a safe-area-aware floating dock that stays over page
+  content, hides on intentional downward scrolling, and restores on upward
+  scrolling or tab selection without resizing the page.
 - Tanks directory filters for all, needs attention, and offline; compact tank
   cards; tank detail sections; freshness labels; normal/warning/critical/offline
   operational semantics; and responsive current-reading cards for temperature,

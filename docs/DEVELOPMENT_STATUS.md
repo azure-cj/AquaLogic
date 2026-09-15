@@ -226,6 +226,11 @@ Last reviewed: 2026-09-15
 - Reworked the authenticated shell to four destinations: Home, Tanks, Alerts,
   and More. Equipment is contextual to an Owner's tank and is not a top-level
   navigation destination; Staff receive a read-only equipment view.
+- Refined the authenticated shell's bottom navigation into a safe-area-aware
+  floating white dock with a restrained border, soft shadow, four custom
+  destinations, and a mint selected capsule. Intentional vertical scrolling
+  hides and restores the dock through translation only, so the page never
+  resizes or snaps.
 - Added a polished Tanks directory/detail flow with needs-attention and offline
   filters, freshness labels, normal/warning/critical/offline semantics,
   temperature/pH/turbidity/TDS readings, split water-quality and monitoring

@@ -12,7 +12,7 @@ class AppPage extends StatelessWidget {
       slivers: [
         SliverToBoxAdapter(child: header),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 88),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
           sliver: SliverList.separated(
             itemCount: children.length,
             itemBuilder: (context, index) => children[index],

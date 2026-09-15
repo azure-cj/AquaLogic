@@ -49,7 +49,7 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
               onSurface: AppColors.text,
               outline: AppColors.line,
             ),
-        fontFamily: 'Roboto',
+        fontFamily: 'Geist',
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
@@ -69,12 +69,6 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
             horizontal: 14,
             vertical: 13,
           ),
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          labelTextStyle: WidgetStatePropertyAll(
-            const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-          ),
-          iconTheme: WidgetStatePropertyAll(const IconThemeData(size: 21)),
         ),
       ),
       home: AuthScope(authService: _authService, child: const SplashScreen()),
