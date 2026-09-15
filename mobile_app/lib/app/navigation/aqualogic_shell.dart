@@ -75,10 +75,13 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
               top: false,
               child: IndexedStack(index: _selectedIndex, children: pages),
             ),
-            Positioned(
+            AnimatedPositioned(
+              key: const ValueKey('soft-floating-dock-position'),
               left: 14,
               right: 14,
-              bottom: 0,
+              bottom: _isBottomNavVisible ? 0 : -80,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeInOutCubic,
               child: SafeArea(
                 top: false,
                 left: false,
@@ -91,19 +94,11 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
                     child: AnimatedOpacity(
                       key: const ValueKey('soft-floating-dock-fade'),
                       opacity: _isBottomNavVisible ? 1 : 0,
-                      duration: const Duration(milliseconds: 180),
+                      duration: const Duration(milliseconds: 240),
                       curve: Curves.easeOutCubic,
-                      child: AnimatedSlide(
-                        key: const ValueKey('soft-floating-dock-slide'),
-                        offset: _isBottomNavVisible
-                            ? Offset.zero
-                            : const Offset(0, 1.25),
-                        duration: const Duration(milliseconds: 240),
-                        curve: Curves.easeOutCubic,
-                        child: _SoftFloatingDock(
-                          selectedIndex: _selectedIndex,
-                          onDestinationSelected: _selectDestination,
-                        ),
+                      child: _SoftFloatingDock(
+                        selectedIndex: _selectedIndex,
+                        onDestinationSelected: _selectDestination,
                       ),
                     ),
                   ),

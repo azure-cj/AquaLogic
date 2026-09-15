@@ -24,38 +24,40 @@ void main() {
 
       final dock = find.byKey(const ValueKey('soft-floating-dock'));
       final fade = find.byKey(const ValueKey('soft-floating-dock-fade'));
-      final slide = find.byKey(const ValueKey('soft-floating-dock-slide'));
+      final position = find.byKey(
+        const ValueKey('soft-floating-dock-position'),
+      );
       final homeScroll = find.byType(CustomScrollView).first;
 
       expect(dock, findsOneWidget);
       expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
       expect(tester.getSize(dock), const Size(362, 70));
-      expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
+      expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
 
       await tester.fling(homeScroll, const Offset(0, -140), 1000);
       await tester.pump();
-      expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
-      await tester.pump(const Duration(milliseconds: 240));
-      expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
+      expect(tester.widget<AnimatedPositioned>(position).bottom, -80);
+      await tester.pump(const Duration(milliseconds: 280));
+      expect(tester.widget<AnimatedPositioned>(position).bottom, -80);
       expect(tester.widget<AnimatedOpacity>(fade).opacity, 0);
 
       await tester.fling(homeScroll, const Offset(0, 80), 1000);
       await tester.pump();
-      expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
+      expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
       expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
 
       await tester.drag(homeScroll, const Offset(0, -100));
-      await tester.pump(const Duration(milliseconds: 240));
-      expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
+      await tester.pump(const Duration(milliseconds: 280));
+      expect(tester.widget<AnimatedPositioned>(position).bottom, -80);
 
       await tester.tap(find.text('View all').first);
       await tester.pumpAndSettle();
       expect(find.text('Your tanks'), findsOneWidget);
-      expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
+      expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
 
       await tester.drag(find.text('Needs attention'), const Offset(-80, 0));
       await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
+      expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
     },
   );
 
