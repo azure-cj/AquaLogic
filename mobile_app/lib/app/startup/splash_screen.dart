@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:aqualogic/app/navigation/aqualogic_shell.dart';
+import 'package:aqualogic/app/auth/auth_gate.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,7 +9,7 @@ class SplashScreen extends StatefulWidget {
   const SplashScreen({
     super.key,
     this.duration = const Duration(milliseconds: 1600),
-    this.next = const AquaLogicShell(),
+    this.next = const AuthGate(),
   });
 
   final Duration duration;

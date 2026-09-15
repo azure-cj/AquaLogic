@@ -1,4 +1,4 @@
-﻿import 'package:aqualogic/shared/models/reading_state.dart';
+import 'package:aqualogic/shared/models/reading_state.dart';
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -14,6 +14,7 @@ class AppColors {
   static const warning = Color(0xFFEBA51D);
   static const critical = Color(0xFFFF607A);
   static const success = Color(0xFF22C99A);
+  static const offline = Color(0xFF6D8491);
 }
 
 Color stateColor(ReadingState state) {
@@ -21,5 +22,6 @@ Color stateColor(ReadingState state) {
     ReadingState.normal => AppColors.success,
     ReadingState.warning => AppColors.warning,
     ReadingState.critical => AppColors.critical,
+    ReadingState.offline => AppColors.offline,
   };
 }

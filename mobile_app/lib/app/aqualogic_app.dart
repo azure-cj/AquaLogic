@@ -1,9 +1,34 @@
+import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/startup/splash_screen.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:flutter/material.dart';
 
-class AquaLogicApp extends StatelessWidget {
-  const AquaLogicApp({super.key});
+class AquaLogicApp extends StatefulWidget {
+  const AquaLogicApp({super.key, this.authService});
+
+  final AuthService? authService;
+
+  @override
+  State<AquaLogicApp> createState() => _AquaLogicAppState();
+}
+
+class _AquaLogicAppState extends State<AquaLogicApp> {
+  late final AuthService _authService;
+  late final bool _ownsAuthService;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsAuthService = widget.authService == null;
+    _authService = widget.authService ?? MockAuthService();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsAuthService) _authService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,13 +38,46 @@ class AquaLogicApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.teal,
-          brightness: Brightness.light,
-        ),
+        colorScheme:
+            ColorScheme.fromSeed(
+              seedColor: AppColors.teal,
+              brightness: Brightness.light,
+            ).copyWith(
+              primary: AppColors.tealDark,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: AppColors.text,
+              outline: AppColors.line,
+            ),
         fontFamily: 'Roboto',
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppColors.line),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppColors.line),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppColors.tealDark, width: 1.5),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 13,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          labelTextStyle: WidgetStatePropertyAll(
+            const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          ),
+          iconTheme: WidgetStatePropertyAll(const IconThemeData(size: 21)),
+        ),
       ),
-      home: const SplashScreen(),
+      home: AuthScope(authService: _authService, child: const SplashScreen()),
     );
   }
 }

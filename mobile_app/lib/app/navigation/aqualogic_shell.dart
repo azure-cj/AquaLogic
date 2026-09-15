@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
+import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/control/screens/control_screen.dart';
-import 'package:aqualogic/features/home/widgets/home_pager.dart';
+import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
@@ -12,7 +14,9 @@ import 'package:flutter/rendering.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AquaLogicShell extends StatefulWidget {
-  const AquaLogicShell({super.key});
+  const AquaLogicShell({super.key, required this.user});
+
+  final AuthUser user;
 
   @override
   State<AquaLogicShell> createState() => _AquaLogicShellState();
@@ -20,7 +24,6 @@ class AquaLogicShell extends StatefulWidget {
 
 class _AquaLogicShellState extends State<AquaLogicShell> {
   var _selectedIndex = 0;
-  var _isOwnerBriefVisible = false;
   var _isBottomNavVisible = true;
   var _tick = 0;
   late SensorSnapshot _snapshot;
@@ -47,28 +50,26 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomePager(
+      HomeScreen(
         snapshot: _snapshot,
+        user: widget.user,
         onOpenAlerts: () {
           setState(() {
             _selectedIndex = 3;
             _isBottomNavVisible = true;
           });
         },
-        onBriefVisibilityChanged: (isVisible) {
-          if (_isOwnerBriefVisible == isVisible) return;
+        onOpenTanks: () {
           setState(() {
-            _isOwnerBriefVisible = isVisible;
-            if (!isVisible) {
-              _isBottomNavVisible = true;
-            }
+            _selectedIndex = 1;
+            _isBottomNavVisible = true;
           });
         },
       ),
       TanksScreen(snapshot: _snapshot),
       ControlScreen(snapshot: _snapshot),
       AlertsScreen(snapshot: _snapshot),
-      MoreScreen(snapshot: _snapshot),
+      MoreScreen(snapshot: _snapshot, user: widget.user),
     ];
 
     return Scaffold(
@@ -79,24 +80,21 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
           child: IndexedStack(index: _selectedIndex, children: pages),
         ),
       ),
-      bottomNavigationBar: _isOwnerBriefVisible
-          ? null
-          : _AnimatedBottomNavigation(
-              selectedIndex: _selectedIndex,
-              isVisible: _isBottomNavVisible,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                  _isOwnerBriefVisible = false;
-                  _isBottomNavVisible = true;
-                });
-              },
-            ),
+      bottomNavigationBar: _AnimatedBottomNavigation(
+        selectedIndex: _selectedIndex,
+        isVisible: _isBottomNavVisible,
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedIndex = index;
+            _isBottomNavVisible = true;
+          });
+        },
+      ),
     );
   }
 
   bool _handleScrollNotification(UserScrollNotification notification) {
-    if (_isOwnerBriefVisible || notification.metrics.axis != Axis.vertical) {
+    if (notification.metrics.axis != Axis.vertical) {
       return false;
     }
 
