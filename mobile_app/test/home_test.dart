@@ -3,6 +3,7 @@ import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
+import 'package:aqualogic/features/home/widgets/home_shared_widgets.dart';
 import 'package:aqualogic/features/home/widgets/staff_home_content.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,42 @@ void main() {
     expect(data.attentionItems.first.type, HomeAttentionType.waterQuality);
     expect(data.monitoring.reportingTankCount, 4);
     expect(data.monitoring.outageCount, 0);
+  });
+
+  testWidgets('fleet status headline follows the current fleet state', (
+    tester,
+  ) async {
+    const data = HomeDashboardData(
+      tanks: [
+        HomeTankSummary(
+          id: 'display-reef-a',
+          initial: 'D',
+          name: 'Display Reef A',
+          subtitle: 'Mixed reef - 320L',
+          status: HomeOperationalStatus.normal,
+          lastReportLabel: 'Updated just now',
+          contextLabel: 'Ready for routine checks',
+        ),
+      ],
+      attentionItems: [],
+      monitoring: HomeMonitoringSummary(
+        totalTankCount: 1,
+        reportingTankCount: 1,
+        outageCount: 0,
+        sensorFeedOnline: true,
+      ),
+      recentActivity: [],
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(home: FleetStatusSheet(data: data)),
+    );
+
+    expect(find.text('All tanks look good'), findsOneWidget);
+    expect(
+      find.text('1 tank · 1 normal · 0 need attention · 0 offline'),
+      findsOneWidget,
+    );
   });
 
   test('offline tanks remain distinct from critical water-quality states', () {
@@ -134,6 +171,12 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
+      expect(find.byType(OwnerHomeHero), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('owner-home-hero-illustration')),
+        findsOneWidget,
+      );
+      expect(find.text('2 tanks need attention'), findsOneWidget);
       expect(find.text('Fleet overview'), findsOneWidget);
     }
   });

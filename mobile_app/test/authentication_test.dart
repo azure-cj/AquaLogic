@@ -38,6 +38,10 @@ void main() {
 
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(find.text('Live readings'), findsNothing);
+
+    final loginContext = tester.element(find.byType(LoginScreen));
+    expect(Theme.of(loginContext).textTheme.bodyMedium?.fontFamily, 'Geist');
+    expect(find.text('Welcome back'), findsNothing);
   });
 
   testWidgets('invalid credentials remain on Login with a generic error', (
@@ -52,7 +56,7 @@ void main() {
     );
 
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.text('Incorrect email or password.'), findsOneWidget);
+    expect(find.text('Email or password is incorrect.'), findsOneWidget);
     expect(find.text('Live readings'), findsNothing);
   });
 
@@ -71,7 +75,8 @@ void main() {
     expect(find.text('JRed Owner'), findsWidgets);
     expect(find.text('OWNER'), findsWidgets);
     expect(find.text('JRed Aquatics'), findsOneWidget);
-    expect(find.text('Aquarium status'), findsOneWidget);
+    expect(find.text('2 tanks need attention'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fleet-status-sheet')), findsOneWidget);
     expect(find.text('Fleet overview'), findsOneWidget);
   });
 
@@ -108,7 +113,7 @@ void main() {
 
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(find.text('JRed Owner'), findsNothing);
-    expect(find.text('Aquarium status'), findsNothing);
+    expect(find.text('2 tanks need attention'), findsNothing);
   });
 
   test('mock authentication returns backend-compatible roles', () async {

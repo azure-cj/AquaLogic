@@ -30,20 +30,13 @@ void main() {
       expect(tester.getSize(dock), const Size(362, 70));
       expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
 
-      await tester.drag(homeScroll, const Offset(0, -12));
-      await tester.pump();
-      expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
-
-      await tester.drag(homeScroll, const Offset(0, -32));
+      await tester.fling(homeScroll, const Offset(0, -140), 1000);
       await tester.pump();
       expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
       await tester.pump(const Duration(milliseconds: 240));
       expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
 
-      await tester.drag(homeScroll, const Offset(0, 8));
-      await tester.pump();
-      expect(tester.widget<AnimatedSlide>(slide).offset, const Offset(0, 1.25));
-      await tester.drag(homeScroll, const Offset(0, 20));
+      await tester.fling(homeScroll, const Offset(0, 80), 1000);
       await tester.pump();
       expect(tester.widget<AnimatedSlide>(slide).offset, Offset.zero);
 

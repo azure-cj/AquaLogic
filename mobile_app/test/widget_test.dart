@@ -27,7 +27,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('JRed Aquatics'), findsOneWidget);
-      expect(find.text('Aquarium status'), findsOneWidget);
+      expect(find.text('2 tanks need attention'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fleet-status-sheet')), findsOneWidget);
       expect(find.text('Fleet overview'), findsOneWidget);
       expect(find.text('Freshwater C'), findsWidgets);
       expect(find.text('Critical'), findsWidgets);

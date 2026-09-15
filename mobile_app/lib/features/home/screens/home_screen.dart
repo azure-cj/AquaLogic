@@ -41,7 +41,9 @@ class HomeScreen extends StatelessWidget {
     };
 
     return AppPage(
-      header: RoleHomeHeader(user: user, isOnline: snapshot.isOnline),
+      header: user.role == UserRole.admin
+          ? OwnerHomeHero(user: user, isOnline: snapshot.isOnline, data: data)
+          : RoleHomeHeader(user: user, isOnline: snapshot.isOnline),
       children: [content],
     );
   }

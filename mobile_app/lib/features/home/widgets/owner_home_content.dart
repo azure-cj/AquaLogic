@@ -24,9 +24,7 @@ class OwnerHomeContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        FleetStatusSummary(data: data),
-        const SizedBox(height: 18),
-        const SectionTitle(title: 'Needs attention'),
+        const SectionTitle(title: 'Highest priority'),
         const SizedBox(height: 8),
         if (priorityItem == null)
           const EmptyAttentionCard(
@@ -36,6 +34,7 @@ class OwnerHomeContent extends StatelessWidget {
         else
           AttentionCard(
             item: priorityItem,
+            compact: true,
             onAction: priorityItem.type == HomeAttentionType.monitoring
                 ? onOpenTanks
                 : onOpenAlerts,
