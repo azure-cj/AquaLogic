@@ -1,4 +1,5 @@
-﻿import 'package:aqualogic/shared/models/reading_state.dart';
+import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/models/reading_state.dart';
 
 class SensorSnapshot {
   const SensorSnapshot({
@@ -27,24 +28,21 @@ class SensorSnapshot {
   final bool isOnline;
   final DateTime updatedAt;
 
-  int get healthPercent {
-    final statuses = [tempStatus, phStatus, turbidityStatus, tdsStatus];
-    var score = 100;
-    for (final status in statuses) {
-      score -= switch (status) {
-        'NORMAL' || 'CLEAR' => 0,
-        'LOW' || 'HIGH' || 'MODERATE' => 12,
-        'CRITICAL' || 'DIRTY' || 'NO SENSOR' => 24,
-        _ => 8,
-      };
-    }
-    if (!isOnline) score -= 18;
-    return score.clamp(0, 100);
+  OperationalStatus get operationalStatus {
+    if (!isOnline) return OperationalStatus.offline;
+    return switch (overallStatus.trim().toUpperCase()) {
+      'CRITICAL' => OperationalStatus.critical,
+      'MONITOR' || 'WARNING' => OperationalStatus.warning,
+      _ => OperationalStatus.normal,
+    };
   }
 
   ReadingState get overallState {
-    if (!isOnline || overallStatus == 'CRITICAL') return ReadingState.critical;
-    if (overallStatus == 'MONITOR') return ReadingState.warning;
-    return ReadingState.normal;
+    return switch (operationalStatus) {
+      OperationalStatus.normal => ReadingState.normal,
+      OperationalStatus.warning => ReadingState.warning,
+      OperationalStatus.critical => ReadingState.critical,
+      OperationalStatus.offline => ReadingState.offline,
+    };
   }
 }

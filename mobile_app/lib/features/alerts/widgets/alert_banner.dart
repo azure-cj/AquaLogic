@@ -1,6 +1,7 @@
-﻿import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/data/build_alerts.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
+import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -11,28 +12,39 @@ class AlertBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alert = buildAlerts(snapshot).first;
+    final alerts = buildAlerts(snapshot);
+    if (alerts.isEmpty) {
+      return const EmptyState(
+        title: 'No active water-quality alerts',
+        message: 'Current parameter conditions do not need acknowledgement.',
+      );
+    }
+    final alert = alerts.first;
+    final color = alert.severity.name == 'critical'
+        ? AppColors.critical
+        : AppColors.warning;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: stateColor(alert.state).withValues(alpha: 0.10),
-        border: Border.all(color: stateColor(alert.state)),
-        borderRadius: BorderRadius.circular(18),
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.65)),
+        borderRadius: BorderRadius.circular(17),
       ),
       child: Row(
         children: [
-          Icon(alert.icon, color: stateColor(alert.state), size: 26),
-          const SizedBox(width: 12),
+          Icon(alert.icon, color: color, size: 24),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  alert.title.toUpperCase(),
+                  '${alert.severity.name.toUpperCase()} · ${alert.parameter}',
                   style: TextStyle(
-                    color: stateColor(alert.state),
-                    fontSize: 12,
+                    color: color,
+                    fontSize: 10,
                     fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -40,12 +52,16 @@ class AlertBanner extends StatelessWidget {
                   alert.message,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.text, fontSize: 13),
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
           ),
-          const Icon(LucideIcons.chevronRight, color: AppColors.critical),
+          const Icon(LucideIcons.chevronRight, color: AppColors.muted),
         ],
       ),
     );

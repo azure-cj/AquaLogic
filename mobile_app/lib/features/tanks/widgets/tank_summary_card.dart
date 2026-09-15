@@ -1,9 +1,9 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
-import 'package:aqualogic/features/tanks/models/tank_status.dart';
+import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
-import 'package:aqualogic/shared/widgets/status_pill.dart';
 import 'package:flutter/material.dart';
 
 class TankSummaryCard extends StatelessWidget {
@@ -18,24 +18,29 @@ class TankSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final offline =
+        !tank.isRetired && tank.operationalStatus == OperationalStatus.offline;
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      tank.typeLabel.toUpperCase(),
+                      tank.locationOrType.toUpperCase(),
                       style: const TextStyle(
                         color: AppColors.muted,
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
                       tank.name,
                       style: const TextStyle(
@@ -47,32 +52,21 @@ class TankSummaryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              StatusPill(
-                label: tank.status,
-                state: tankStatusState(tank.status),
-              ),
+              tank.isRetired
+                  ? const LifecycleBadge()
+                  : OperationalStatusBadge(status: tank.operationalStatus),
             ],
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: MiniMetric(label: 'HEALTH', value: '${tank.health}%'),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: MiniMetric(label: 'VOLUME', value: tank.volumeLabel),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: MiniMetric(label: 'FED', value: tank.lastFedLabel),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 13),
+          FreshnessLabel(label: tank.lastReportLabel, isUnavailable: offline),
+          const SizedBox(height: 10),
           Text(
-            tank.description,
-            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            tank.latestCondition ?? tank.description,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              height: 1.35,
+            ),
           ),
         ],
       ),
@@ -80,6 +74,7 @@ class TankSummaryCard extends StatelessWidget {
   }
 }
 
+// Kept as a small reusable value row for clients that still use this widget.
 class MiniMetric extends StatelessWidget {
   const MiniMetric({super.key, required this.label, required this.value});
 
@@ -89,29 +84,31 @@ class MiniMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.line),
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 3),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.text,
-              fontSize: 18,
+              fontSize: 13,
               fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
             ),
           ),
         ],

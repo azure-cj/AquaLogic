@@ -16,20 +16,25 @@ class HeaderAlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alert = buildAlerts(snapshot).first;
-    final color = stateColor(alert.state);
-
+    final alerts = buildAlerts(snapshot);
+    if (alerts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final alert = alerts.first;
+    final color = alert.severity.name == 'critical'
+        ? AppColors.critical
+        : AppColors.warning;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(17),
         onTap: onTap,
         child: Ink(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.14),
             border: Border.all(color: color.withValues(alpha: 0.75)),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(17),
           ),
           child: Row(
             children: [
@@ -42,10 +47,9 @@ class HeaderAlertCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      alert.title.toUpperCase(),
+                      '${alert.severity.name.toUpperCase()} · ${alert.parameter}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

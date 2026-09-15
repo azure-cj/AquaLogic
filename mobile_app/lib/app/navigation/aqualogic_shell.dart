@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
-import 'package:aqualogic/features/control/screens/control_screen.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
@@ -55,7 +54,7 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
         user: widget.user,
         onOpenAlerts: () {
           setState(() {
-            _selectedIndex = 3;
+            _selectedIndex = 2;
             _isBottomNavVisible = true;
           });
         },
@@ -66,8 +65,7 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
           });
         },
       ),
-      TanksScreen(snapshot: _snapshot),
-      ControlScreen(snapshot: _snapshot),
+      TanksScreen(snapshot: _snapshot, user: widget.user),
       AlertsScreen(snapshot: _snapshot),
       MoreScreen(snapshot: _snapshot, user: widget.user),
     ];
@@ -169,11 +167,6 @@ class _AnimatedBottomNavigation extends StatelessWidget {
                               icon: Icon(LucideIcons.network),
                               selectedIcon: Icon(LucideIcons.network),
                               label: 'Tanks',
-                            ),
-                            NavigationDestination(
-                              icon: Icon(LucideIcons.slidersHorizontal),
-                              selectedIcon: Icon(LucideIcons.slidersHorizontal),
-                              label: 'Control',
                             ),
                             NavigationDestination(
                               icon: Icon(LucideIcons.bell),

@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-15
 
 ## Completed and working locally
 
@@ -203,8 +203,59 @@ Last reviewed: 2026-08-23
 ### Mobile
 
 - Flutter Android-first dashboard prototype with home, tanks, sensor cards,
-  alerts, fish library, controls, and navigation shell.
-- Local mock readings and demo control interactions.
+  alerts, fish library, equipment status, and navigation shell.
+- Local mock readings and demo equipment interactions.
+- Flutter mock sign-in interface with clearly isolated local development
+  accounts for the Owner/admin and Staff roles.
+- Role-aware authenticated mobile shell that maps backend-compatible `admin` to
+  the mobile `Owner` experience and `staff` to the mobile `Staff` experience.
+- Local sign-out from More/Account; shared dashboard features remain on local
+  demo data.
+- Role-aware Home V1 with distinct Owner and Staff information hierarchies while
+  sharing the same AquaLogic design system, tank rows, attention cards,
+  monitoring summary, and recent activity components.
+- Backend-compatible Home presentation for `normal`, `warning`, `critical`, and
+  `offline` operational tank states; offline monitoring remains separate from
+  water-quality alerts.
+- Local `HomeDashboardData` and `MockHomeRepository` boundary for future API
+  replacement without rebuilding Home widgets. The fabricated health
+  percentage is no longer the primary Home summary.
+
+### Mobile UI/UX refinement — 2026-09-15
+
+- Reworked the authenticated shell to four destinations: Home, Tanks, Alerts,
+  and More. Equipment is contextual to an Owner's tank and is not a top-level
+  navigation destination; Staff receive a read-only equipment view.
+- Added a polished Tanks directory/detail flow with needs-attention and offline
+  filters, freshness labels, normal/warning/critical/offline semantics,
+  temperature/pH/turbidity/TDS readings, split water-quality and monitoring
+  issues, species snapshots, a dedicated retired lifecycle label, and recent
+  activity. Retired tanks are not collapsed into Offline or alert severity.
+- Added separate Water quality and Monitoring alert streams with Active and
+  History views. Water alerts use warning/critical severity, monitoring outages
+  stay operational and neutral, and local Mark handled acknowledgement does
+  not claim recovery.
+- Added Fish species directory/detail views with search, water-type filters,
+  preferred ranges, care notes, assigned-species context, and distinct
+  suitable/attention/unavailable suitability states.
+- Added contextual Owner Equipment for UV, LED, automatic feeder, Pump A, and
+  Pump B with separate device connectivity, safe confirmations, and a local
+  queued/executing/succeeded/failed/expired/outcome-unknown command lifecycle.
+- Reworked More/Account, Sync/local data, About, identity, role, and sign-out
+  surfaces and removed fabricated notification, haptic, and critical-only
+  preference controls.
+- Added shared semantic status/freshness/empty-state components and mock
+  repository seams for tanks, alerts, fish, and equipment. Added widget and
+  repository tests for role visibility, stream separation, offline semantics,
+  suitability states, command safety, and responsive screen content.
+
+Mobile authentication, Home data, and this UI/UX refinement are intentionally
+frontend-only. FastAPI/HTTP integration, JWT access tokens, refresh sessions,
+secure credential storage, backend `/auth/*` integration, persistent login,
+live sensor sync, persisted alerts and monitoring incidents, sensor history,
+backend species and assignment APIs, real actuator commands/device
+connectivity, command reconciliation, push notifications, and production
+equipment safety controls are not yet implemented in the Flutter client.
 
 ## Active follow-up work
 
