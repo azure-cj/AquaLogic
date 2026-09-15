@@ -91,6 +91,10 @@ void main() {
     expect(find.text('AquaLogic Staff'), findsWidgets);
     expect(find.text('STAFF'), findsWidgets);
     expect(find.text('Operations'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('home-hero-illustration')),
+      findsOneWidget,
+    );
     expect(find.text('JRed Aquatics'), findsNothing);
     expect(find.text('Needs attention'), findsOneWidget);
     expect(find.text('Tank rounds'), findsOneWidget);

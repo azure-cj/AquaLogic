@@ -3,24 +3,25 @@ import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/shared/widgets/connection_bell.dart';
-import 'package:aqualogic/shared/widgets/header_panel.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/section_title.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-class OwnerHomeHero extends StatelessWidget {
-  const OwnerHomeHero({
+class HomeHero extends StatelessWidget {
+  const HomeHero({
     super.key,
     required this.user,
     required this.isOnline,
     required this.data,
+    required this.showFleetStatus,
   });
 
   final AuthUser user;
   final bool isOnline;
   final HomeDashboardData data;
+  final bool showFleetStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +61,7 @@ class OwnerHomeHero extends StatelessWidget {
                       child: Opacity(
                         opacity: 0.82,
                         child: Image.asset(
-                          key: const ValueKey('owner-home-hero-illustration'),
+                          key: const ValueKey('home-hero-illustration'),
                           'assets/images/owner_home_hero.png',
                           fit: BoxFit.cover,
                           alignment: Alignment.bottomCenter,
@@ -148,82 +149,15 @@ class OwnerHomeHero extends StatelessWidget {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 186),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: FleetStatusSheet(data: data),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class RoleHomeHeader extends StatelessWidget {
-  const RoleHomeHeader({super.key, required this.user, required this.isOnline});
-
-  final AuthUser user;
-  final bool isOnline;
-
-  @override
-  Widget build(BuildContext context) {
-    final organization = user.role == UserRole.admin
-        ? 'JRed Aquatics'
-        : 'Operations';
-
-    return HeaderPanel(
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.teal,
-            child: Icon(LucideIcons.droplets, color: Colors.white, size: 19),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Good morning',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                Text(
-                  user.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 17,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    _RoleBadge(label: user.role.badgeLabel),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        organization,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        if (showFleetStatus)
+          Padding(
+            padding: const EdgeInsets.only(top: 186),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: FleetStatusSheet(data: data),
             ),
           ),
-          ConnectionBell(isOnline: isOnline),
-        ],
-      ),
+      ],
     );
   }
 }

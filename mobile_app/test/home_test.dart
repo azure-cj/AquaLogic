@@ -171,9 +171,9 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
-      expect(find.byType(OwnerHomeHero), findsOneWidget);
+      expect(find.byType(HomeHero), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('owner-home-hero-illustration')),
+        find.byKey(const ValueKey('home-hero-illustration')),
         findsOneWidget,
       );
       expect(find.text('2 tanks need attention'), findsOneWidget);
