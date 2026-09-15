@@ -119,6 +119,66 @@ void main() {
     expect(find.text('Mark handled'), findsNothing);
   });
 
+  testWidgets('Alerts focuses an exact monitoring incident reference', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlertsScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          repository: const MockAlertRepository(
+            monitoringOutageTankIds: {'nursery-d'},
+          ),
+          initialReferenceId: 'nursery-d-monitoring',
+          initialStream: AlertStream.monitoring,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nursery D'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('monitoring-incident-nursery-d-monitoring')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Alerts opens an exact historical alert reference', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlertsScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          initialReferenceId: 'display-reef-a-temp-history',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alert detail'), findsOneWidget);
+    expect(find.text('Display Reef A'), findsWidgets);
+    expect(find.text('Temperature'), findsOneWidget);
+    expect(find.text('Handled'), findsOneWidget);
+  });
+
+  testWidgets('Alerts reports a missing initial reference gracefully', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlertsScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          initialReferenceId: 'missing-alert-id',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('This alert is no longer available.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Fish library search opens domain-aligned species detail', (
     tester,
   ) async {

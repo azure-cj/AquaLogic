@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
+import 'package:aqualogic/features/alerts/screens/alert_detail_screen.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
+import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
@@ -59,6 +62,7 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
         user: widget.user,
         onOpenAlerts: () => _selectDestination(2),
         onOpenTanks: () => _selectDestination(1),
+        onOpenAlert: _openHomeAttention,
       ),
       TanksScreen(snapshot: _snapshot, user: widget.user),
       AlertsScreen(snapshot: _snapshot),
@@ -156,6 +160,61 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     setState(() {
       _selectedIndex = index;
       _isBottomNavVisible = true;
+    });
+  }
+
+  void _openHomeAttention(HomeAttentionItem item) {
+    final sourceId = item.sourceId;
+    if (sourceId == null) {
+      _showMissingHomeAttention(item.type);
+      return;
+    }
+
+    final alertData = const MockAlertRepository().load(snapshot: _snapshot);
+    if (item.type == HomeAttentionType.waterQuality) {
+      for (final alert in alertData.waterQualityAlerts) {
+        if (alert.id == sourceId) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => AlertDetailScreen(alert: alert),
+            ),
+          );
+          return;
+        }
+      }
+    } else {
+      for (final incident in alertData.monitoringIncidents) {
+        if (incident.id == sourceId) {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => AlertsScreen(
+                snapshot: _snapshot,
+                initialReferenceId: incident.id,
+                initialStream: AlertStream.monitoring,
+              ),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    _showMissingHomeAttention(item.type);
+  }
+
+  void _showMissingHomeAttention(HomeAttentionType type) {
+    _selectDestination(2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            type == HomeAttentionType.monitoring
+                ? 'This monitoring incident is no longer available.'
+                : 'This alert is no longer available.',
+          ),
+        ),
+      );
     });
   }
 

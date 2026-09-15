@@ -380,93 +380,131 @@ class _CompactAttentionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _statusColor(item.status);
+    final category = item.type == HomeAttentionType.waterQuality
+        ? 'Water quality'
+        : 'Monitoring';
+    final actionSemantics = item.type == HomeAttentionType.waterQuality
+        ? 'View ${item.tankName} ${item.status.label.toLowerCase()} alert'
+        : 'View ${item.tankName} monitoring incident';
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 11, 14, 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        border: Border.all(color: color.withValues(alpha: 0.62)),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: color.withValues(alpha: 0.14),
-                child: Icon(_statusIcon(item.status), color: color, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
+    return Semantics(
+      container: true,
+      label:
+          '${item.tankName}, ${item.status.label}, ${item.title}, '
+          '${item.message}, ${item.actionLabel}',
+      child: Container(
+        key: const ValueKey('owner-priority-card'),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              AppColors.background.withValues(alpha: 0.42),
+            ],
+          ),
+          border: Border.all(color: AppColors.line),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.tealDark.withValues(alpha: 0.035),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: IntrinsicHeight(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.tankName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Text(
+                        item.tankName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      runSpacing: 0,
-                      children: [
-                        OperationalStatusBadge(
-                          status: item.status.asOperationalStatus,
-                          compact: true,
-                        ),
-                        TextButton.icon(
-                          onPressed: onAction,
-                          icon: const Icon(LucideIcons.arrowUpRight, size: 14),
-                          label: Text(item.actionLabel),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.tealDark,
-                            minimumSize: const Size(0, 48),
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            textStyle: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    OperationalStatusBadge(
+                      key: const ValueKey('owner-priority-severity-pill'),
+                      status: item.status.asOperationalStatus,
+                      compact: true,
+                      leadingText: item.status == HomeOperationalStatus.critical
+                          ? '!'
+                          : null,
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Text(
-            item.title,
-            style: const TextStyle(
-              color: AppColors.text,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+                const SizedBox(height: 10),
+                Text(
+                  item.title,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11.5,
+                    height: 1.3,
+                  ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Semantics(
+                      button: true,
+                      label: actionSemantics,
+                      child: TextButton.icon(
+                        onPressed: onAction,
+                        icon: const Icon(LucideIcons.arrowUpRight, size: 14),
+                        label: Text(item.actionLabel),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.tealDark,
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          textStyle: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            item.message,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 11.5,
-              height: 1.3,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

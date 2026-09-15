@@ -9,11 +9,13 @@ class OwnerHomeContent extends StatelessWidget {
     required this.data,
     required this.onOpenAlerts,
     required this.onOpenTanks,
+    this.onOpenAlert,
   });
 
   final HomeDashboardData data;
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
+  final ValueChanged<HomeAttentionItem>? onOpenAlert;
 
   @override
   Widget build(BuildContext context) {
@@ -24,22 +26,27 @@ class OwnerHomeContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionTitle(title: 'Highest priority'),
-        const SizedBox(height: 8),
-        if (priorityItem == null)
-          const EmptyAttentionCard(
-            title: 'All tanks operating normally',
-            message: 'No current water-quality warnings.',
-          )
-        else
+        if (priorityItem != null) ...[
+          SectionTitle(
+            title: data.attentionItems.length == 1
+                ? 'Needs attention'
+                : 'Highest priority',
+            action: 'View all alerts',
+            actionArrow: true,
+            onTap: onOpenAlerts,
+          ),
+          const SizedBox(height: 8),
           AttentionCard(
             item: priorityItem,
             compact: true,
-            onAction: priorityItem.type == HomeAttentionType.monitoring
-                ? onOpenTanks
-                : onOpenAlerts,
+            onAction: onOpenAlert == null
+                ? priorityItem.type == HomeAttentionType.monitoring
+                      ? onOpenTanks
+                      : onOpenAlerts
+                : () => onOpenAlert!(priorityItem),
           ),
-        const SizedBox(height: 18),
+          const SizedBox(height: 18),
+        ],
         SectionTitle(
           title: 'Fleet overview',
           action: 'View all',

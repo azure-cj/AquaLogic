@@ -4,6 +4,7 @@ import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/home/widgets/home_shared_widgets.dart';
+import 'package:aqualogic/features/home/widgets/owner_home_content.dart';
 import 'package:aqualogic/features/home/widgets/staff_home_content.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ void main() {
     expect(data.offlineTankCount, 0);
     expect(data.attentionItems.first.status, HomeOperationalStatus.critical);
     expect(data.attentionItems.first.type, HomeAttentionType.waterQuality);
+    expect(data.attentionItems.first.sourceId, 'freshwater-c-tds');
+    expect(data.attentionItems[1].sourceId, 'quarantine-b-ph');
     expect(data.monitoring.reportingTankCount, 4);
     expect(data.monitoring.outageCount, 0);
   });
@@ -60,6 +63,47 @@ void main() {
     );
   });
 
+  testWidgets('owner priority card keeps severity in a compact top pill', (
+    tester,
+  ) async {
+    const item = HomeAttentionItem(
+      id: 'freshwater-c-critical',
+      tankId: 'freshwater-c',
+      tankName: 'Freshwater C',
+      type: HomeAttentionType.waterQuality,
+      status: HomeOperationalStatus.critical,
+      title: 'Critical water-quality state',
+      message: 'Latest readings need review before the next routine check.',
+      actionLabel: 'View alert',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AttentionCard(item: item, compact: true, onAction: _noop),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('owner-priority-card')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('owner-priority-severity-pill')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('owner-priority-accent-rail')),
+      findsNothing,
+    );
+    expect(find.text('Freshwater C'), findsOneWidget);
+    expect(find.text('Critical'), findsOneWidget);
+    expect(find.text('!'), findsOneWidget);
+    expect(find.text('Priority 01'), findsNothing);
+    expect(find.text('Critical water-quality state'), findsOneWidget);
+    expect(
+      find.text('Latest readings need review before the next routine check.'),
+      findsOneWidget,
+    );
+    expect(find.text('View alert'), findsOneWidget);
+  });
+
   test('offline tanks remain distinct from critical water-quality states', () {
     final data = const MockHomeRepository(
       offlineTankIds: {'nursery-d'},
@@ -78,6 +122,74 @@ void main() {
     expect(offlineAttention.type, HomeAttentionType.monitoring);
     expect(data.monitoring.reportingTankCount, 3);
     expect(data.monitoring.outageCount, 1);
+    expect(offlineAttention.sourceId, 'nursery-d-monitoring');
+  });
+
+  testWidgets('owner priority section heading follows active issue count', (
+    tester,
+  ) async {
+    const oneIssue = HomeAttentionItem(
+      id: 'quarantine-b-warning',
+      tankId: 'quarantine-b',
+      tankName: 'Quarantine B',
+      type: HomeAttentionType.waterQuality,
+      status: HomeOperationalStatus.warning,
+      title: 'Warning water-quality state',
+      message: 'Review the latest reading.',
+      actionLabel: 'View alert',
+    );
+    const secondIssue = HomeAttentionItem(
+      id: 'freshwater-c-critical',
+      tankId: 'freshwater-c',
+      tankName: 'Freshwater C',
+      type: HomeAttentionType.waterQuality,
+      status: HomeOperationalStatus.critical,
+      title: 'Critical water-quality state',
+      message: 'Latest readings need review.',
+      actionLabel: 'View alert',
+    );
+
+    HomeDashboardData baseData(List<HomeAttentionItem> attentionItems) {
+      return HomeDashboardData(
+        tanks: const [],
+        attentionItems: attentionItems,
+        monitoring: const HomeMonitoringSummary(
+          totalTankCount: 0,
+          reportingTankCount: 0,
+          outageCount: 0,
+          sensorFeedOnline: true,
+        ),
+        recentActivity: const [],
+      );
+    }
+
+    Future<void> pumpWith(List<HomeAttentionItem> items) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OwnerHomeContent(
+            data: baseData(items),
+            onOpenAlerts: _noop,
+            onOpenTanks: _noop,
+          ),
+        ),
+      );
+    }
+
+    await pumpWith(const [oneIssue]);
+    expect(find.text('Needs attention'), findsOneWidget);
+    expect(find.text('Highest priority'), findsNothing);
+    expect(find.text('View all alerts'), findsOneWidget);
+    expect(find.byKey(const ValueKey('owner-priority-card')), findsOneWidget);
+
+    await pumpWith(const [secondIssue, oneIssue]);
+    expect(find.text('Highest priority'), findsOneWidget);
+    expect(find.text('Needs attention'), findsNothing);
+    expect(find.byKey(const ValueKey('owner-priority-card')), findsOneWidget);
+
+    await pumpWith(const []);
+    expect(find.text('Highest priority'), findsNothing);
+    expect(find.text('Needs attention'), findsNothing);
+    expect(find.byKey(const ValueKey('owner-priority-card')), findsNothing);
   });
 
   test(

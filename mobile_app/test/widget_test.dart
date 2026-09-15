@@ -42,6 +42,14 @@ void main() {
       expect(find.text('Control'), findsNothing);
       expect(find.byKey(const ValueKey('soft-floating-dock')), findsOneWidget);
 
+      await tester.tap(find.text('Freshwater C').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Alert detail'), findsNothing);
+
+      await tester.tap(find.text('Critical').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Alert detail'), findsNothing);
+
       await tester.drag(
         find.byType(CustomScrollView).first,
         const Offset(0, -420),
@@ -53,9 +61,22 @@ void main() {
       await tester.tap(find.text('View alert').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('Alerts'), findsWidgets);
-      expect(find.text('Water quality and reporting state'), findsOneWidget);
-      expect(find.text('1 critical'), findsOneWidget);
+      expect(find.text('Alert detail'), findsOneWidget);
+      expect(find.text('TDS'), findsOneWidget);
+      expect(find.text('Freshwater C'), findsWidgets);
+      expect(find.text('TDS is outside the configured range.'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Alert detail'), findsNothing);
+
+      await tester.fling(
+        find.byType(CustomScrollView).first,
+        const Offset(0, 500),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('JRed Owner'), findsWidgets);
 
       await tester.tap(find.text('Tanks').last);
       await tester.pumpAndSettle();

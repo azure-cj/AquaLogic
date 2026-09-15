@@ -66,6 +66,7 @@ class HomeAttentionItem {
     required this.title,
     required this.message,
     required this.actionLabel,
+    this.sourceId,
   });
 
   final String id;
@@ -76,6 +77,7 @@ class HomeAttentionItem {
   final String title;
   final String message;
   final String actionLabel;
+  final String? sourceId;
 }
 
 class HomeMonitoringSummary {

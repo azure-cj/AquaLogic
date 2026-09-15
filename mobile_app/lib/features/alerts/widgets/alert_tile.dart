@@ -152,10 +152,16 @@ class AlertTile extends StatelessWidget {
 }
 
 class MonitoringIncidentTile extends StatelessWidget {
-  const MonitoringIncidentTile({super.key, required this.incident, this.onTap});
+  const MonitoringIncidentTile({
+    super.key,
+    required this.incident,
+    this.onTap,
+    this.highlighted = false,
+  });
 
   final MonitoringIncident incident;
   final VoidCallback? onTap;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -163,10 +169,17 @@ class MonitoringIncidentTile extends StatelessWidget {
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: incident.isActive
-            ? AppColors.offline.withValues(alpha: 0.07)
+            ? highlighted
+                  ? AppColors.mint.withValues(alpha: 0.42)
+                  : AppColors.offline.withValues(alpha: 0.07)
             : Colors.white.withValues(alpha: 0.72),
         border: Border.all(
-          color: incident.isActive ? AppColors.offline : AppColors.line,
+          color: highlighted
+              ? AppColors.tealDark
+              : incident.isActive
+              ? AppColors.offline
+              : AppColors.line,
+          width: highlighted ? 1.5 : 1,
         ),
         borderRadius: BorderRadius.circular(17),
       ),

@@ -1,3 +1,5 @@
+import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
+import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/demo/demo_data.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
@@ -15,6 +17,9 @@ class MockHomeRepository implements HomeRepository {
 
   @override
   HomeDashboardData load({required SensorSnapshot snapshot}) {
+    final alertData = MockAlertRepository(
+      monitoringOutageTankIds: snapshot.isOnline ? offlineTankIds : const {},
+    ).load(snapshot: snapshot);
     final tanks = DemoData.tanks
         .map((tank) {
           final id = _tankId(tank.name);
@@ -41,7 +46,7 @@ class MockHomeRepository implements HomeRepository {
     final attentionItems =
         tanks
             .where((tank) => tank.status.requiresAttention)
-            .map(_attentionFor)
+            .map((tank) => _attentionFor(tank, alertData))
             .toList()
           ..sort(
             (left, right) =>
@@ -80,8 +85,14 @@ class MockHomeRepository implements HomeRepository {
     );
   }
 
-  HomeAttentionItem _attentionFor(HomeTankSummary tank) {
+  HomeAttentionItem _attentionFor(
+    HomeTankSummary tank,
+    AlertCenterData alertData,
+  ) {
     final isOffline = tank.status == HomeOperationalStatus.offline;
+    final sourceId = isOffline
+        ? _monitoringSourceId(tank.id, alertData)
+        : _waterQualitySourceId(tank.id, alertData);
     return HomeAttentionItem(
       id: '${tank.id}-${tank.status.name}',
       tankId: tank.id,
@@ -97,7 +108,22 @@ class MockHomeRepository implements HomeRepository {
           ? 'Monitoring has no recent report from this tank.'
           : 'Latest readings need review before the next routine check.',
       actionLabel: isOffline ? 'View tank' : 'View alert',
+      sourceId: sourceId,
     );
+  }
+
+  String? _waterQualitySourceId(String tankId, AlertCenterData alertData) {
+    for (final alert in alertData.waterQualityAlerts) {
+      if (alert.tankId == tankId && alert.isActive) return alert.id;
+    }
+    return null;
+  }
+
+  String? _monitoringSourceId(String tankId, AlertCenterData alertData) {
+    for (final incident in alertData.monitoringIncidents) {
+      if (incident.tankId == tankId && incident.isActive) return incident.id;
+    }
+    return null;
   }
 
   HomeOperationalStatus _operationalStatus(String status) {

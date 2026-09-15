@@ -1,6 +1,7 @@
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
+import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/widgets/home_shared_widgets.dart';
 import 'package:aqualogic/features/home/widgets/owner_home_content.dart';
 import 'package:aqualogic/features/home/widgets/staff_home_content.dart';
@@ -15,6 +16,7 @@ class HomeScreen extends StatelessWidget {
     required this.user,
     required this.onOpenAlerts,
     required this.onOpenTanks,
+    this.onOpenAlert,
     this.repository = const MockHomeRepository(),
   });
 
@@ -22,6 +24,7 @@ class HomeScreen extends StatelessWidget {
   final AuthUser user;
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
+  final ValueChanged<HomeAttentionItem>? onOpenAlert;
   final HomeRepository repository;
 
   @override
@@ -32,6 +35,7 @@ class HomeScreen extends StatelessWidget {
         data: data,
         onOpenAlerts: onOpenAlerts,
         onOpenTanks: onOpenTanks,
+        onOpenAlert: onOpenAlert,
       ),
       UserRole.staff => StaffHomeContent(
         data: data,

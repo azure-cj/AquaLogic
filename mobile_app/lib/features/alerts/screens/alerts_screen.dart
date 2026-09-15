@@ -15,10 +15,18 @@ enum AlertStream { waterQuality, monitoring }
 enum AlertView { active, history }
 
 class AlertsScreen extends StatefulWidget {
-  const AlertsScreen({super.key, required this.snapshot, this.repository});
+  const AlertsScreen({
+    super.key,
+    required this.snapshot,
+    this.repository,
+    this.initialReferenceId,
+    this.initialStream = AlertStream.waterQuality,
+  });
 
   final SensorSnapshot snapshot;
   final AlertRepository? repository;
+  final String? initialReferenceId;
+  final AlertStream initialStream;
 
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
@@ -27,9 +35,21 @@ class AlertsScreen extends StatefulWidget {
 class _AlertsScreenState extends State<AlertsScreen> {
   late final AlertRepository _repository =
       widget.repository ?? const MockAlertRepository();
-  var _stream = AlertStream.waterQuality;
+  late AlertStream _stream;
   var _view = AlertView.active;
   final _handledIds = <String>{};
+  var _didResolveInitialReference = false;
+  String? _focusedMonitoringId;
+  String? _referenceMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = widget.initialStream;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resolveInitialReference();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +108,18 @@ class _AlertsScreenState extends State<AlertsScreen> {
           warningCount: warningCount,
           monitoringCount: activeMonitoringCount,
         ),
+        if (_referenceMessage != null)
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _referenceMessage!,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         _SegmentControl<AlertStream>(
           selected: _stream,
           onSelected: (value) => setState(() => _stream = value),
@@ -141,6 +173,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                       .where((incident) => !incident.isActive)
                       .toList(growable: false),
             showHistory: _view == AlertView.history,
+            focusedId: _focusedMonitoringId,
           ),
         if (_stream == AlertStream.waterQuality)
           Text(
@@ -161,6 +194,43 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
   List<MonitoringIncident> _monitoringItems(AlertCenterData data) {
     return data.monitoringIncidents;
+  }
+
+  void _resolveInitialReference() {
+    final referenceId = widget.initialReferenceId;
+    if (!mounted || referenceId == null || _didResolveInitialReference) return;
+
+    final data = _repository.load(snapshot: widget.snapshot);
+    for (final alert in data.waterQualityAlerts) {
+      if (alert.id == referenceId) {
+        _didResolveInitialReference = true;
+        setState(() {
+          _stream = AlertStream.waterQuality;
+          _view = alert.isActive ? AlertView.active : AlertView.history;
+        });
+        _openAlert(alert);
+        return;
+      }
+    }
+
+    for (final incident in data.monitoringIncidents) {
+      if (incident.id == referenceId) {
+        _didResolveInitialReference = true;
+        setState(() {
+          _stream = AlertStream.monitoring;
+          _view = incident.isActive ? AlertView.active : AlertView.history;
+          _focusedMonitoringId = incident.id;
+        });
+        return;
+      }
+    }
+
+    _didResolveInitialReference = true;
+    setState(() {
+      _referenceMessage = widget.initialStream == AlertStream.monitoring
+          ? 'This monitoring incident is no longer available.'
+          : 'This alert is no longer available.';
+    });
   }
 
   Future<void> _confirmMarkHandled(AlertInfo alert) async {
@@ -248,10 +318,15 @@ class _WaterQualityList extends StatelessWidget {
 }
 
 class _MonitoringList extends StatelessWidget {
-  const _MonitoringList({required this.incidents, required this.showHistory});
+  const _MonitoringList({
+    required this.incidents,
+    required this.showHistory,
+    this.focusedId,
+  });
 
   final List<MonitoringIncident> incidents;
   final bool showHistory;
+  final String? focusedId;
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +344,11 @@ class _MonitoringList extends StatelessWidget {
     return Column(
       children: [
         for (var index = 0; index < incidents.length; index++) ...[
-          MonitoringIncidentTile(incident: incidents[index]),
+          MonitoringIncidentTile(
+            key: ValueKey('monitoring-incident-${incidents[index].id}'),
+            incident: incidents[index],
+            highlighted: focusedId == incidents[index].id,
+          ),
           if (index < incidents.length - 1) const SizedBox(height: 9),
         ],
       ],
