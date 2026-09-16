@@ -1,5 +1,6 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
+import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:flutter/material.dart';
@@ -15,27 +16,28 @@ class TankOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOffline =
         !tank.isRetired && tank.operationalStatus == OperationalStatus.offline;
+    final condition = tank.isRetired
+        ? 'Retired tank; monitoring is not expected.'
+        : isOffline
+        ? 'No current reading is available.'
+        : tank.latestCondition ?? tank.description;
+    final conditionLabel = _compactTankCondition(condition);
+
     return Semantics(
       button: true,
       label: 'Open ${tank.name} tank details',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
+          key: ValueKey('tank-card-${tank.tankId}'),
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.fromLTRB(15, 15, 12, 13),
+            padding: const EdgeInsets.fromLTRB(14, 14, 12, 13),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Colors.white.withValues(alpha: 0.92),
               border: Border.all(color: AppColors.line),
               borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.tealDark.withValues(alpha: 0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,18 +45,7 @@ class TankOverviewCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 21,
-                      backgroundColor: AppColors.teal.withValues(alpha: 0.25),
-                      child: Text(
-                        tank.initial,
-                        style: const TextStyle(
-                          color: AppColors.tealDark,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
+                    TankIdentityMarker(initial: tank.initial, size: 48),
                     const SizedBox(width: 11),
                     Expanded(
                       child: Column(
@@ -62,23 +53,25 @@ class TankOverviewCard extends StatelessWidget {
                         children: [
                           Text(
                             tank.name,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: AppColors.text,
                               fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
                           Text(
                             tank.subtitle,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: AppColors.muted,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 11.5,
+                              height: 1.25,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -93,26 +86,20 @@ class TankOverviewCard extends StatelessWidget {
                           ),
                   ],
                 ),
-                const SizedBox(height: 13),
+                const SizedBox(height: 14),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
-                        tank.isRetired
-                            ? 'Retired tank; monitoring is not expected.'
-                            : isOffline
-                            ? 'No current reading is available.'
-                            : tank.latestCondition ?? tank.description,
+                        conditionLabel,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isOffline ? AppColors.offline : AppColors.text,
-                          fontSize: 12,
+                          fontSize: 12.5,
                           height: 1.3,
-                          fontWeight: isOffline
-                              ? FontWeight.w700
-                              : FontWeight.w600,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -124,13 +111,13 @@ class TankOverviewCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 11),
                 Wrap(
-                  spacing: 14,
+                  spacing: 12,
                   runSpacing: 5,
                   children: [
                     FreshnessLabel(
-                      label: tank.lastReportLabel,
+                      label: compactFreshnessLabel(tank.lastReportLabel),
                       isUnavailable: isOffline,
                     ),
                     if (tank.species.isNotEmpty)
@@ -153,6 +140,15 @@ class TankOverviewCard extends StatelessWidget {
   }
 }
 
+String _compactTankCondition(String condition) {
+  return switch (condition.trim()) {
+    'All installed readings are within configured ranges.' =>
+      'All readings within range',
+    'TDS is outside the configured range.' => 'TDS outside configured range',
+    _ => condition,
+  };
+}
+
 class _MetaLabel extends StatelessWidget {
   const _MetaLabel({required this.icon, required this.label});
 
@@ -170,8 +166,8 @@ class _MetaLabel extends StatelessWidget {
           label,
           style: const TextStyle(
             color: AppColors.muted,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],

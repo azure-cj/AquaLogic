@@ -60,6 +60,7 @@ flutter:
   assets:
     - assets/images/aqualogic_icon.png
     - assets/images/owner_home_hero.png
+    - assets/images/tank_header.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

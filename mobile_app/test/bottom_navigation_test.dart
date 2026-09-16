@@ -52,10 +52,10 @@ void main() {
 
       await tester.tap(find.text('View all').first);
       await tester.pumpAndSettle();
-      expect(find.text('Your tanks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tanks-page-title')), findsOneWidget);
       expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
 
-      await tester.drag(find.text('Needs attention'), const Offset(-80, 0));
+      await tester.tap(find.byKey(const ValueKey('tank-filter-attention')));
       await tester.pumpAndSettle();
       expect(tester.widget<AnimatedPositioned>(position).bottom, 0);
     },

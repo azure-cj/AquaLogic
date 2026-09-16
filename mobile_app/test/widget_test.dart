@@ -81,12 +81,12 @@ void main() {
       await tester.tap(find.text('Tanks').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('Your tanks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tanks-page-title')), findsOneWidget);
       expect(
         find.byKey(const ValueKey('soft-floating-dock-destination-1')),
         findsOneWidget,
       );
-      expect(find.text('A quick view of every monitored tank'), findsOneWidget);
+      expect(find.text('Monitor your aquarium fleet'), findsOneWidget);
       expect(find.text('Display Reef A'), findsOneWidget);
       expect(find.text('Quarantine B'), findsOneWidget);
 
@@ -94,7 +94,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Marine display · 320L'), findsOneWidget);
-      expect(find.text('Tank information'), findsOneWidget);
+      expect(find.text('Location'), findsOneWidget);
       expect(find.text('320L'), findsWidgets);
 
       await tester.scrollUntilVisible(
@@ -108,7 +108,7 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
-      expect(find.text('Your tanks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tanks-page-title')), findsOneWidget);
 
       await tester.tap(find.text('More').last);
       await tester.pumpAndSettle();

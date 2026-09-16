@@ -179,6 +179,76 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Tanks directory keeps dynamic counts and filter behavior', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: TanksScreen(snapshot: MockSensorFeed.snapshot(0))),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('tanks-page-title')), findsOneWidget);
+    expect(find.text('Monitor your aquarium fleet'), findsOneWidget);
+    expect(find.text('Search tanks...'), findsOneWidget);
+    expect(find.text('4 tanks · 2 need attention'), findsOneWidget);
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('Attention'), findsOneWidget);
+    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Display Reef A'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('tank-filter-attention')));
+    await tester.pumpAndSettle();
+    expect(find.text('Freshwater C'), findsOneWidget);
+    expect(find.text('Quarantine B'), findsOneWidget);
+    expect(find.text('Display Reef A'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('tank-filter-offline')));
+    await tester.pumpAndSettle();
+    expect(find.text('No tanks are offline'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('tank-filter-all')));
+    await tester.enterText(find.byType(TextField), 'nursery');
+    await tester.pumpAndSettle();
+    expect(find.text('Nursery D'), findsOneWidget);
+    expect(find.text('Display Reef A'), findsNothing);
+  });
+
+  testWidgets('Tank detail uses a shared sensor panel and compact sections', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TankDetailScreen(
+          tank: DemoData.tanks.first,
+          snapshot: MockSensorFeed.snapshot(0),
+        ),
+      ),
+    );
+
+    expect(find.text('Display Reef A'), findsOneWidget);
+    expect(find.text('Location'), findsOneWidget);
+    expect(find.text('Main room'), findsOneWidget);
+    expect(find.text('320L'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sensor-overview-panel')), findsOneWidget);
+    expect(find.text('Temperature'), findsOneWidget);
+    expect(find.text('26.8'), findsOneWidget);
+    expect(find.text('TDS'), findsOneWidget);
+    expect(find.text('2,620'), findsOneWidget);
+    expect(find.text('1,080'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Issues'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(find.byType(CustomScrollView).last, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(find.text('No active issues'), findsOneWidget);
+    expect(find.text('Reporting normally'), findsOneWidget);
+    expect(find.text('4 connected devices'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
+  });
+
   testWidgets('Fish library search opens domain-aligned species detail', (
     tester,
   ) async {
@@ -266,11 +336,11 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('View equipment'),
+      find.byKey(const ValueKey('tank-equipment-entry')),
       300,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('View equipment'));
+    await tester.tap(find.byKey(const ValueKey('tank-equipment-entry')));
     await tester.pumpAndSettle();
     expect(find.text('Connected equipment'), findsOneWidget);
   });
@@ -338,6 +408,11 @@ void main() {
     );
     final screens = <Widget>[
       TanksScreen(snapshot: MockSensorFeed.snapshot(0), user: owner),
+      TankDetailScreen(
+        tank: DemoData.tanks.first,
+        snapshot: MockSensorFeed.snapshot(0),
+        user: owner,
+      ),
       AlertsScreen(snapshot: MockSensorFeed.snapshot(0)),
       const FishLibraryScreen(),
       EquipmentScreen(tank: DemoData.tanks.first, user: owner),
