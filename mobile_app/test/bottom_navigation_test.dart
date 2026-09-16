@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:aqualogic/app/navigation/aqualogic_shell.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
@@ -74,5 +76,84 @@ void main() {
     }
     expect(find.text('Control'), findsNothing);
     expect(find.byKey(const ValueKey('soft-floating-dock')), findsOneWidget);
+
+    final capsule = find.byKey(
+      const ValueKey('soft-floating-dock-selected-capsule'),
+    );
+    expect(capsule, findsOneWidget);
+    expect(
+      tester.widget<AnimatedPositioned>(capsule).duration,
+      const Duration(milliseconds: 200),
+    );
+    expect(
+      tester.widget<AnimatedPositioned>(capsule).curve,
+      Curves.easeOutCubic,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('soft-floating-dock-destination-1')),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(capsule, findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(capsule, findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('soft-floating-dock-destination-1')),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(capsule, findsOneWidget);
+  });
+
+  testWidgets('shared capsule redirects cleanly during rapid tab changes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: AquaLogicShell(user: owner)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('soft-floating-dock-destination-1')),
+    );
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(
+      find.byKey(const ValueKey('soft-floating-dock-destination-2')),
+    );
+    await tester.pumpAndSettle();
+
+    final alertsSemantics = tester.getSemantics(
+      find.byKey(const ValueKey('soft-floating-dock-destination-2')),
+    );
+    expect(alertsSemantics.flagsCollection.isSelected, ui.Tristate.isTrue);
+    expect(
+      find.byKey(const ValueKey('soft-floating-dock-selected-capsule')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shared capsule skips motion when animations are disabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: const AquaLogicShell(user: owner),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final capsule = find.byKey(
+      const ValueKey('soft-floating-dock-selected-capsule'),
+    );
+    expect(tester.widget<AnimatedPositioned>(capsule).duration, Duration.zero);
+
+    await tester.tap(
+      find.byKey(const ValueKey('soft-floating-dock-destination-3')),
+    );
+    await tester.pump();
+    expect(tester.widget<AnimatedPositioned>(capsule).duration, Duration.zero);
   });
 }

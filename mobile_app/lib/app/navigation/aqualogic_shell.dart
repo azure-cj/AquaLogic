@@ -267,37 +267,80 @@ class _SoftFloatingDock extends StatelessWidget {
           height: 70,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Row(
-              children: [
-                _SoftFloatingDestination(
-                  index: 0,
-                  label: 'Home',
-                  icon: LucideIcons.house,
-                  selected: selectedIndex == 0,
-                  onTap: () => onDestinationSelected(0),
-                ),
-                _SoftFloatingDestination(
-                  index: 1,
-                  label: 'Tanks',
-                  icon: LucideIcons.network,
-                  selected: selectedIndex == 1,
-                  onTap: () => onDestinationSelected(1),
-                ),
-                _SoftFloatingDestination(
-                  index: 2,
-                  label: 'Alerts',
-                  icon: LucideIcons.bell,
-                  selected: selectedIndex == 2,
-                  onTap: () => onDestinationSelected(2),
-                ),
-                _SoftFloatingDestination(
-                  index: 3,
-                  label: 'More',
-                  icon: LucideIcons.settings,
-                  selected: selectedIndex == 3,
-                  onTap: () => onDestinationSelected(3),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final slotWidth = constraints.maxWidth / 4;
+                final capsuleWidth = (slotWidth - 4).clamp(
+                  0.0,
+                  constraints.maxWidth,
+                );
+                final animationDuration =
+                    MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200);
+
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedPositioned(
+                      key: const ValueKey(
+                        'soft-floating-dock-selected-capsule',
+                      ),
+                      duration: animationDuration,
+                      curve: Curves.easeOutCubic,
+                      top: 2,
+                      left: (selectedIndex * slotWidth) + 2,
+                      width: capsuleWidth,
+                      height: 54,
+                      child: IgnorePointer(
+                        child: ExcludeSemantics(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: AppColors.mint,
+                              border: Border.all(
+                                color: AppColors.teal.withValues(alpha: 0.14),
+                              ),
+                              borderRadius: BorderRadius.circular(17),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _SoftFloatingDestination(
+                          index: 0,
+                          label: 'Home',
+                          icon: LucideIcons.house,
+                          selected: selectedIndex == 0,
+                          onTap: () => onDestinationSelected(0),
+                        ),
+                        _SoftFloatingDestination(
+                          index: 1,
+                          label: 'Tanks',
+                          icon: LucideIcons.network,
+                          selected: selectedIndex == 1,
+                          onTap: () => onDestinationSelected(1),
+                        ),
+                        _SoftFloatingDestination(
+                          index: 2,
+                          label: 'Alerts',
+                          icon: LucideIcons.bell,
+                          selected: selectedIndex == 2,
+                          onTap: () => onDestinationSelected(2),
+                        ),
+                        _SoftFloatingDestination(
+                          index: 3,
+                          label: 'More',
+                          icon: LucideIcons.settings,
+                          selected: selectedIndex == 3,
+                          onTap: () => onDestinationSelected(3),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -326,79 +369,55 @@ class _SoftFloatingDestination extends StatelessWidget {
     final foreground = selected ? AppColors.text : AppColors.muted;
 
     return Expanded(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final capsuleWidth = constraints.hasBoundedWidth
-              ? (constraints.maxWidth - 4)
-                    .clamp(0.0, constraints.maxWidth)
-                    .toDouble()
-              : 72.0;
-
-          return Semantics(
-            container: true,
-            button: true,
-            onTap: onTap,
-            label: label,
-            selected: selected,
-            child: ExcludeSemantics(
-              child: Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  key: ValueKey('soft-floating-dock-destination-$index'),
-                  onTap: onTap,
-                  borderRadius: BorderRadius.circular(18),
-                  overlayColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.pressed)) {
-                      return AppColors.mint.withValues(alpha: 0.45);
-                    }
-                    if (states.contains(WidgetState.hovered)) {
-                      return AppColors.mint.withValues(alpha: 0.16);
-                    }
-                    return Colors.transparent;
-                  }),
-                  child: Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
-                      height: 54,
-                      width: capsuleWidth,
-                      padding: const EdgeInsets.symmetric(horizontal: 7),
-                      decoration: BoxDecoration(
-                        color: selected ? AppColors.mint : Colors.transparent,
-                        border: selected
-                            ? Border.all(
-                                color: AppColors.teal.withValues(alpha: 0.14),
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(17),
+      child: Semantics(
+        container: true,
+        button: true,
+        onTap: onTap,
+        label: label,
+        selected: selected,
+        child: ExcludeSemantics(
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              key: ValueKey('soft-floating-dock-destination-$index'),
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(18),
+              overlayColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.pressed)) {
+                  return AppColors.mint.withValues(alpha: 0.45);
+                }
+                if (states.contains(WidgetState.hovered)) {
+                  return AppColors.mint.withValues(alpha: 0.16);
+                }
+                return Colors.transparent;
+              }),
+              child: Center(
+                child: SizedBox(
+                  height: 54,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 20, color: foreground),
+                      const SizedBox(height: 2),
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: foreground,
+                          fontSize: 10.5,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                        ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(icon, size: 20, color: foreground),
-                          const SizedBox(height: 2),
-                          Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: foreground,
-                              fontSize: 10.5,
-                              fontWeight: selected
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
