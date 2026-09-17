@@ -120,6 +120,24 @@ void main() {
     expect(find.text('2 tanks need attention'), findsNothing);
   });
 
+  testWidgets('sign out remains available from the existing Account route', (
+    tester,
+  ) async {
+    await _pumpToLogin(tester);
+    await _signIn(tester, email: 'owner@aqualogic.local', password: 'owner123');
+
+    await tester.tap(find.text('More').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('account-profile-panel')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your local prototype identity'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('account-sign-out-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+  });
+
   test('mock authentication returns backend-compatible roles', () async {
     final service = MockAuthService();
 

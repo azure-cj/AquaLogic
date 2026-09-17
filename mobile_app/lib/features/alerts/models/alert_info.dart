@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 enum AlertCategory { waterQuality, monitoring }
 
@@ -17,7 +18,7 @@ class AlertInfo {
     required this.startedLabel,
     required this.lifecycle,
     this.recommendation,
-    this.icon = Icons.warning_amber_rounded,
+    this.icon = LucideIcons.triangleAlert,
   });
 
   final String id;

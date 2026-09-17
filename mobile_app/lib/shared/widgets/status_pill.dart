@@ -1,4 +1,4 @@
-﻿import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/shared/models/reading_state.dart';
 import 'package:flutter/material.dart';
 
@@ -37,7 +37,7 @@ class StatusPill extends StatelessWidget {
             style: TextStyle(
               color: dark ? Colors.white : color,
               fontSize: 10,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

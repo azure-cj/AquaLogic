@@ -1,5 +1,7 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
+import 'package:aqualogic/shared/formatters/freshness_labels.dart';
+import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -28,7 +30,7 @@ class TankTile extends StatelessWidget {
                   tank.initial,
                   style: const TextStyle(
                     color: AppColors.tealDark,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -44,11 +46,16 @@ class TankTile extends StatelessWidget {
                       style: const TextStyle(
                         color: AppColors.text,
                         fontSize: 13,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 3),
-                    FreshnessLabel(label: tank.lastReportLabel),
+                    FreshnessLabel(
+                      label: formatFreshnessLabel(tank.lastReportLabel),
+                      isUnavailable:
+                          !tank.isRetired &&
+                          tank.operationalStatus == OperationalStatus.offline,
+                    ),
                   ],
                 ),
               ),

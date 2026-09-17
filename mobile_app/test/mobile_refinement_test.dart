@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
+import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
@@ -7,6 +10,7 @@ import 'package:aqualogic/features/demo/demo_data.dart';
 import 'package:aqualogic/features/fish/screens/fish_library_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
+import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/features/tanks/screens/tank_detail_screen.dart';
@@ -14,6 +18,7 @@ import 'package:aqualogic/features/tanks/screens/tanks_screen.dart';
 import 'package:aqualogic/features/tanks/widgets/tank_overview_card.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -94,7 +99,22 @@ void main() {
     );
 
     expect(find.text('Water quality'), findsOneWidget);
-    expect(find.text('1 critical'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('alert-summary-count-critical')),
+          )
+          .data,
+      '1',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('alert-summary-count-warning')),
+          )
+          .data,
+      '1',
+    );
     expect(find.text('Mark handled'), findsWidgets);
 
     await tester.tap(find.text('Mark handled').first);
@@ -102,8 +122,22 @@ void main() {
     expect(find.text('Mark this alert as handled?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Mark handled'));
     await tester.pumpAndSettle();
-    expect(find.text('0 critical'), findsOneWidget);
-    expect(find.text('1 warning'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('alert-summary-count-critical')),
+          )
+          .data,
+      '0',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const ValueKey('alert-summary-count-warning')),
+          )
+          .data,
+      '1',
+    );
 
     await tester.tap(find.text('History'));
     await tester.pumpAndSettle();
@@ -117,6 +151,178 @@ void main() {
     expect(find.text('Nursery D'), findsOneWidget);
     expect(find.text('No recent readings received.'), findsOneWidget);
     expect(find.text('Mark handled'), findsNothing);
+  });
+
+  testWidgets('Alerts keeps its Material surface on a standalone route', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: AlertsScreen(snapshot: MockSensorFeed.snapshot(0))),
+    );
+
+    final title = tester.renderObject<RenderParagraph>(
+      find.byKey(const ValueKey('alerts-page-title')),
+    );
+    expect(title.text.style?.decoration, TextDecoration.none);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      const Color(0xFFEAF8FA),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('alert-state-history')));
+    await tester.pumpAndSettle();
+    expect(find.text('Display Reef A'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Alerts uses explicit actions and preserves exact alert routing',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: AlertsScreen(snapshot: MockSensorFeed.snapshot(0))),
+      );
+
+      expect(find.byKey(const ValueKey('alert-summary-strip')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('alert-stream-selector')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('alert-state-tabs')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('alert-view-freshwater-c-tds')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel('Mark Freshwater C alert as handled'),
+        findsOneWidget,
+      );
+      final streamSemantics = tester.getSemantics(
+        find.byKey(const ValueKey('alert-stream-waterQuality')),
+      );
+      expect(streamSemantics.flagsCollection.isSelected, ui.Tristate.isTrue);
+
+      await tester.tap(
+        find.byKey(const ValueKey('alert-view-freshwater-c-tds')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Alert detail'), findsOneWidget);
+      expect(find.text('Freshwater C'), findsOneWidget);
+      expect(find.text('TDS'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('alert-view-quarantine-b-ph')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('alert-view-quarantine-b-ph')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Quarantine B'), findsOneWidget);
+      expect(find.text('pH'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Monitoring rows open the exact monitoring context', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlertsScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          repository: const MockAlertRepository(
+            monitoringOutageTankIds: {'nursery-d'},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('alert-stream-monitoring')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('monitoring-incident-nursery-d-monitoring')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nursery D'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('monitoring-row-nursery-d-monitoring')),
+      findsOneWidget,
+    );
+    expect(find.text('Offline'), findsOneWidget);
+  });
+
+  testWidgets('Alerts empty states stay calm across both streams and views', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AlertsScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          repository: const _EmptyAlertRepository(),
+        ),
+      ),
+    );
+
+    expect(find.text('No active water-quality alerts.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('alert-stream-monitoring')));
+    await tester.pumpAndSettle();
+    expect(find.text('No monitoring outages.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('alert-state-history')));
+    await tester.pumpAndSettle();
+    expect(find.text('No alert history yet.'), findsOneWidget);
+  });
+
+  testWidgets('Alerts remains usable at larger text scales', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(360, 720));
+
+    for (final scale in [1.0, 1.3, 1.5, 2.0]) {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+          child: MaterialApp(
+            home: AlertsScreen(snapshot: MockSensorFeed.snapshot(0)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'scale $scale');
+      expect(
+        find.byKey(const ValueKey('alert-stream-selector')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('alert-state-tabs')), findsOneWidget);
+      expect(find.text('View alert'), findsWidgets);
+      expect(find.text('Mark handled'), findsWidgets);
+    }
+  });
+
+  testWidgets('Alerts fits the requested mobile viewports', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final size in [
+      const Size(360, 720),
+      const Size(390, 680),
+      const Size(390, 844),
+      const Size(430, 932),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(
+        MaterialApp(home: AlertsScreen(snapshot: MockSensorFeed.snapshot(0))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '${size.width}x${size.height}',
+      );
+      expect(find.text('Alerts'), findsOneWidget);
+      expect(find.text('View alert'), findsWidgets);
+      expect(find.text('Mark handled'), findsWidgets);
+    }
   });
 
   testWidgets('Alerts focuses an exact monitoring incident reference', (
@@ -372,6 +578,7 @@ void main() {
   testWidgets('More exposes identity and truthful app data surfaces', (
     tester,
   ) async {
+    final semanticsHandle = tester.ensureSemantics();
     await tester.pumpWidget(
       MaterialApp(
         home: MoreScreen(
@@ -386,13 +593,141 @@ void main() {
       ),
     );
 
+    expect(find.byKey(const ValueKey('more-page-title')), findsOneWidget);
+    expect(find.text('Account, app settings, and resources'), findsOneWidget);
     expect(find.text('JRed Owner'), findsOneWidget);
+    expect(find.text('owner@aqualogic.local'), findsOneWidget);
+    expect(find.text('JRed Aquatics'), findsOneWidget);
+    expect(find.text('Local prototype account'), findsOneWidget);
     expect(find.text('OWNER'), findsOneWidget);
     expect(find.text('Fish species'), findsOneWidget);
     expect(find.text('Sync / local data'), findsOneWidget);
+    expect(find.text('Local data and connection status'), findsOneWidget);
     expect(find.text('About AquaLogic'), findsOneWidget);
+    expect(
+      find.text('Product information and prototype scope'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('account-profile-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('more-app-data-group')), findsOneWidget);
+    expect(find.text('Session'), findsNothing);
+    expect(find.text('Sign out'), findsOneWidget);
+    expect(find.bySemanticsLabel('Sign out'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Open Fish species. Care references and suitability context',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(
+        'Open Sync / local data. Local data and connection status',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(
+        'Open About AquaLogic. Product information and prototype scope',
+      ),
+      findsOneWidget,
+    );
+    semanticsHandle.dispose();
     expect(find.text('Push notifications'), findsNothing);
     expect(find.text('Critical-only at night'), findsNothing);
+  });
+
+  testWidgets('More keeps account and resource destinations intact', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MoreScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          user: const AuthUser(
+            id: 'owner',
+            name: 'JRed Owner',
+            email: 'owner@aqualogic.local',
+            role: UserRole.admin,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('account-profile-panel')));
+    await tester.pumpAndSettle();
+    expect(find.text('Your local prototype identity'), findsOneWidget);
+    expect(find.text('Session'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('account-sign-out-button')),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Fish species'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Practical care references for your tanks'),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sync / local data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Local demo data'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('About AquaLogic'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'A local-first aquarium monitoring and operations experience for JRed Aquatics.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('More remains usable across mobile sizes and text scales', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const owner = AuthUser(
+      id: 'owner',
+      name: 'A long AquaLogic owner name',
+      email: 'owner-with-a-long-email-address@aqualogic.local',
+      role: UserRole.admin,
+    );
+
+    for (final size in [
+      const Size(360, 720),
+      const Size(390, 680),
+      const Size(390, 844),
+      const Size(430, 932),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      for (final scale in [1.0, 1.3, 1.5, 2.0]) {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: MaterialApp(
+              home: MoreScreen(
+                snapshot: MockSensorFeed.snapshot(0),
+                user: owner,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: '${size.width}x${size.height} at $scale',
+        );
+        expect(find.text('Sign out'), findsOneWidget);
+      }
+    }
   });
 
   testWidgets('refined mobile surfaces fit a narrow Android viewport', (
@@ -425,4 +760,16 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+}
+
+class _EmptyAlertRepository implements AlertRepository {
+  const _EmptyAlertRepository();
+
+  @override
+  AlertCenterData load({required SensorSnapshot snapshot}) {
+    return const AlertCenterData(
+      waterQualityAlerts: <AlertInfo>[],
+      monitoringIncidents: <MonitoringIncident>[],
+    );
+  }
 }

@@ -55,7 +55,7 @@ class HeaderAlertCard extends StatelessWidget {
                       style: TextStyle(
                         color: color,
                         fontSize: 10,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 4),

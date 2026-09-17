@@ -1,7 +1,9 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
+import 'package:aqualogic/features/alerts/widgets/alert_tile.dart';
+import 'package:aqualogic/features/alerts/widgets/alerts_header.dart';
+import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
-import 'package:aqualogic/shared/widgets/header_panel.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
@@ -15,39 +17,15 @@ class AlertDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = alert.severity == AlertSeverity.critical
-        ? AppColors.critical
-        : AppColors.warning;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         top: false,
         child: AppPage(
-          header: HeaderPanel(
-            compact: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton.filledTonal(
-                  tooltip: 'Back to Alerts',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(LucideIcons.arrowLeft),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Alert detail',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const Text(
-                  'Review the condition and its current state',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
+          header: AlertsHeader(
+            title: 'Alert detail',
+            subtitle: 'Review the condition and its current state',
+            onBack: () => Navigator.of(context).pop(),
           ),
           children: [
             SoftCard(
@@ -56,37 +34,40 @@ class AlertDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Icon(alert.icon, color: color, size: 23),
-                      const SizedBox(width: 9),
-                      Text(
-                        alert.severity.name.toUpperCase(),
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
+                      AlertSeverityPill(severity: alert.severity),
                       const Spacer(),
                       _StateLabel(active: alert.isActive),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    alert.tankName,
-                    style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      TankIdentityMarker(
+                        initial: _tankInitial(alert.tankName),
+                        size: 54,
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Text(
+                          alert.tankName,
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 21,
+                            height: 1.1,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 8),
                   Text(
                     alert.parameter,
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -157,9 +138,14 @@ class _StateLabel extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontSize: 9,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
   }
+}
+
+String _tankInitial(String tankName) {
+  final trimmed = tankName.trim();
+  return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
 }

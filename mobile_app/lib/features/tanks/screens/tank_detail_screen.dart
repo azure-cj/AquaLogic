@@ -8,6 +8,7 @@ import 'package:aqualogic/features/sensors/widgets/reading_grid.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/formatters/freshness_labels.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:flutter/material.dart';
@@ -96,7 +97,6 @@ class TankDetailScreen extends StatelessWidget {
               subtitle: 'Latest tank events',
             ),
             _ActivitySection(activities: tank.recentActivity),
-            const SizedBox(height: 76),
           ],
         ),
       ),
@@ -243,7 +243,7 @@ class _TankDetailHeader extends StatelessWidget {
                                   const SizedBox(width: 5),
                                   Flexible(
                                     child: Text(
-                                      compactFreshnessLabel(
+                                      formatFreshnessLabel(
                                         tank.lastReportLabel,
                                       ),
                                       maxLines: 1,

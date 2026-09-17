@@ -1,4 +1,5 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_tokens.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
@@ -43,6 +44,7 @@ class _TanksScreenState extends State<TanksScreen> {
     final offlineCount = allTanks.where(_isOffline).length;
 
     return AppPage(
+      bottomClearance: AppSpacing.bottomDockClearance,
       header: _TanksHeader(
         onQueryChanged: (value) => setState(() => _query = value),
       ),
@@ -84,7 +86,6 @@ class _TanksScreenState extends State<TanksScreen> {
               },
             ),
           ),
-        const SizedBox(height: 76),
       ],
     );
   }
@@ -170,7 +171,12 @@ class _TanksHeader extends StatelessWidget {
         ),
         Container(
           width: double.infinity,
-          padding: EdgeInsets.fromLTRB(20, safeTop + 18, 20, 20),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pageGutter,
+            safeTop + 18,
+            AppSpacing.pageGutter,
+            20,
+          ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,

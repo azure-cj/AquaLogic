@@ -1,4 +1,5 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/shared/formatters/freshness_labels.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,11 +10,13 @@ class OperationalStatusBadge extends StatelessWidget {
     required this.status,
     this.label,
     this.compact = false,
+    this.leadingText,
   });
 
   final OperationalStatus status;
   final String? label;
   final bool compact;
+  final String? leadingText;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +24,8 @@ class OperationalStatusBadge extends StatelessWidget {
     return _SemanticBadge(
       label: label ?? status.label,
       color: color,
-      icon: _operationalIcon(status),
+      icon: leadingText == null ? _operationalIcon(status) : null,
+      leadingText: leadingText,
       compact: compact,
       semanticsLabel: 'Tank status ${label ?? status.label}',
     );
@@ -131,8 +135,9 @@ class FreshnessLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayLabel = formatFreshnessLabel(label);
     return Semantics(
-      label: 'Data freshness $label',
+      label: 'Data freshness $displayLabel',
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -144,7 +149,7 @@ class FreshnessLabel extends StatelessWidget {
           const SizedBox(width: 5),
           Flexible(
             child: Text(
-              label,
+              displayLabel,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: isUnavailable ? AppColors.offline : AppColors.muted,
@@ -187,7 +192,7 @@ class SectionHeader extends StatelessWidget {
                 style: const TextStyle(
                   color: AppColors.text,
                   fontSize: 17,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               if (subtitle != null) ...[
@@ -254,7 +259,7 @@ class EmptyState extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 14,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -316,7 +321,7 @@ class InfoRow extends StatelessWidget {
               style: const TextStyle(
                 color: AppColors.text,
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -331,13 +336,15 @@ class _SemanticBadge extends StatelessWidget {
     required this.label,
     required this.color,
     required this.icon,
+    this.leadingText,
     required this.semanticsLabel,
     required this.compact,
   });
 
   final String label;
   final Color color;
-  final IconData icon;
+  final IconData? icon;
+  final String? leadingText;
   final String semanticsLabel;
   final bool compact;
 
@@ -359,7 +366,18 @@ class _SemanticBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: compact ? 12 : 14),
+            if (leadingText != null)
+              Text(
+                leadingText!,
+                style: TextStyle(
+                  color: color,
+                  fontSize: compact ? 12 : 13,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              )
+            else
+              Icon(icon, color: color, size: compact ? 12 : 14),
             const SizedBox(width: 5),
             Text(
               label,
@@ -368,7 +386,7 @@ class _SemanticBadge extends StatelessWidget {
               style: TextStyle(
                 color: color,
                 fontSize: compact ? 9 : 10,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],

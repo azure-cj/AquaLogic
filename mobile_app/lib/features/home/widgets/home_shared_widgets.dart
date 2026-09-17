@@ -1,4 +1,6 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/theme/app_tokens.dart';
+import 'package:aqualogic/shared/formatters/freshness_labels.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
@@ -90,12 +92,18 @@ class HomeHero extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            'AquaLogic',
-                            style: TextStyle(
-                              color: AppColors.text,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                          const Expanded(
+                            child: FittedBox(
+                              alignment: Alignment.centerLeft,
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'AquaLogic',
+                                style: TextStyle(
+                                  color: AppColors.text,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                           const Spacer(),
@@ -153,7 +161,9 @@ class HomeHero extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 186),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pageGutter,
+              ),
               child: FleetStatusSheet(data: data),
             ),
           ),
@@ -640,7 +650,9 @@ class TankStatusRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      showContext ? tank.contextLabel : tank.lastReportLabel,
+                      showContext
+                          ? tank.contextLabel
+                          : formatFreshnessLabel(tank.lastReportLabel),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

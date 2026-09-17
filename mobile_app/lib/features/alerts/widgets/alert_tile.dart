@@ -1,5 +1,6 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
+import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -17,117 +18,103 @@ class AlertTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _severityColor(alert.severity);
     final child = Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        color: alert.isActive
-            ? color.withValues(alpha: 0.07)
-            : Colors.white.withValues(alpha: 0.72),
-        border: Border.all(
-          color: alert.isActive
-              ? color.withValues(alpha: 0.58)
-              : AppColors.line,
-        ),
-        borderRadius: BorderRadius.circular(17),
+        color: Colors.white,
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 19,
-                backgroundColor: color.withValues(alpha: 0.13),
-                child: Icon(alert.icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      alert.severity.name.toUpperCase(),
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.7,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      alert.tankName,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      alert.parameter,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (onTap != null)
-                const Icon(
-                  LucideIcons.chevronRight,
-                  color: AppColors.muted,
-                  size: 18,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          _AlertHeading(alert: alert),
+          const SizedBox(height: 13),
           Text(
-            alert.message,
+            _compactAlertTitle(alert),
             style: const TextStyle(
               color: AppColors.text,
-              fontSize: 12,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            '${alert.startedLabel} · ${alert.statusLabel}',
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 10,
+              fontSize: 15,
+              height: 1.25,
               fontWeight: FontWeight.w700,
             ),
           ),
+          const SizedBox(height: 5),
+          Text(
+            '${alert.parameter} · ${alert.startedLabel}',
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              height: 1.25,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           if (alert.recommendation != null && alert.isActive) ...[
-            const SizedBox(height: 9),
+            const SizedBox(height: 10),
             Text(
-              'Recommended: ${alert.recommendation}',
+              alert.recommendation!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                height: 1.3,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
-          if (alert.isActive && onMarkHandled != null) ...[
-            const SizedBox(height: 9),
+          if (onTap != null || (alert.isActive && onMarkHandled != null)) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: AppColors.line.withValues(alpha: 0.9)),
+            const SizedBox(height: 5),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onMarkHandled,
-                icon: const Icon(LucideIcons.check, size: 16),
-                label: const Text('Mark handled'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.tealDark,
-                  minimumSize: const Size(44, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                ),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 2,
+                children: [
+                  if (onTap != null)
+                    Semantics(
+                      button: true,
+                      label: 'View ${alert.tankName} alert',
+                      child: TextButton.icon(
+                        key: ValueKey('alert-view-${alert.id}'),
+                        onPressed: onTap,
+                        icon: const Icon(LucideIcons.arrowUpRight, size: 17),
+                        label: const Text('View alert'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.tealDark,
+                          minimumSize: const Size(44, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          textStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (alert.isActive && onMarkHandled != null)
+                    Semantics(
+                      button: true,
+                      label: 'Mark ${alert.tankName} alert as handled',
+                      child: TextButton(
+                        key: ValueKey('alert-handle-${alert.id}'),
+                        onPressed: onMarkHandled,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.muted,
+                          minimumSize: const Size(44, 44),
+                          padding: const EdgeInsets.symmetric(horizontal: 5),
+                          textStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        child: const Text('Mark handled'),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -135,17 +122,130 @@ class AlertTile extends StatelessWidget {
       ),
     );
 
-    if (onTap == null) return child;
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: _alertSemanticsLabel(alert),
+      child: child,
+    );
+  }
+}
+
+class AlertHistoryRow extends StatelessWidget {
+  const AlertHistoryRow({super.key, required this.alert, this.onTap});
+
+  final AlertInfo alert;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TankIdentityMarker(initial: _tankInitial(alert.tankName), size: 42),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact =
+                    constraints.maxWidth < 190 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.25;
+                final title = Text(
+                  alert.tankName,
+                  maxLines: compact ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 14,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                );
+                final status = const _IncidentStatePill(
+                  label: 'Handled',
+                  color: AppColors.muted,
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    compact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              title,
+                              const SizedBox(height: 5),
+                              status,
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: title),
+                              const SizedBox(width: 7),
+                              status,
+                            ],
+                          ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _compactAlertTitle(alert),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 12,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Water quality · ${alert.startedLabel}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 10.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 6),
+            const Padding(
+              padding: EdgeInsets.only(top: 15),
+              child: Icon(
+                LucideIcons.chevronRight,
+                color: AppColors.muted,
+                size: 18,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    final row = Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.76),
+        border: Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: content,
+    );
+
+    if (onTap == null) return row;
     return Semantics(
       button: true,
-      label: 'Open ${alert.tankName} ${alert.parameter} alert',
+      label: 'Open ${alert.tankName} handled alert',
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(17),
-          child: child,
-        ),
+        child: InkWell(onTap: onTap, child: row),
       ),
     );
   }
@@ -165,93 +265,125 @@ class MonitoringIncidentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: incident.isActive
-            ? highlighted
-                  ? AppColors.mint.withValues(alpha: 0.42)
-                  : AppColors.offline.withValues(alpha: 0.07)
-            : Colors.white.withValues(alpha: 0.72),
-        border: Border.all(
-          color: highlighted
-              ? AppColors.tealDark
-              : incident.isActive
-              ? AppColors.offline
-              : AppColors.line,
-          width: highlighted ? 1.5 : 1,
-        ),
-        borderRadius: BorderRadius.circular(17),
-      ),
+    final statusColor = incident.isActive
+        ? AppColors.offline
+        : AppColors.tealDark;
+    final statusLabel = incident.isActive ? 'Offline' : 'Recovered';
+    final timeLabel = incident.isActive
+        ? incident.startedLabel
+        : incident.recoveredLabel ?? incident.startedLabel;
+
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: AppColors.offline.withValues(alpha: 0.13),
-            child: const Icon(
-              LucideIcons.wifiOff,
-              color: AppColors.offline,
-              size: 20,
-            ),
+          TankIdentityMarker(
+            initial: _tankInitial(incident.tankName),
+            size: 42,
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  incident.isActive
-                      ? 'MONITORING OUTAGE'
-                      : 'RECOVERED MONITORING OUTAGE',
-                  style: const TextStyle(
-                    color: AppColors.offline,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact =
+                    constraints.maxWidth < 190 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.25;
+                final title = Text(
                   incident.tankName,
+                  maxLines: compact ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.text,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  incident.message,
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  incident.recoveredLabel ?? incident.startedLabel,
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 10,
+                    fontSize: 14,
+                    height: 1.2,
                     fontWeight: FontWeight.w700,
                   ),
-                ),
-              ],
+                );
+                final status = _IncidentStatePill(
+                  label: statusLabel,
+                  color: statusColor,
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    compact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              title,
+                              const SizedBox(height: 5),
+                              status,
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: title),
+                              const SizedBox(width: 7),
+                              status,
+                            ],
+                          ),
+                    const SizedBox(height: 4),
+                    Text(
+                      incident.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 12,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Monitoring · $timeLabel',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 10.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-          if (onTap != null)
-            const Icon(
-              LucideIcons.chevronRight,
-              color: AppColors.muted,
-              size: 18,
+          if (onTap != null) ...[
+            const SizedBox(width: 6),
+            const Padding(
+              padding: EdgeInsets.only(top: 15),
+              child: Icon(
+                LucideIcons.chevronRight,
+                color: AppColors.muted,
+                size: 18,
+              ),
             ),
+          ],
         ],
       ),
     );
 
-    if (onTap == null) return child;
+    final row = Container(
+      key: ValueKey('monitoring-row-${incident.id}'),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.mint.withValues(alpha: 0.28)
+            : Colors.white.withValues(alpha: 0.76),
+        border: Border.all(
+          color: highlighted ? AppColors.teal : AppColors.line,
+          width: highlighted ? 1.5 : 1,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: content,
+    );
+
+    if (onTap == null) return row;
     return Semantics(
       button: true,
       label: 'Open monitoring incident for ${incident.tankName}',
@@ -259,17 +391,161 @@ class MonitoringIncidentTile extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(17),
-          child: child,
+          borderRadius: BorderRadius.circular(14),
+          child: row,
         ),
       ),
     );
   }
 }
 
-Color _severityColor(AlertSeverity severity) {
-  return switch (severity) {
-    AlertSeverity.critical => AppColors.critical,
-    AlertSeverity.warning => AppColors.warning,
+class AlertSeverityPill extends StatelessWidget {
+  const AlertSeverityPill({super.key, required this.severity});
+
+  final AlertSeverity severity;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCritical = severity == AlertSeverity.critical;
+    final color = isCritical ? AppColors.critical : AppColors.warning;
+    final label = isCritical ? 'Critical' : 'Warning';
+    return Semantics(
+      container: true,
+      label: 'Alert severity $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          border: Border.all(color: color.withValues(alpha: 0.45)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isCritical ? LucideIcons.circleAlert : LucideIcons.triangleAlert,
+              color: color,
+              size: 14,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertHeading extends StatelessWidget {
+  const _AlertHeading({required this.alert});
+
+  final AlertInfo alert;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TankIdentityMarker(initial: _tankInitial(alert.tankName), size: 50),
+        const SizedBox(width: 11),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact =
+                  constraints.maxWidth < 230 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.25;
+              final tankName = Text(
+                alert.tankName,
+                maxLines: compact ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 16,
+                  height: 1.15,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+              final severity = AlertSeverityPill(severity: alert.severity);
+              return compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [tankName, const SizedBox(height: 7), severity],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: tankName),
+                        const SizedBox(width: 7),
+                        severity,
+                      ],
+                    );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _IncidentStatePill extends StatelessWidget {
+  const _IncidentStatePill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: 'Incident status $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          border: Border.all(color: color.withValues(alpha: 0.38)),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _alertSemanticsLabel(AlertInfo alert) {
+  final recommendation = alert.recommendation;
+  return [
+    alert.tankName,
+    alert.severity == AlertSeverity.critical ? 'Critical' : 'Warning',
+    _compactAlertTitle(alert),
+    alert.parameter,
+    alert.startedLabel,
+    if (recommendation != null && alert.isActive) recommendation,
+  ].join(', ');
+}
+
+String _compactAlertTitle(AlertInfo alert) {
+  return switch (alert.message.trim()) {
+    'TDS is outside the configured range.' => 'TDS outside configured range',
+    'pH requires attention in the quarantine range.' => 'pH requires attention',
+    _ => alert.message,
   };
+}
+
+String _tankInitial(String tankName) {
+  final trimmed = tankName.trim();
+  return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
 }

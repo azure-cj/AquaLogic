@@ -1,4 +1,5 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/shared/formatters/freshness_labels.dart';
 import 'package:flutter/material.dart';
 
 class TankIdentityMarker extends StatelessWidget {
@@ -59,12 +60,5 @@ class TankIdentityMarker extends StatelessWidget {
 }
 
 String compactFreshnessLabel(String label) {
-  final trimmed = label.trim();
-  if (trimmed.toLowerCase().startsWith('updated ')) {
-    return trimmed.substring('updated '.length);
-  }
-  if (trimmed.toLowerCase().startsWith('last report ')) {
-    return trimmed.substring('last report '.length);
-  }
-  return trimmed;
+  return formatFreshnessLabel(label);
 }

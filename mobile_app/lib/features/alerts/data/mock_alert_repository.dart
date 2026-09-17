@@ -1,7 +1,7 @@
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/demo/demo_data.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
-import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 abstract class AlertRepository {
   AlertCenterData load({required SensorSnapshot snapshot});
@@ -28,7 +28,7 @@ class MockAlertRepository implements AlertRepository {
           startedLabel: 'Started 18 min ago',
           lifecycle: AlertLifecycle.active,
           recommendation: 'Review the tank before the next water change.',
-          icon: Icons.error_outline,
+          icon: LucideIcons.circleAlert,
         ),
         const AlertInfo(
           id: 'quarantine-b-ph',
@@ -40,7 +40,7 @@ class MockAlertRepository implements AlertRepository {
           startedLabel: 'Started 6 min ago',
           lifecycle: AlertLifecycle.active,
           recommendation: 'Review the latest reading.',
-          icon: Icons.warning_amber_rounded,
+          icon: LucideIcons.triangleAlert,
         ),
       ],
       const AlertInfo(
@@ -52,7 +52,7 @@ class MockAlertRepository implements AlertRepository {
         message: 'Temperature returned to the configured range.',
         startedLabel: 'Handled 2h ago',
         lifecycle: AlertLifecycle.handled,
-        icon: Icons.check_circle_outline,
+        icon: LucideIcons.circleCheck,
       ),
     ];
 

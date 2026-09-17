@@ -6,6 +6,7 @@ import 'package:aqualogic/features/home/widgets/home_shared_widgets.dart';
 import 'package:aqualogic/features/home/widgets/owner_home_content.dart';
 import 'package:aqualogic/features/home/widgets/staff_home_content.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
+import 'package:aqualogic/app/theme/app_tokens.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
 import 'package:flutter/material.dart';
 
@@ -45,6 +46,7 @@ class HomeScreen extends StatelessWidget {
     };
 
     return AppPage(
+      bottomClearance: AppSpacing.bottomDockClearance,
       header: HomeHero(
         user: user,
         isOnline: snapshot.isOnline,

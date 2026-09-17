@@ -1,10 +1,17 @@
+import 'package:aqualogic/app/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
 class AppPage extends StatelessWidget {
-  const AppPage({super.key, required this.header, required this.children});
+  const AppPage({
+    super.key,
+    required this.header,
+    required this.children,
+    this.bottomClearance = 0,
+  });
 
   final Widget header;
   final List<Widget> children;
+  final double bottomClearance;
 
   @override
   Widget build(BuildContext context) {
@@ -12,11 +19,17 @@ class AppPage extends StatelessWidget {
       slivers: [
         SliverToBoxAdapter(child: header),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pageGutter,
+            AppSpacing.pageTop,
+            AppSpacing.pageGutter,
+            AppSpacing.pageBottom + bottomClearance,
+          ),
           sliver: SliverList.separated(
             itemCount: children.length,
             itemBuilder: (context, index) => children[index],
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            separatorBuilder: (context, index) =>
+                const SizedBox(height: AppSpacing.sectionGap),
           ),
         ),
       ],

@@ -191,7 +191,7 @@ class _SplashScene extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 34,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0,
                         ),
                       ),

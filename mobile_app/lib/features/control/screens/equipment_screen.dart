@@ -6,7 +6,7 @@ import 'package:aqualogic/features/control/models/equipment_models.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
-import 'package:aqualogic/shared/widgets/header_panel.dart';
+import 'package:aqualogic/features/more/widgets/more_header.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
@@ -54,32 +54,11 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       body: SafeArea(
         top: false,
         child: AppPage(
-          header: HeaderPanel(
-            compact: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton.filledTonal(
-                  tooltip: 'Back to ${widget.tank.name}',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(LucideIcons.arrowLeft),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Equipment',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  widget.tank.name,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
+          header: MoreHeader(
+            title: 'Equipment',
+            subtitle: widget.tank.name,
+            backLabel: 'Back to ${widget.tank.name}',
+            onBack: () => Navigator.of(context).pop(),
           ),
           children: [
             if (!_canManage) _ReadOnlyNotice(isRetired: widget.tank.isRetired),
@@ -307,7 +286,7 @@ class _LatestCommandCard extends StatelessWidget {
                   style: TextStyle(
                     color: AppColors.muted,
                     fontSize: 10,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -316,7 +295,7 @@ class _LatestCommandCard extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 13,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -361,41 +340,77 @@ class _EquipmentDeviceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 21,
-                backgroundColor: AppColors.teal.withValues(alpha: 0.17),
-                child: Icon(icon, color: AppColors.tealDark, size: 20),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+              final stackConnection =
+                  textScale > 1.5 || constraints.maxWidth < 270;
+              final identity = Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 21,
+                    backgroundColor: AppColors.teal.withValues(alpha: 0.17),
+                    child: Icon(icon, color: AppColors.tealDark, size: 20),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          device.name,
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          device.subtitle,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+              final connection = DeviceConnectionBadge(
+                status: device.connection,
+                compact: true,
+              );
+              if (stackConnection) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      device.name,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      device.subtitle,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 11,
-                        height: 1.25,
+                    identity,
+                    Padding(
+                      padding: const EdgeInsets.only(left: 53, top: 8),
+                      child: SizedBox(
+                        width: constraints.maxWidth - 53,
+                        child: FittedBox(
+                          alignment: Alignment.centerLeft,
+                          fit: BoxFit.scaleDown,
+                          child: connection,
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ),
-              DeviceConnectionBadge(status: device.connection, compact: true),
-            ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: identity),
+                  connection,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 13),
           Row(
@@ -476,7 +491,7 @@ class _DeviceInfo extends StatelessWidget {
           style: const TextStyle(
             color: AppColors.text,
             fontSize: 12,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
@@ -523,7 +538,7 @@ class _CommandHistoryCard extends StatelessWidget {
             style: TextStyle(
               color: AppColors.text,
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
             ),
           ),
           subtitle: Text(
@@ -565,7 +580,7 @@ class _CommandRow extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 12,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 3),

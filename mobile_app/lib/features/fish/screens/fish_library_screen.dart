@@ -3,7 +3,7 @@ import 'package:aqualogic/features/fish/data/mock_fish_repository.dart';
 import 'package:aqualogic/features/fish/models/fish_species.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
-import 'package:aqualogic/shared/widgets/header_panel.dart';
+import 'package:aqualogic/features/more/widgets/more_header.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
@@ -41,62 +41,63 @@ class _FishLibraryScreenState extends State<FishLibraryScreen> {
       body: SafeArea(
         top: false,
         child: AppPage(
-          header: HeaderPanel(
-            compact: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton.filledTonal(
-                  tooltip: 'Back',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(LucideIcons.arrowLeft),
+          header: MoreHeader(
+            title: 'Fish species',
+            subtitle: 'Practical care references for your tanks',
+            onBack: () => Navigator.of(context).pop(),
+            bottom: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search species...',
+                hintStyle: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 15,
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Fish species',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
+                prefixIcon: const Icon(
+                  LucideIcons.search,
+                  color: AppColors.tealDark,
+                ),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.94),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 13,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.line),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.line),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(
+                    color: AppColors.tealDark,
+                    width: 1.5,
                   ),
                 ),
-                const SizedBox(height: 3),
-                const Text(
-                  'Practical care references for your tanks',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  onChanged: (value) => setState(() => _query = value),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search species...',
-                    prefixIcon: const Icon(LucideIcons.search),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 11),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           children: [
             if (widget.assignedTankName != null)
               _AssignedContext(tankName: widget.assignedTankName!),
-            Row(
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                const Expanded(
-                  child: Text(
-                    'Species directory',
-                    style: TextStyle(
-                      color: AppColors.text,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
+                const Text(
+                  'Species directory',
+                  style: TextStyle(
+                    color: AppColors.text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 Text(
@@ -203,7 +204,7 @@ class FishSpeciesCard extends StatelessWidget {
                         style: const TextStyle(
                           color: AppColors.text,
                           fontSize: 15,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -248,7 +249,7 @@ class FishSpeciesCard extends StatelessWidget {
                         style: const TextStyle(
                           color: AppColors.text,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -311,13 +312,21 @@ class SpeciesDetailScreen extends StatelessWidget {
     if (species == null) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('Species detail')),
-        body: const Padding(
-          padding: EdgeInsets.all(16),
-          child: EmptyState(
-            title: 'Species unavailable',
-            message: 'This local species record is not available.',
-            icon: LucideIcons.circleHelp,
+        body: SafeArea(
+          top: false,
+          child: AppPage(
+            header: MoreHeader(
+              title: 'Species detail',
+              subtitle: 'This species record is unavailable',
+              onBack: () => Navigator.of(context).pop(),
+            ),
+            children: const [
+              EmptyState(
+                title: 'Species unavailable',
+                message: 'This local species record is not available.',
+                icon: LucideIcons.circleHelp,
+              ),
+            ],
           ),
         ),
       );
@@ -328,32 +337,10 @@ class SpeciesDetailScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: AppPage(
-          header: HeaderPanel(
-            compact: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton.filledTonal(
-                  tooltip: 'Back',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(LucideIcons.arrowLeft),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Species detail',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  species.name,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
+          header: MoreHeader(
+            title: 'Species detail',
+            subtitle: species.name,
+            onBack: () => Navigator.of(context).pop(),
           ),
           children: [
             _SpeciesHeading(species: species, suitability: suitability),
@@ -369,7 +356,7 @@ class SpeciesDetailScreen extends StatelessWidget {
                         style: const TextStyle(
                           color: AppColors.text,
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -459,7 +446,7 @@ class _SpeciesHeading extends StatelessWidget {
                       style: const TextStyle(
                         color: AppColors.text,
                         fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
@@ -495,7 +482,7 @@ class _SpeciesHeading extends StatelessWidget {
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
@@ -557,7 +544,7 @@ class _TextInfoCard extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.text,
                     fontSize: 13,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -608,7 +595,7 @@ class _AssignedContext extends StatelessWidget {
               style: const TextStyle(
                 color: AppColors.text,
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -677,7 +664,7 @@ class _FishFilterChip extends StatelessWidget {
       labelStyle: TextStyle(
         color: selected ? AppColors.tealDark : AppColors.text,
         fontSize: 11,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
@@ -701,7 +688,7 @@ class _TypeLabel extends StatelessWidget {
         style: const TextStyle(
           color: AppColors.tealDark,
           fontSize: 9,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
