@@ -6,6 +6,60 @@ Last reviewed: 2026-09-15
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-09-17 — ESP32 bridge drains the offline backlog with ack-after-confirmation
+
+**Decision:** The temporary ESP32 bridge now drains the sensor backlog the
+firmware records to flash while offline. On every successful live `/data` poll
+it calls `GET /data/backlog/count`; when `pending > 0` it pulls batches of 50
+records (`GET /data/backlog?limit=50`), forwards each record to the existing
+`POST /device-ingestion/readings` endpoint with the same `X-Device-Key`
+auth, and only then acks on the device (`POST /data/backlog/ack?upto=seq`)
+after the backend confirms each batch. Drain is capped at 500 records per poll
+cycle and is skipped entirely when the live poll fails.
+
+**Reason:** The live-only bridge dropped every reading taken while the ESP32
+was offline between bridge polls or WiFi outages. Draining is additive per
+cycle, reuses the existing live-forwarding endpoint/auth/field mapping, and
+never blocks the normal polling cadence.
+
+**Consequences:** A backward-forward failure mid-batch acks only the already
+confirmed prefix, so acked records are never re-sent (no duplicates) and
+unacked records stay on the device for the next cycle (no loss — the ESP32
+re-returns them until acked). Drain failures are logged and never crash the
+process or disturb live polling. The ack endpoint is the only new device call;
+no backend endpoint was added or changed. Confirmed upstream in
+`bridge/esp32_bridge.py` and `bridge/tests/test_esp32_bridge.py`.
+
+## 2026-09-17 — Backlogged ESP32 readings get an estimated observed_at in the bridge
+
+**Decision:** Backfilled readings no longer share the drain time as
+`observed_at` (the previous behavior stamped every backlogged record at the
+moment it was forwarded, wrong by up to the full outage duration). The bridge
+now estimates each record's sample time by spreading records evenly over
+`[last clean live reading, now]` in `seq` order. The anchor is frozen while the
+backlog is non-empty so the window does not drift across multi-cycle drains,
+and it resets to `None` on bridge restart, in which case the window falls back
+to `now - pending * poll_interval_seconds`. Estimates are marked
+`time_estimated=true` / `estimation_method="even_spread"` on the internal
+payload and in the drain log line; the marker keys are stripped before posting
+because the backend schema forbids unknown fields today.
+
+**Reason:** The ESP32 has no real-time clock (no RTC/NTP in scope), so true
+sample times are unknowable; a deterministic, monotonic best-guess is strictly
+better than stamping everything with drain time (which corrupts ordering and
+interval-based dashboards/reporting).
+
+**Consequences:** Live `/data` forwarding is unchanged. A reboot mid-outage
+produces a seq jump; estimation still yields bounded, non-future timestamps and
+never crashes. The estimation flag is not yet persisted on
+`backend/app/schemas/sensor.py` (`SensorReadingCreate` uses `extra="forbid"`, so
+markers must stay off the wire). Follow-up: add `time_estimated` (and optionally
+`estimation_method`) to `DeviceReadingCreate` / the `SensorReading` model with
+an Alembic migration, wire it through `ingest_device_reading` in
+`backend/app/routes/devices.py`, expose it in `SensorReadingRead`, then re-enable
+sending the markers from the bridge. Confirmed upstream in
+`bridge/esp32_bridge.py:815-924` and `bridge/tests/test_esp32_bridge.py`.
+
 ## 2026-09-15 — Use a translating overlay for mobile bottom navigation
 
 **Decision:** Keep the authenticated mobile shell's four destinations—Home,

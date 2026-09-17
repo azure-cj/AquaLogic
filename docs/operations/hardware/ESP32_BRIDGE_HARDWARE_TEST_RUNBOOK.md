@@ -124,6 +124,35 @@ The bridge validates and forwards sensor readings, polls pending commands,
 calls only the allowlisted local routes, and reports state/results. It does not
 print the device key or Wi-Fi configuration.
 
+## Offline backlog draining
+
+The firmware buffers readings to flash while it is offline from the bridge. On
+each successful live `/data` poll, the bridge checks
+`GET /data/backlog/count` and, when `pending > 0`, pulls the buffered records
+in batches of 50 (`GET /data/backlog?limit=50`), forwards each through the same
+`POST /device-ingestion/readings` endpoint and `X-Device-Key` auth as live
+readings, and only then acks them on the device
+(`POST /data/backlog/ack?upto=<seq>`). Drain is capped at 500 records per poll
+cycle; a forward failure acks only the already-confirmed prefix, logs, and
+retries next cycle — unacked records are never lost and confirmed records are
+never re-sent. Drain failures never crash the bridge or slow the live poll.
+
+To verify: during an offline period, confirm the ESP32 is recording a backlog
+(`GET http://<esp32-ip>/data/backlog/count` shows `pending > 0`), then let the
+bridge poll the live endpoint again. The bridge logs `[BACKLOG] draining N
+pending records` and `[BACKLOG] acked up to seq N`; the ESP32's count returns
+to `pending: 0` once drained; and the readings appear in the tank's reading
+history in the backend (readings list/API or DB), with observed values matching
+the recorded sensor data.
+
+Backfilled readings get an **estimated** `observed_at`: they are spread evenly
+across the interval between the last clean live reading and now, in `seq`
+order (the ESP32 has no real-time clock). The drain log line records this as
+`time_estimated=true, method=even_spread, window=[start, now]`. Because the
+backend schema does not yet persist an estimation flag, the marker keys are
+stripped before posting; treat backfilled timestamps as approximate until the
+backend field addition is shipped.
+
 For a controlled pump test only, confirm the physical setup is empty or
 water-only, then change `pump_manual_test_enabled` to `true`. The dashboard
 shows the firmware-reported configured volume in mL; **Dispense / test** starts

@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -11,6 +12,13 @@ import esp32_bridge as bridge
 
 
 FIXTURE = Path(__file__).parents[2] / "backend" / "tests" / "fixtures" / "esp32_data.json"
+
+
+@pytest.fixture(autouse=True)
+def _reset_bridge_backlog_anchor():
+    bridge._last_live_reading_at = None
+    yield
+    bridge._last_live_reading_at = None
 
 
 def test_translates_only_supported_esp32_fields():
@@ -32,6 +40,18 @@ def test_unreachable_esp32_does_not_submit():
         with pytest.raises(bridge.URLError):
             bridge.run_once(config)
     submit.assert_not_called()
+
+
+def test_backlog_drain_runs_only_after_a_successful_live_poll():
+    config = {"esp32_data_url": "http://esp32.invalid/data", "aqualogic_backend_url": "https://api.example", "device_key": "test", "timeout_seconds": 1, "actuator_enabled": False}
+    with patch.object(bridge, "poll_sensor_once", side_effect=bridge.URLError("offline")), \
+        patch.object(bridge, "drain_backlog") as drain:
+        with pytest.raises(bridge.URLError):
+            bridge.run_once(config)
+    drain.assert_not_called()
+    with patch.object(bridge, "poll_sensor_once"), patch.object(bridge, "drain_backlog") as drain:
+        bridge.run_once(config)
+    drain.assert_called_once_with(config)
 
 
 def test_invalid_esp32_json_is_reported():
@@ -432,3 +452,205 @@ def test_config_rejects_public_esp32_address(tmp_path):
     }))
     with pytest.raises(bridge.BridgeError, match="private"):
         bridge.load_config(path)
+
+
+def backlog_record(seq, temperature=26.0, ph=7.1, turbidity=1.2, tds=220.0):
+    return {
+        "seq": seq,
+        "temp_c": temperature,
+        "ph_value": ph,
+        "ph_status": "ok",
+        "turbidity_ntu": turbidity,
+        "turbidity_status": "ok",
+        "tds_ppm": tds,
+        "tds_status": "ok",
+        "overall_status": "ok",
+    }
+
+
+def drain_config():
+    return {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "key",
+        "timeout_seconds": 1,
+    }
+
+
+def zero_backlog_count():
+    return {"pending": 0, "dropped": 0, "oldest_seq": 0, "newest_seq": 0}
+
+
+def test_fetch_backlog_count_rejects_invalid_shape():
+    config = drain_config()
+    with patch.object(bridge, "fetch_json", return_value={"pending": 1}), \
+        pytest.raises(bridge.BridgeError, match="backlog count"):
+        bridge.fetch_backlog_count(config)
+
+
+def test_drain_skips_when_nothing_is_pending():
+    config = drain_config()
+    with patch.object(bridge, "fetch_backlog_count", return_value=zero_backlog_count()) as count, \
+        patch.object(bridge, "fetch_backlog_batch") as fetch, \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 0
+    count.assert_called_once_with(config)
+    fetch.assert_not_called()
+    submit.assert_not_called()
+    ack.assert_not_called()
+
+
+def test_drain_forwards_and_acks_each_batch():
+    config = drain_config()
+    first_batch = [backlog_record(1), backlog_record(2)]
+    second_batch = [backlog_record(3)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 3, "dropped": 0, "oldest_seq": 1, "newest_seq": 3}) as count, \
+        patch.object(bridge, "BACKLOG_BATCH_LIMIT", 2), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[first_batch, second_batch, []]) as fetch, \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 3
+    count.assert_called_once_with(config)
+    assert [call.args[0] for call in fetch.call_args_list] == [config, config]
+    assert submit.call_count == 3
+    assert [set(x.args[2]) for x in submit.call_args_list] == [
+        {"temperature", "ph", "turbidity", "tds", "observed_at"}] * 3
+    assert [x.args[2]["temperature"] for x in submit.call_args_list] == [26.0, 26.0, 26.0]
+    assert [call.args for call in ack.call_args_list] == [(config, 2), (config, 3)]
+
+
+def test_drain_forwards_a_small_backlog_in_one_batch():
+    config = drain_config()
+    batch = [backlog_record(1), backlog_record(2), backlog_record(3)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 3, "dropped": 0, "oldest_seq": 1, "newest_seq": 3}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading"), \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 3
+    assert [call.args for call in ack.call_args_list] == [(config, 3)]
+
+
+def test_drain_does_not_ack_when_first_forward_fails():
+    config = drain_config()
+    batch = [backlog_record(1), backlog_record(2)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 2, "dropped": 0, "oldest_seq": 1, "newest_seq": 2}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading", side_effect=bridge.URLError("offline")), \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 0
+    ack.assert_not_called()
+
+
+def test_drain_acks_confirmed_prefix_on_partial_batch_failure():
+    config = drain_config()
+    batch = [backlog_record(1), backlog_record(2), backlog_record(3)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 3, "dropped": 0, "oldest_seq": 1, "newest_seq": 3}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading", side_effect=[None, None, bridge.URLError("offline")]), \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 2
+    assert [call.args for call in ack.call_args_list] == [(config, 2)]
+
+
+def test_drain_stops_at_per_cycle_cap():
+    config = drain_config()
+    batches = [[backlog_record(seq)] for seq in range(1, 11)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 10, "dropped": 0, "oldest_seq": 1, "newest_seq": 10}), \
+        patch.object(bridge, "BACKLOG_MAX_PER_CYCLE", 3), \
+        patch.object(bridge, "BACKLOG_BATCH_LIMIT", 1), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=batches), \
+        patch.object(bridge, "post_reading"), \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 3
+    assert [call.args for call in ack.call_args_list] == [(config, 1), (config, 2), (config, 3)]
+
+
+def test_drain_estimates_observed_at_by_even_spread():
+    config = drain_config()
+    batch = [backlog_record(1), backlog_record(2), backlog_record(3)]
+    before = datetime.now(timezone.utc)
+    bridge._last_live_reading_at = before - timedelta(seconds=60)
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 3, "dropped": 0, "oldest_seq": 1, "newest_seq": 3}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog"):
+        assert bridge.drain_backlog(config) == 3
+    after = datetime.now(timezone.utc)
+    stamps = [datetime.fromisoformat(x.args[2]["observed_at"]) for x in submit.call_args_list]
+    assert len(stamps) == 3
+    assert stamps == sorted(stamps)
+    assert bridge._last_live_reading_at < stamps[0] < before
+    assert before <= stamps[-1] <= after
+    step = stamps[1] - stamps[0]
+    assert step > timedelta(seconds=5)
+    assert abs((stamps[2] - stamps[1]) - step) < timedelta(seconds=1)
+
+
+def test_drain_observed_at_survives_reboot_seq_jump():
+    config = drain_config()
+    # The ESP32 returns its buffer newest first, so after a reboot the oldest
+    # batch can be a mix of the pre-reboot high seqs and post-reboot low seqs.
+    batch = [backlog_record(100001), backlog_record(100002), backlog_record(1), backlog_record(2)]
+    before = datetime.now(timezone.utc)
+    bridge._last_live_reading_at = before - timedelta(seconds=60)
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 4, "dropped": 0, "oldest_seq": 1, "newest_seq": 100002}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog"):
+        assert bridge.drain_backlog(config) == 4
+    after = datetime.now(timezone.utc)
+    stamps = dict(zip([100001, 100002, 1, 2], [datetime.fromisoformat(x.args[2]["observed_at"]) for x in submit.call_args_list]))
+    assert bridge._last_live_reading_at < stamps[1] < stamps[2] < stamps[100001] < stamps[100002] <= after
+    assert stamps[1] - bridge._last_live_reading_at < timedelta(seconds=1)
+
+
+def test_drain_marks_estimates_but_strips_markers_at_the_wire(caplog):
+    config = drain_config()
+    batch = [backlog_record(1), backlog_record(2)]
+    bridge._last_live_reading_at = datetime.now(timezone.utc) - timedelta(seconds=60)
+    with caplog.at_level(logging.INFO, logger="aqualogic.bridge"), \
+        patch.object(bridge, "fetch_backlog_count", return_value={"pending": 2, "dropped": 0, "oldest_seq": 1, "newest_seq": 2}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog"):
+        bridge.drain_backlog(config)
+    assert "time_estimated=true" in caplog.text
+    assert "even_spread" in caplog.text
+    assert all(set(x.args[2]) == {"temperature", "ph", "turbidity", "tds", "observed_at"} for x in submit.call_args_list)
+
+
+def test_drain_falls_back_to_poll_interval_window_without_anchor():
+    config = drain_config()
+    batch = [backlog_record(seq) for seq in range(1, 11)]
+    before = datetime.now(timezone.utc)
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 10, "dropped": 0, "oldest_seq": 1, "newest_seq": 10}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading") as submit, \
+        patch.object(bridge, "_ack_backlog"):
+        bridge.drain_backlog(config)
+    stamps = [datetime.fromisoformat(x.args[2]["observed_at"]) for x in submit.call_args_list]
+    assert len(stamps) == 10
+    assert before - timedelta(seconds=150) <= stamps[0] <= before
+    assert stamps[-1] <= datetime.now(timezone.utc)
+
+
+def test_drain_updates_anchor_only_when_backlog_empties():
+    config = drain_config()
+    anchor = datetime.now(timezone.utc) - timedelta(seconds=60)
+    bridge._last_live_reading_at = anchor
+    batch = [backlog_record(1)]
+    with patch.object(bridge, "fetch_backlog_count", return_value={"pending": 1, "dropped": 0, "oldest_seq": 1, "newest_seq": 1}), \
+        patch.object(bridge, "fetch_backlog_batch", side_effect=[batch, []]), \
+        patch.object(bridge, "post_reading"), \
+        patch.object(bridge, "_ack_backlog"):
+        bridge.drain_backlog(config)
+    assert bridge._last_live_reading_at == anchor
+    before = datetime.now(timezone.utc)
+    with patch.object(bridge, "fetch_backlog_count", return_value=zero_backlog_count()), \
+        patch.object(bridge, "fetch_backlog_batch"), \
+        patch.object(bridge, "post_reading"), \
+        patch.object(bridge, "_ack_backlog"):
+        bridge.drain_backlog(config)
+    assert bridge._last_live_reading_at is not None
+    assert before - timedelta(seconds=1) <= bridge._last_live_reading_at <= datetime.now(timezone.utc)

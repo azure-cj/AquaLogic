@@ -8,7 +8,7 @@ import logging
 import math
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -32,6 +32,19 @@ PUMP_STATUS_POLL_INTERVAL_SECONDS = 0.25
 COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 PUMP_ACTUATORS = {"pump_a", "pump_b"}
+BACKLOG_BATCH_LIMIT = 50
+BACKLOG_MAX_PER_CYCLE = 500
+BACKLOG_ESTIMATION_FLAG = "time_estimated"
+BACKLOG_ESTIMATION_METHOD = "even_spread"
+BACKLOG_ESTIMATION_MARKER_KEYS = (BACKLOG_ESTIMATION_FLAG, "estimation_method")
+
+# Timestamp of the last live reading forwarded while the backlog was empty. The
+# ESP32 has no real-time clock, so backfilled records cannot know their true
+# sample times; the bridge spreads them across [this anchor, now] instead.
+# Frozen while the backlog is non-empty so the window does not drift mid-drain,
+# and reset to None across bridge restarts (falls back to now - pending * poll
+# interval for the window).
+_last_live_reading_at: datetime | None = None
 
 
 class BridgeError(ValueError):
@@ -80,10 +93,10 @@ def _split_time(value: str, label: str) -> tuple[str, str]:
     return hour, minute
 
 
-def translate_esp32_payload(payload: object) -> dict[str, float]:
+def translate_esp32_payload(payload: object, observed_at: datetime | None = None) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise BridgeError("ESP32 response must be a JSON object")
-    translated: dict[str, float] = {}
+    translated: dict[str, Any] = {}
     for source, target in FIELD_MAP.items():
         value = payload.get(source)
         if not _is_number(value):
@@ -92,7 +105,7 @@ def translate_esp32_payload(payload: object) -> dict[str, float]:
         if not minimum <= value <= maximum:
             raise BridgeError(f"ESP32 field {source!r} is outside the accepted range")
         translated[target] = float(value)
-    translated["observed_at"] = datetime.now(timezone.utc).isoformat()
+    translated["observed_at"] = (observed_at or datetime.now(timezone.utc)).isoformat()
     return translated
 
 
@@ -393,6 +406,40 @@ def _esp32_url(config: dict, path: str, query: dict[str, str] | None = None) -> 
 
 def _device_headers(config: dict) -> dict[str, str]:
     return {"X-Device-Key": config["device_key"]}
+
+
+def fetch_backlog_count(config: dict) -> dict[str, int]:
+    response = fetch_json(
+        _esp32_url(config, "/data/backlog/count"),
+        float(config["timeout_seconds"]),
+    )
+    expected = {"pending", "dropped", "oldest_seq", "newest_seq"}
+    if not isinstance(response, dict) or set(response) != expected:
+        raise BridgeError("ESP32 returned an invalid backlog count")
+    normalized: dict[str, int] = {}
+    for key in expected:
+        if not _is_int(response[key]) or response[key] < 0:
+            raise BridgeError("ESP32 returned an invalid backlog count")
+        normalized[key] = int(response[key])
+    return normalized
+
+
+def fetch_backlog_batch(config: dict, limit: int) -> list[object]:
+    response = fetch_json(
+        _esp32_url(config, "/data/backlog", {"limit": str(limit)}),
+        float(config["timeout_seconds"]),
+    )
+    if not isinstance(response, list):
+        raise BridgeError("ESP32 returned an invalid backlog batch")
+    return response
+
+
+def _ack_backlog(config: dict, upto: int) -> None:
+    url = _esp32_url(config, "/data/backlog/ack", {"upto": str(upto)})
+    request = Request(url, headers={"Accept": "application/json"}, method="POST")
+    with urlopen(request, timeout=float(config["timeout_seconds"])) as response:  # nosec B310: URL is deliberate bridge configuration
+        if response.status >= 300:
+            raise BridgeError(f"ESP32 returned HTTP {response.status} for backlog ack")
 
 
 def _pending_commands(config: dict) -> list[object]:
@@ -765,6 +812,119 @@ def poll_sensor_once(config: dict) -> None:
     LOG.info("Forwarded temperature=%s°C pH=%s turbidity=%sNTU TDS=%sppm", payload["temperature"], payload["ph"], payload["turbidity"], payload["tds"])
 
 
+def _backlog_estimate_window(config: dict, count: dict[str, int], now: datetime) -> datetime:
+    """Start of the interval to spread backlogged records across."""
+    anchor = _last_live_reading_at
+    if anchor is not None and anchor < now:
+        return anchor
+    pending = max(count["pending"], 1)
+    interval = float(config.get("poll_interval_seconds", 15))
+    return now - timedelta(seconds=pending * interval)
+
+
+def _estimate_observed_at(seq: int, oldest_seq: int, newest_seq: int, window_start: datetime, now: datetime) -> datetime:
+    """Best-guess sample time for one backlogged record by even spacing in seq order."""
+    span = newest_seq - oldest_seq + 1
+    if span < 1:
+        span = 1
+    fraction = min(max((seq - oldest_seq + 1) / span, 0.0), 1.0)
+    return window_start + (now - window_start) * fraction
+
+
+def drain_backlog(config: dict) -> int:
+    """Forward readings the ESP32 buffered while offline, acking only confirmed batches.
+
+    Backfilled records get an estimated observed_at. The ESP32 has no real-time
+    clock, so true sample times are unknowable; this best-guesses by spreading
+    each record evenly across [last clean live reading, now] in seq order. The
+    anchor is frozen while the backlog is non-empty so the window does not drift
+    during a multi-cycle drain. Estimates are marked time_estimated=true on the
+    internal payload and the marker keys are stripped just before posting, since
+    the backend schema rejects unknown fields today (see docs/DECISIONS.md).
+
+    Returns the number of records forwarded this cycle. Stateless like the live
+    poll: if a forward or ack fails mid-drain, the failure is logged and the next
+    poll cycle resumes from the same un-acked records. Confirmed records are
+    acked immediately so they are never re-sent, and unconfirmed records are
+    never acked so they are never lost.
+    """
+    global _last_live_reading_at
+    count = fetch_backlog_count(config)
+    if count["pending"] <= 0:
+        _last_live_reading_at = datetime.now(timezone.utc)
+        return 0
+    now = datetime.now(timezone.utc)
+    window_start = _backlog_estimate_window(config, count, now)
+    LOG.info(
+        "[BACKLOG] draining %d pending records (seq %d-%d)",
+        count["pending"],
+        count["oldest_seq"],
+        count["newest_seq"],
+    )
+    LOG.info(
+        "[BACKLOG] estimated observed_at for backfilled records (%s=true, method=%s, window=[%s, %s])",
+        BACKLOG_ESTIMATION_FLAG,
+        BACKLOG_ESTIMATION_METHOD,
+        window_start.isoformat(),
+        now.isoformat(),
+    )
+    forwarded = 0
+    while forwarded < BACKLOG_MAX_PER_CYCLE:
+        batch = fetch_backlog_batch(config, BACKLOG_BATCH_LIMIT)
+        if not batch:
+            break
+        # Validate and translate the whole batch up front so a malformed record
+        # is never half-forwarded. Reuses the live /data field mapping
+        # (temp_c->temperature, ph_value->ph, turbidity_ntu->turbidity,
+        # tds_ppm->tds) with an observed_at stamp estimated from the backlog
+        # window. seq drives acking only and is intentionally not forwarded.
+        validated: list[tuple[dict[str, Any], int]] = []
+        for record in batch:
+            if not isinstance(record, dict):
+                raise BridgeError("ESP32 backlog contains a non-object record")
+            seq = record.get("seq")
+            if not _is_int(seq) or seq < 0:
+                raise BridgeError("ESP32 backlog record is missing a valid seq")
+            seq = int(seq)
+            estimated_at = _estimate_observed_at(seq, count["oldest_seq"], count["newest_seq"], window_start, now)
+            payload = translate_esp32_payload(record, observed_at=estimated_at)
+            payload[BACKLOG_ESTIMATION_FLAG] = True
+            payload["estimation_method"] = BACKLOG_ESTIMATION_METHOD
+            validated.append((payload, seq))
+        confirmed_upto: int | None = None
+        try:
+            for payload, seq in validated:
+                # The backend schema forbids unknown fields (extra="forbid"), so
+                # the estimation markers never cross the wire; persisting them is
+                # the backend follow-up recorded in docs/DECISIONS.md.
+                wire_payload = {key: value for key, value in payload.items() if key not in BACKLOG_ESTIMATION_MARKER_KEYS}
+                post_reading(
+                    config["aqualogic_backend_url"],
+                    config["device_key"],
+                    wire_payload,
+                    float(config["timeout_seconds"]),
+                )
+                forwarded += 1
+                confirmed_upto = seq
+        except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
+            if confirmed_upto is not None:
+                try:
+                    _ack_backlog(config, confirmed_upto)
+                    LOG.info("[BACKLOG] acked confirmed prefix up to seq %d", confirmed_upto)
+                except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as ack_error:
+                    LOG.warning("[BACKLOG] could not ack confirmed prefix up to seq %d (%s)", confirmed_upto, safe_error(ack_error))
+            LOG.warning("[BACKLOG] forward failed after %d records this cycle, will retry next cycle (%s)", forwarded, safe_error(error))
+            return forwarded
+        last_seq = int(validated[-1][1])
+        _ack_backlog(config, last_seq)
+        LOG.info("[BACKLOG] acked up to seq %d (%d/%d records)", last_seq, forwarded, count["pending"])
+        if len(validated) < BACKLOG_BATCH_LIMIT:
+            break
+    if forwarded >= BACKLOG_MAX_PER_CYCLE and forwarded < count["pending"]:
+        LOG.info("[BACKLOG] per-cycle cap of %d records reached; remaining drain deferred to the next cycle", BACKLOG_MAX_PER_CYCLE)
+    return forwarded
+
+
 def run_once(config: dict) -> None:
     failures: list[BaseException] = []
     try:
@@ -772,6 +932,14 @@ def run_once(config: dict) -> None:
     except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
         failures.append(error)
         LOG.warning("Sensor poll failed (%s)", safe_error(error))
+    else:
+        try:
+            drain_backlog(config)
+        except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
+            # Backlog draining is optional catch-up. A failure here never
+            # crashes the process nor bumps the live-poll backoff; the next
+            # poll cycle retries from the same un-acked records.
+            LOG.warning("Backlog drain failed (%s)", safe_error(error))
 
     if config.get("actuator_enabled", True):
         try:

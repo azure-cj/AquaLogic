@@ -42,6 +42,12 @@ Last reviewed: 2026-09-15
   fixed tanks, ingest only four supported `/data` measurements, audit requests,
   and represent dissolved oxygen/ammonia as unavailable. See
   `operations/hardware/ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
+- The bridge drains the ESP32 offline backlog after successful live polls
+  (batched, acked only after backend confirmation, capped per cycle) and
+  backfills estimated `observed_at` timestamps spread evenly over the outage
+  interval, since the ESP32 has no real-time clock. Estimates are flagged
+  `time_estimated=true` in logs/docs only; persisting the flag is a backend
+  follow-up (see `DECISIONS.md`).
 - v1 admin-only actuator bridge controls are implemented for UV, normal LED, and
   fish feeder, plus a guarded Pump A/B manual-test phase. Pump commands use
   expiring server records, fixed device/tank mapping, firmware-configured mL
