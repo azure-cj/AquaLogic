@@ -20,25 +20,11 @@ class StaffHomeContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionTitle(title: 'Needs attention'),
-        const SizedBox(height: 8),
-        if (data.attentionItems.isEmpty)
-          const EmptyAttentionCard(
-            title: 'Nothing needs immediate attention',
-            message: 'All monitored tanks are currently normal.',
-          )
-        else
-          for (final item in data.attentionItems.take(3)) ...[
-            AttentionCard(
-              item: item,
-              onAction: item.type == HomeAttentionType.monitoring
-                  ? onOpenTanks
-                  : onOpenAlerts,
-            ),
-            if (item != data.attentionItems.take(3).last)
-              const SizedBox(height: 10),
-          ],
-        const SizedBox(height: 18),
+        PriorityAttentionSection(
+          attentionItems: data.attentionItems,
+          onOpenAlerts: onOpenAlerts,
+          onOpenTanks: onOpenTanks,
+        ),
         MonitoringSummaryCard(summary: data.monitoring),
         const SizedBox(height: 18),
         SectionTitle(

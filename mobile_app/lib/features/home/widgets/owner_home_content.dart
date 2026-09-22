@@ -19,34 +19,15 @@ class OwnerHomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priorityItem = data.attentionItems.isEmpty
-        ? null
-        : data.attentionItems.first;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (priorityItem != null) ...[
-          SectionTitle(
-            title: data.attentionItems.length == 1
-                ? 'Needs attention'
-                : 'Highest priority',
-            action: 'View all alerts',
-            actionArrow: true,
-            onTap: onOpenAlerts,
-          ),
-          const SizedBox(height: 8),
-          AttentionCard(
-            item: priorityItem,
-            compact: true,
-            onAction: onOpenAlert == null
-                ? priorityItem.type == HomeAttentionType.monitoring
-                      ? onOpenTanks
-                      : onOpenAlerts
-                : () => onOpenAlert!(priorityItem),
-          ),
-          const SizedBox(height: 18),
-        ],
+        PriorityAttentionSection(
+          attentionItems: data.attentionItems,
+          onOpenAlerts: onOpenAlerts,
+          onOpenTanks: onOpenTanks,
+          onOpenAlert: onOpenAlert,
+        ),
         SectionTitle(
           title: 'Fleet overview',
           action: 'View all',

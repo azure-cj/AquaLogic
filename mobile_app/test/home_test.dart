@@ -217,7 +217,9 @@ void main() {
     },
   );
 
-  testWidgets('Staff Home has a calm all-normal empty state', (tester) async {
+  testWidgets('Staff Home matches the owner attention empty state', (
+    tester,
+  ) async {
     const data = HomeDashboardData(
       tanks: [
         HomeTankSummary(
@@ -252,11 +254,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Nothing needs immediate attention'), findsOneWidget);
-    expect(
-      find.text('All monitored tanks are currently normal.'),
-      findsOneWidget,
-    );
+    expect(find.text('Needs attention'), findsNothing);
+    expect(find.text('Nothing needs immediate attention'), findsNothing);
+    expect(find.byKey(const ValueKey('owner-priority-card')), findsNothing);
   });
 
   testWidgets('Owner Home remains usable at common mobile widths', (

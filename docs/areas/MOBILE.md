@@ -55,8 +55,8 @@ Implemented:
 
 - Owner Home focused on fleet condition, exceptions, compact fleet overview,
   monitoring/reporting state, and recent activity.
-- Staff Home focused on actionable attention items, monitoring/reporting state,
-  tank rounds, and recent activity.
+- Staff Home focused on the same compact highest-priority attention card,
+  monitoring/reporting state, tank rounds, and recent activity.
 - Shared Home components for role headers, operational status badges, attention
   cards, tank rows, monitoring summaries, and activity rows.
 - Backend-compatible operational status presentation: `Normal`, `Warning`,

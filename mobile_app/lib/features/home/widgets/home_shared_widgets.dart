@@ -284,6 +284,52 @@ class FleetStatusSheet extends StatelessWidget {
   }
 }
 
+class PriorityAttentionSection extends StatelessWidget {
+  const PriorityAttentionSection({
+    super.key,
+    required this.attentionItems,
+    required this.onOpenAlerts,
+    required this.onOpenTanks,
+    this.onOpenAlert,
+  });
+
+  final List<HomeAttentionItem> attentionItems;
+  final VoidCallback onOpenAlerts;
+  final VoidCallback onOpenTanks;
+  final ValueChanged<HomeAttentionItem>? onOpenAlert;
+
+  @override
+  Widget build(BuildContext context) {
+    if (attentionItems.isEmpty) return const SizedBox.shrink();
+
+    final priorityItem = attentionItems.first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionTitle(
+          title: attentionItems.length == 1
+              ? 'Needs attention'
+              : 'Highest priority',
+          action: 'View all alerts',
+          actionArrow: true,
+          onTap: onOpenAlerts,
+        ),
+        const SizedBox(height: 8),
+        AttentionCard(
+          item: priorityItem,
+          compact: true,
+          onAction: onOpenAlert == null
+              ? priorityItem.type == HomeAttentionType.monitoring
+                    ? onOpenTanks
+                    : onOpenAlerts
+              : () => onOpenAlert!(priorityItem),
+        ),
+        const SizedBox(height: 18),
+      ],
+    );
+  }
+}
+
 class AttentionCard extends StatelessWidget {
   const AttentionCard({
     super.key,
