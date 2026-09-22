@@ -2,12 +2,19 @@
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:windowSplashScreenBackground">#003F61</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#17C6C8</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/aqualogic_icon</item>
+        <item name="android:windowSplashScreenBackground">#EAF8FA</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/aqualogic_splash_mark</item>
+        <item name="android:statusBarColor">#EAF8FA</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#EAF8FA</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowBackground">@drawable/normal_background</item>
+        <item name="android:statusBarColor">#EAF8FA</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#EAF8FA</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

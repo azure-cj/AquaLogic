@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 Future<void> _pumpToLogin(WidgetTester tester) async {
   await tester.pumpWidget(AquaLogicApp(authService: MockAuthService()));
-  await tester.pump(const Duration(milliseconds: 1600));
+  await tester.pump(const Duration(milliseconds: 600));
   await tester.pumpAndSettle();
   expect(find.byType(LoginScreen), findsOneWidget);
 }
@@ -29,11 +29,11 @@ void main() {
   ) async {
     await tester.pumpWidget(AquaLogicApp(authService: MockAuthService()));
 
-    expect(find.text('Waking the tank...'), findsOneWidget);
+    expect(find.text('Preparing AquaLogic'), findsOneWidget);
     expect(find.byType(LoginScreen), findsNothing);
     expect(find.text('Live readings'), findsNothing);
 
-    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(find.byType(LoginScreen), findsOneWidget);

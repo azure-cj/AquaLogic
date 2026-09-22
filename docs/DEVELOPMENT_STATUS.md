@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-09-15
+Last reviewed: 2026-09-23
 
 ## Completed and working locally
 
@@ -259,6 +259,20 @@ Last reviewed: 2026-09-15
   repository seams for tanks, alerts, fish, and equipment. Added widget and
   repository tests for role visibility, stream separation, offline semantics,
   suitability states, command safety, and responsive screen content.
+
+### Mobile startup refinement — 2026-09-23
+
+- Replaced the looping aquarium loader with a pale underwater Flutter startup
+  scene using the supplied illustration, existing AquaLogic mark, a restrained
+  animated waterline, four ambient bubbles, and static `Preparing AquaLogic`
+  text. No fake startup progress or looping fish movement is shown.
+- Matched Android native and Flutter splash backgrounds and mark sizing, with a
+  simple legacy launch background and light system bars. The Flutter scene
+  remains until the minimum 600 ms visual window and auth destination resolve,
+  then settles into the existing `AuthGate` destination.
+- Reduced-motion startup disables bubbles and continuous waterline motion and
+  uses opacity-only branding and handoff. Added focused splash readiness,
+  timing, reduced-motion, and disposal tests.
 
 Mobile authentication, Home data, and this UI/UX refinement are intentionally
 frontend-only. FastAPI/HTTP integration, JWT access tokens, refresh sessions,

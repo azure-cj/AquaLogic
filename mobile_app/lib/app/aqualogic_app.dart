@@ -4,6 +4,8 @@ import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:flutter/material.dart';
 
+const _startupPreview = bool.fromEnvironment('AQUALOGIC_STARTUP_PREVIEW');
+
 class AquaLogicApp extends StatefulWidget {
   const AquaLogicApp({super.key, this.authService});
 
@@ -71,7 +73,14 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
           ),
         ),
       ),
-      home: AuthScope(authService: _authService, child: const SplashScreen()),
+      home: AuthScope(
+        authService: _authService,
+        child: const SplashScreen(
+          minimumDisplayDuration: _startupPreview
+              ? Duration(seconds: 6)
+              : Duration(milliseconds: 600),
+        ),
+      ),
     );
   }
 }

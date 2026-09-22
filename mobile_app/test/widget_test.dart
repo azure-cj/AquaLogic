@@ -10,10 +10,10 @@ void main() {
       await tester.pumpWidget(const AquaLogicApp());
 
       expect(find.text('AquaLogic'), findsOneWidget);
-      expect(find.text('Waking the tank...'), findsOneWidget);
+      expect(find.text('Preparing AquaLogic'), findsOneWidget);
       expect(find.text('JRed Aquatics'), findsNothing);
 
-      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.pump(const Duration(milliseconds: 600));
       expect(find.text('JRed Aquatics'), findsNothing);
       expect(find.byType(LoginScreen), findsNothing);
 

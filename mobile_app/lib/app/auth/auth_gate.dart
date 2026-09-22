@@ -6,8 +6,20 @@ import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:aqualogic/features/auth/screens/login_screen.dart';
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key, this.animateInitialState = true});
+
+  /// Lets a covering startup screen own the first visible transition.
+  ///
+  /// State changes after the first frame keep the normal AuthGate animation.
+  final bool animateInitialState;
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  var _hasBuilt = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,8 +37,13 @@ class AuthGate extends StatelessWidget {
         'auth-${authService.currentUser?.id ?? 'unknown'}',
     };
 
+    final duration = !_hasBuilt && !widget.animateInitialState
+        ? Duration.zero
+        : const Duration(milliseconds: 280);
+    _hasBuilt = true;
+
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
+      duration: duration,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (currentChild, previousChildren) {

@@ -61,6 +61,7 @@ flutter:
     - assets/images/aqualogic_icon.png
     - assets/images/login_underwater_footer.png
     - assets/images/owner_home_hero.png
+    - assets/images/startup_underwater.png
     - assets/images/tank_header.png
 
   fonts:

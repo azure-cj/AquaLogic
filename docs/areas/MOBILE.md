@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
 Status: Flutter prototype
-Last reviewed: 2026-09-15
+Last reviewed: 2026-09-23
 
 ## Read first
 
@@ -108,6 +108,27 @@ The local mock repositories are `MockTankRepository`, `MockAlertRepository`,
 `MockFishRepository`, and `MockEquipmentRepository`. They intentionally do not
 replace the FastAPI contract; they provide a stable UI seam for this milestone
 and can later be replaced by API-backed repositories.
+
+## Startup experience refinement
+
+Implemented in the Flutter prototype:
+
+- Android and Flutter launch surfaces use the same pale aqua base and existing
+  AquaLogic mark. Flutter then fades in the supplied light underwater artwork,
+  brand, a restrained custom-painted waterline, and four sparse ambient bubbles.
+- Startup shows one static `Preparing AquaLogic` label. It does not simulate
+  backend progress or show a progress bar, rotating status text, or moving fish.
+- The 600 ms minimum display window is a visual continuity floor. The splash
+  stays visible while `AuthService` is checking and then hands off through the
+  existing `AuthGate` to its selected Login or authenticated destination.
+- Reduced-motion mode disables bubble and waterline animation and keeps the
+  logo/scene handoff to opacity transitions. Controllers and the minimum timer
+  are disposed with the splash state.
+
+This remains a local prototype startup sequence: `MockAuthService` resolves
+immediately to unauthenticated and no backend work or real startup stages are
+claimed. The focused behavior tests live in
+[`splash_screen_test.dart`](../../mobile_app/test/splash_screen_test.dart).
 
 ## Deferred integration work
 
