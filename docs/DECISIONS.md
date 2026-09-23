@@ -1,10 +1,31 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-09-15
+Last reviewed: 2026-09-23
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-09-23 — Keep global defaults with complete optional tank overrides
+
+**Decision:** Keep `ThresholdConfig` as the global fallback and allow an
+administrator to save a complete per-parameter override for an active tank.
+An override replaces the full bound set and enabled state, uses the parameter's
+fixed unit, and can be reset so the tank follows future global revisions.
+Record every override and reset in append-only tank history. Evaluate readings,
+alerts, statuses, public projections, and analytics through one effective
+threshold resolver. A multi-tank analytics view draws shared threshold bands
+only when all included effective histories match.
+
+**Reason:** Tanks may need different operational limits, while the confirmed
+global defaults remain useful for newly created and unconfigured tanks. Deriving
+limits from fish preferences would silently impose one species' care range on a
+mixed tank and would conflate advisory species care with operational monitoring.
+
+**Consequences:** All tanks continue to inherit existing global values until an
+administrator configures an override. Reset history explicitly returns to the
+global timeline, while existing readings and alerts remain intact. Public pages
+continue to expose operational statuses without threshold values.
 
 ## 2026-09-17 — ESP32 bridge drains the offline backlog with ack-after-confirmation
 

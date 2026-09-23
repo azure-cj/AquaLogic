@@ -58,7 +58,16 @@ def update_threshold(parameter: str, payload: ThresholdUpdate, request: Request,
         critical_min=payload.critical_min, critical_max=payload.critical_max,
         enabled=payload.enabled, effective_from=now,
     ))
-    audit_event(db, request, "threshold.write", "success", actor_user_id=current_user.id, target_type="threshold", target_id=parameter)
+    audit_event(
+        db,
+        request,
+        "threshold.write",
+        "success",
+        actor_user_id=current_user.id,
+        target_type="threshold",
+        target_id=parameter,
+        details={"scope": "global", "parameter": parameter},
+    )
     db.commit(); db.refresh(item); return item
 
 @router.get("/analytics/fleet", response_model=AnalyticsResponse)

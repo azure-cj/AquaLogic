@@ -95,7 +95,9 @@ Last reviewed: 2026-09-23
   and boundary semantics, prospective threshold revisions, receipt-time
   freshness, worst-available tank status derivation, automatic alert
   escalation/downgrade/resolution, operator/system resolution metadata, and
-  audited threshold-disable resolution. External notification delivery remains
+  audited threshold-disable resolution. Global defaults now support optional
+  complete per-tank overrides with audited reset-to-global history and shared
+  effective-threshold evaluation. External notification delivery remains
   deferred.
 
 ### Web
@@ -147,7 +149,10 @@ Last reviewed: 2026-09-23
   feedback and strict/open boundary guidance, deferred parameters remain
   hidden, and alert history distinguishes automatic recovery from the
   operator-facing Mark handled action while retaining the in-app-only
-  notification surface.
+  notification surface. Global thresholds are labeled as defaults; the tank
+  workspace shows inherited/overridden effective thresholds with admin edit and
+  reset actions, and analytics suppresses shared bands when selected tanks
+  differ.
 - Phase 03 species-care contract hardening is implemented: suitability evaluates
   only temperature, pH, and TDS using receipt-time freshness, the public tank
   response uses a reduced species and sensor projection, and legacy dissolved

@@ -2,7 +2,7 @@
 
 Classification: **Implemented UI clarity record**
 Status: Implemented UI clarity hardening; algorithms unchanged  
-Last reviewed: 2026-08-22
+Last reviewed: 2026-09-23
 
 ## Objective
 
@@ -16,7 +16,8 @@ alert, or Species Care engines.
 - Stale readings remain visible as historical/last-known context.
 - Stale data must not look like a current Normal measurement.
 - Manual alert handling remains distinct from system-confirmed recovery.
-- Global thresholds continue to drive operational status and alerts.
+- Operational status and alerts use the tank's effective thresholds: a full
+  tank override when present, otherwise the global default.
 - Species preferences remain advisory and do not modify thresholds or alerts.
 - Species Care continues to evaluate temperature, pH, and TDS only.
 - Threshold comparisons remain strict/open; exact configured boundaries remain
@@ -121,11 +122,12 @@ Species Care: Needs attention
 
 Required help text near the tank-level presentation:
 
-> Operational status uses global monitoring thresholds. Species Care compares
-> current supported readings with assigned-species preferences.
+> Operational status uses this tank's effective monitoring thresholds,
+> inheriting global defaults unless an administrator saves an override. Species
+> Care compares current supported readings with assigned-species preferences.
 
-Do not merge statuses, recolor one to pretend it is the other, change global
-thresholds per species, or create Species Care alerts.
+Do not merge statuses, recolor one to pretend it is the other, derive operational
+thresholds from species preferences, or create Species Care alerts.
 
 Component tests must render a Normal operational result beside an Attention
 Species Care result and assert that the explanation is visible or accessible.

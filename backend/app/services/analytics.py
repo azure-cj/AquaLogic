@@ -9,8 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Alert, SensorReading, Tank, ThresholdConfig, ThresholdRevision
+from app.models import Alert, SensorReading, Tank
 from app.services.decision_engine import PARAMETERS
+from app.services.thresholds import effective_threshold_segments_by_tank
 
 
 def _aware(value: datetime) -> datetime:
@@ -85,80 +86,79 @@ def _uptime_status(reported: int, uptime: float) -> str:
     return "critical"
 
 
-def _threshold_segments(
+def _analytics_thresholds(
     db: Session,
     start: datetime,
     end: datetime,
-) -> list[dict[str, Any]]:
-    revisions = list(
-        db.scalars(
-            select(ThresholdRevision).order_by(
-                ThresholdRevision.parameter,
-                ThresholdRevision.effective_from,
-                ThresholdRevision.id,
-            )
-        ).all()
-    )
-    configs = {
-        item.parameter: item
-        for item in db.scalars(select(ThresholdConfig).order_by(ThresholdConfig.parameter)).all()
-    }
-    by_parameter: dict[str, list[Any]] = defaultdict(list)
-    for revision in revisions:
-        by_parameter[revision.parameter].append(revision)
+    *,
+    tanks: list[Tank],
+    selected_tank_ids: list[int],
+) -> dict[str, Any]:
+    scope_ids = selected_tank_ids or [tank.id for tank in tanks]
+    if len(selected_tank_ids) == 1:
+        tank_id = selected_tank_ids[0]
+        segments = effective_threshold_segments_by_tank(db, [tank_id], start, end)[tank_id]
+        return {
+            "threshold_segments": [{**item, "tank_id": tank_id} for item in segments],
+            "threshold_scope": "tank",
+            "threshold_tank_id": tank_id,
+            "thresholds_vary_by_tank": False,
+        }
 
-    segments: list[dict[str, Any]] = []
-    for parameter in PARAMETERS:
-        items = by_parameter.get(parameter, [])
-        if not items and parameter in configs:
-            items = [configs[parameter]]
-        for index, item in enumerate(items):
-            effective = (
-                _aware(item.effective_from)
-                if isinstance(item, ThresholdRevision)
-                else start
+    histories = effective_threshold_segments_by_tank(db, scope_ids, start, end)
+    if not scope_ids:
+        return {
+            "threshold_segments": [],
+            "threshold_scope": "shared",
+            "threshold_tank_id": None,
+            "thresholds_vary_by_tank": False,
+        }
+
+    comparable_fields = (
+        "parameter",
+        "unit",
+        "start",
+        "end",
+        "warning_min",
+        "warning_max",
+        "critical_min",
+        "critical_max",
+        "enabled",
+    )
+    def signature(segments: list[dict]) -> list[tuple]:
+        normalized: list[tuple] = []
+        for segment in segments:
+            state = tuple(
+                segment[field]
+                for field in comparable_fields
+                if field not in {"start", "end"}
             )
-            following = (
-                _aware(items[index + 1].effective_from)
-                if index + 1 < len(items) and isinstance(items[index + 1], ThresholdRevision)
-                else end
-            )
-            segment_start = max(start, effective)
-            segment_end = min(end, following)
-            if segment_start >= segment_end:
-                continue
-            segment = {
-                "parameter": parameter,
-                "unit": item.unit,
-                "start": segment_start,
-                "end": segment_end,
-                "warning_min": item.warning_min,
-                "warning_max": item.warning_max,
-                "critical_min": item.critical_min,
-                "critical_max": item.critical_max,
-                "enabled": item.enabled,
-            }
-            comparable_fields = (
-                "parameter",
-                "unit",
-                "warning_min",
-                "warning_max",
-                "critical_min",
-                "critical_max",
-                "enabled",
-            )
-            if (
-                segments
-                and segments[-1]["end"] == segment["start"]
-                and all(
-                    segments[-1][field] == segment[field]
-                    for field in comparable_fields
-                )
-            ):
-                segments[-1]["end"] = segment["end"]
+            if normalized and normalized[-1][0] == state and normalized[-1][2] == segment["start"]:
+                previous = normalized[-1]
+                normalized[-1] = (state, previous[1], segment["end"])
             else:
-                segments.append(segment)
-    return segments
+                normalized.append((state, segment["start"], segment["end"]))
+        return normalized
+
+    signatures = [signature(histories[tank_id]) for tank_id in scope_ids]
+    if any(signature != signatures[0] for signature in signatures[1:]):
+        return {
+            "threshold_segments": [],
+            "threshold_scope": "varies",
+            "threshold_tank_id": None,
+            "thresholds_vary_by_tank": True,
+        }
+
+    shared_segments = [
+        {**segment, "source": "shared", "tank_id": None}
+        for segment in histories[scope_ids[0]]
+    ]
+    return {
+        "threshold_segments": shared_segments,
+        "threshold_scope": "shared",
+        "threshold_tank_id": None,
+        "thresholds_vary_by_tank": False,
+    }
 
 
 def build_fleet_analytics(
@@ -402,6 +402,13 @@ def build_fleet_analytics(
         primary_driver_by_metric[parameter] = (
             max(deviations, default=(0.0, None))[1] if deviations else None
         )
+    threshold_context = _analytics_thresholds(
+        db,
+        start,
+        end,
+        tanks=tanks,
+        selected_tank_ids=selected_tank_ids,
+    )
     return {
         "window": {
             "range": range_name,
@@ -437,7 +444,7 @@ def build_fleet_analytics(
             for index, bucket in enumerate(alert_buckets)
         ],
         "alert_events": alert_events,
-        "threshold_segments": _threshold_segments(db, start, end),
+        **threshold_context,
         "uptime": uptime,
         "uptime_comparison": {
             "current": current_uptime,

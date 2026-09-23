@@ -64,6 +64,8 @@ export type ThresholdSegment = {
   critical_min: number | null;
   critical_max: number | null;
   enabled: boolean;
+  source?: 'global' | 'tank_override' | 'shared';
+  tank_id?: number | null;
 };
 
 export type TankUptime = {
@@ -94,6 +96,9 @@ export type AnalyticsResponse = {
   alert_series: Array<{ timestamp: string; warning: number; critical: number; }>;
   alert_events: AnalyticsAlert[];
   threshold_segments: ThresholdSegment[];
+  threshold_scope?: 'shared' | 'tank' | 'varies';
+  threshold_tank_id?: number | null;
+  thresholds_vary_by_tank?: boolean;
   uptime: TankUptime[];
   uptime_comparison: {
     current: number;

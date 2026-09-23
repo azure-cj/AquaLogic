@@ -5,6 +5,7 @@ import {
   LoadingState,
   PageHeader,
   Panel,
+  Notice,
 } from '@/shared/components/admin-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -813,6 +814,16 @@ export default function AnalyticsPage() {
         </Panel>
       ) : data ? (
         <>
+          {data.thresholds_vary_by_tank && (
+            <Notice tone="warning">
+              Effective thresholds vary by tank. Shared threshold bands are hidden for this view; select one tank to see its historical threshold bands.
+            </Notice>
+          )}
+          {data.threshold_scope === 'tank' && data.threshold_tank_id != null && (
+            <Notice>
+              Threshold bands show the effective history for {data.tanks.find((tank) => tank.id === data.threshold_tank_id)?.name ?? 'the selected tank'}; the fleet average remains visible for context.
+            </Notice>
+          )}
           <div className="analytics-stats">
             <div>
               <InfoLabel
@@ -862,7 +873,9 @@ export default function AnalyticsPage() {
                 <span><i className="legend-line fleet-line" /> Fleet average</span>
                 <span title="Configured warning bounds active at the end of this period">
                   <i className="legend-zone warning-zone" />
-                  Warning limits {currentThreshold
+                  Warning limits {data.thresholds_vary_by_tank
+                    ? 'vary by tank'
+                    : currentThreshold
                     ? boundLabel(
                         currentThreshold.warning_min,
                         currentThreshold.warning_max,
@@ -872,7 +885,9 @@ export default function AnalyticsPage() {
                 </span>
                 <span title="Configured critical bounds active at the end of this period">
                   <i className="legend-zone critical-zone" />
-                  Critical limits {currentThreshold
+                  Critical limits {data.thresholds_vary_by_tank
+                    ? 'vary by tank'
+                    : currentThreshold
                     ? boundLabel(
                         currentThreshold.critical_min,
                         currentThreshold.critical_max,

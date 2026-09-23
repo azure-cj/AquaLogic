@@ -11,9 +11,22 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.database import get_db
 from app.dependencies import require_admin, require_staff
-from app.models import Alert, Customer, FishSpecies, RegisteredDevice, SensorReading, Tank, TankFish, User
+from app.models import (
+    Alert,
+    Customer,
+    FishSpecies,
+    RegisteredDevice,
+    SensorReading,
+    Tank,
+    TankFish,
+    TankThresholdOverride,
+    TankThresholdRevision,
+    ThresholdConfig,
+    User,
+)
 from app.schemas.fish import FishAssignmentRequest
 from app.schemas.operations import TankOperationsResponse
+from app.schemas.threshold import EffectiveTankThresholdRead, TankThresholdOverrideUpdate
 from app.schemas.tank import HeroImageUploadRead, TankCreate, TankDetail, TankRetireRequest, TankRead, TankUpdate
 from app.services.auth_security import audit_event
 from app.services.decision_engine import parameter_statuses, status_for_reading
@@ -24,6 +37,7 @@ from app.services.tank_lifecycle import (
     uncleared_actuator_work,
 )
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
+from app.services.thresholds import resolve_effective_thresholds
 
 
 router = APIRouter(prefix="/tanks", tags=["tanks"])
@@ -202,6 +216,150 @@ def upload_hero_image(
         "content_type": image.content_type or "image/jpeg",
         "size_bytes": size_bytes,
     }
+
+
+@router.get("/{tank_id}/thresholds", response_model=list[EffectiveTankThresholdRead])
+def get_tank_thresholds(
+    tank_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+) -> list[dict]:
+    _get_tank_or_404(db, tank_id)
+    return [
+        vars(item)
+        for _, item in sorted(resolve_effective_thresholds(db, tank_id).items())
+    ]
+
+
+@router.put(
+    "/{tank_id}/thresholds/{parameter}",
+    response_model=EffectiveTankThresholdRead,
+)
+def set_tank_threshold_override(
+    tank_id: int,
+    parameter: str,
+    payload: TankThresholdOverrideUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    tank = lock_tank_for_mutation(db, tank_id)
+    require_active_tank(tank, db)
+    default = db.scalar(select(ThresholdConfig).where(ThresholdConfig.parameter == parameter))
+    if default is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Threshold parameter not found",
+        )
+    item = db.scalar(
+        select(TankThresholdOverride).where(
+            TankThresholdOverride.tank_id == tank_id,
+            TankThresholdOverride.parameter == parameter,
+        )
+    )
+    values = payload.model_dump()
+    if item is None:
+        item = TankThresholdOverride(
+            tank_id=tank_id,
+            parameter=parameter,
+            unit=default.unit,
+            **values,
+        )
+        db.add(item)
+    else:
+        for key, value in values.items():
+            setattr(item, key, value)
+    now = datetime.now(timezone.utc)
+    db.add(
+        TankThresholdRevision(
+            tank_id=tank_id,
+            parameter=parameter,
+            is_override=True,
+            unit=item.unit,
+            warning_min=item.warning_min,
+            warning_max=item.warning_max,
+            critical_min=item.critical_min,
+            critical_max=item.critical_max,
+            enabled=item.enabled,
+            effective_from=now,
+        )
+    )
+    audit_event(
+        db,
+        request,
+        "threshold.tank.write",
+        "success",
+        actor_user_id=current_user.id,
+        target_type="tank_threshold",
+        target_id=f"{tank_id}:{parameter}",
+        details={
+            "scope": "tank",
+            "tank_id": tank_id,
+            "parameter": parameter,
+            "operation": "override",
+        },
+    )
+    db.commit()
+    db.refresh(item)
+    effective = resolve_effective_thresholds(db, tank_id)[parameter]
+    return vars(effective)
+
+
+@router.delete(
+    "/{tank_id}/thresholds/{parameter}",
+    response_model=EffectiveTankThresholdRead,
+)
+def reset_tank_threshold_override(
+    tank_id: int,
+    parameter: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    tank = lock_tank_for_mutation(db, tank_id)
+    require_active_tank(tank, db)
+    default = db.scalar(select(ThresholdConfig).where(ThresholdConfig.parameter == parameter))
+    if default is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Threshold parameter not found",
+        )
+    item = db.scalar(
+        select(TankThresholdOverride).where(
+            TankThresholdOverride.tank_id == tank_id,
+            TankThresholdOverride.parameter == parameter,
+        )
+    )
+    if item is not None:
+        now = datetime.now(timezone.utc)
+        db.add(
+            TankThresholdRevision(
+                tank_id=tank_id,
+                parameter=parameter,
+                is_override=False,
+                effective_from=now,
+            )
+        )
+        db.delete(item)
+        audit_event(
+            db,
+            request,
+            "threshold.tank.reset",
+            "success",
+            actor_user_id=current_user.id,
+            target_type="tank_threshold",
+            target_id=f"{tank_id}:{parameter}",
+            details={
+                "scope": "tank",
+                "tank_id": tank_id,
+                "parameter": parameter,
+                "operation": "reset",
+            },
+        )
+        db.commit()
+    else:
+        db.rollback()
+    return vars(resolve_effective_thresholds(db, tank_id)[parameter])
 
 
 @router.post("/{tank_id}/retire", response_model=TankDetail)

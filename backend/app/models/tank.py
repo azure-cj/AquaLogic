@@ -79,3 +79,13 @@ class Tank(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    threshold_overrides: Mapped[list["TankThresholdOverride"]] = relationship(
+        "TankThresholdOverride",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    threshold_revisions: Mapped[list["TankThresholdRevision"]] = relationship(
+        "TankThresholdRevision",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

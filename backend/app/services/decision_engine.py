@@ -7,6 +7,7 @@ from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, Thr
 from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
+from app.services.thresholds import EffectiveThreshold, resolve_effective_thresholds
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
 PUBLIC_PARAMETERS = ("temperature", "ph", "turbidity", "tds")
@@ -47,7 +48,7 @@ def ensure_default_thresholds(db: Session) -> None:
     db.commit()
 
 
-def _severity(value: float | None, threshold: ThresholdConfig) -> AlertSeverity | None:
+def _severity(value: float | None, threshold: ThresholdConfig | EffectiveThreshold) -> AlertSeverity | None:
     if value is None:
         return None
     if not threshold.enabled:
@@ -73,7 +74,7 @@ def _severity(value: float | None, threshold: ThresholdConfig) -> AlertSeverity 
 
 
 def reading_violations(db: Session, reading: SensorReading) -> list[tuple[str, AlertSeverity]]:
-    thresholds = {item.parameter: item for item in db.scalars(select(ThresholdConfig)).all()}
+    thresholds = resolve_effective_thresholds(db, getattr(reading, "tank_id", None))
     return [(p, severity) for p in PARAMETERS if (threshold := thresholds.get(p)) and (severity := _severity(getattr(reading, p), threshold))]
 
 
@@ -91,10 +92,7 @@ def ingest_reading(
     reading = SensorReading(tank_id=tank_id, **payload)
     db.add(reading)
     db.flush()
-    thresholds = {
-        item.parameter: item
-        for item in db.scalars(select(ThresholdConfig)).all()
-    }
+    thresholds = resolve_effective_thresholds(db, tank_id)
     for parameter in PARAMETERS:
         threshold = thresholds.get(parameter)
         if threshold is None:
@@ -197,10 +195,11 @@ def parameter_statuses(
     if not is_reading_current(reading.timestamp, received_at=reading.received_at, evaluated_at=evaluated_at):
         return {parameter: "offline" for parameter in PARAMETERS}
 
-    thresholds = {
-        item.parameter: item
-        for item in db.scalars(select(ThresholdConfig)).all()
-    }
+    thresholds = resolve_effective_thresholds(
+        db,
+        getattr(reading, "tank_id", None),
+        as_of=getattr(reading, "received_at", None),
+    )
     result: dict[str, str] = {}
     for parameter in PARAMETERS:
         threshold = thresholds.get(parameter)

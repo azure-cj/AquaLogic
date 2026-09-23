@@ -1,7 +1,7 @@
 # AquaLogic Domain Model
 
 Status: Current backend model summary
-Last reviewed: 2026-08-22
+Last reviewed: 2026-09-23
 
 ## Entities
 
@@ -9,12 +9,14 @@ Last reviewed: 2026-08-22
 | --- | --- | --- |
 | User | Staff identity, role, active state, and password-change state | Resolves alerts; admin role controls staff and threshold writes |
 | Customer | Customer or account associated with managed tanks | Owns zero or more tanks |
-| Tank | Managed aquarium and public display metadata | May belong to a customer; has fish, readings, and alerts |
+| Tank | Managed aquarium and public display metadata | May belong to a customer; has fish, readings, alerts, and optional monitoring-threshold overrides |
 | FishSpecies | Grouped species-level identity, diet, care, compatibility, and customer-facing profile information | Assigned to tanks through `TankFish` |
 | TankFish | Many-to-many tank/species assignment | Composite key of tank and fish species |
 | SensorReading | Timestamped water-quality measurement with observation and server receipt times | Belongs to one tank; may retain a nullable source device; may produce alerts |
-| ThresholdConfig | Configurable bounds and units per parameter | Used by the decision engine |
-| ThresholdRevision | Append-only snapshot of a threshold configuration and its effective timestamp | Supplies historically correct analytics bands |
+| ThresholdConfig | Global fallback bounds and unit per parameter | Used when a tank has no override for that parameter |
+| ThresholdRevision | Append-only snapshot of a global threshold default and its effective timestamp | Supplies global fallback history for analytics |
+| TankThresholdOverride | Complete tank-specific bounds and enabled state for one parameter | Replaces the full global configuration for that tank and parameter |
+| TankThresholdRevision | Append-only tank override or reset event | Supplies effective historical analytics bands; reset events resume the global timeline |
 | Alert | Persisted warning or critical condition | Belongs to a tank and optionally a reading; can be resolved by an operator or the monitoring engine |
 | RegisteredDevice | Device-key identity fixed to exactly one tank | Authenticates the bridge, tracks last seen time, and supports admin activation/key rotation |
 | ActuatorCommand | Admin audit and lifecycle record for one physical UV, LED, feeder, or guarded pump-maintenance command | Belongs to one registered device/tank and optionally an actor user |
@@ -140,7 +142,8 @@ no manual resolution action or external notification.
 - Only active users can authenticate.
 - Users with temporary passwords must complete password change before accessing
   the main staff dashboard.
-- Only administrators can create/update staff accounts or write thresholds.
+- Only administrators can create/update staff accounts or write global defaults
+  and tank threshold overrides; staff can read effective threshold settings.
 - Only administrators can queue or read actuator commands and state; staff
   receives 403 for actuator command, state, and history APIs.
 - A registered device's key maps to one server-side tank; device requests never
@@ -152,7 +155,11 @@ no manual resolution action or external notification.
 - Operational freshness and latest-reading selection use `received_at` with a
   90-second window; observation timestamps remain historical diagnostics.
 - Exact threshold boundaries are Normal, strict bound ordering is required, and
-  threshold changes are prospective rather than retroactive.
+  global and tank threshold changes are prospective rather than retroactive.
+- Each tank uses a complete override for a parameter when present, otherwise
+  it inherits the current global default. Reset removes the override; no
+  individual bound is merged with the other configuration. Tank override units
+  are fixed from the global parameter unit.
 - A fresh reading uses the worst severity among present, enabled values; missing
   values are Unavailable and a reading with no usable fresh value is Offline.
 - Device connection status is derived as online, offline, or disabled from
@@ -183,7 +190,11 @@ no manual resolution action or external notification.
   maximum; pump maintenance commands use a 20-second default with a
   30-second maximum. Ambiguous physical requests are not automatically retried.
 - Every successful threshold update appends a revision in the same transaction;
-  revisions are never edited in place.
+  revisions are never edited in place. Tank reset history records a fallback
+  event, after which effective history follows the global revision timeline.
+- Species preferences never generate operational threshold overrides. Public
+  responses may expose the resulting water status, but not numeric threshold
+  configuration.
 - Schema changes are represented by migrations, not only by local SQLite table
   creation.
 - Legacy invalid species ranges safely evaluate as unavailable.

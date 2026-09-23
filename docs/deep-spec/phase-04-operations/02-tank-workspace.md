@@ -1,6 +1,6 @@
 # Tank Workspace
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-09-23
 Status: Implemented current staff workspace; equipment expansion owned by Phase 05
 
 ## 1. Purpose
@@ -26,6 +26,8 @@ resource and operations snapshot to present:
 - tank name, location, public profile metadata, water type, volume, habitat,
   establishment date, and optional customer summary;
 - latest supported reading and parameter states;
+- effective monitoring thresholds, with inherited global defaults or full
+  administrator-managed tank overrides;
 - Normal, Warning, Critical, or Offline operational status;
 - reporting age and observation-time context;
 - unresolved tank alerts;
@@ -156,6 +158,5 @@ dedicated incident route.
 - Tank ownership restrictions and customer accounts.
 - Bulk tank operations and bulk species assignment.
 - Dedicated assignment-history pages or pagination.
-- Tank-level threshold overrides.
 - Full actuator behavior beyond the Phase 05 control center.
 - Predictive or automated care recommendations.

@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-23
 
 ## System overview
 
@@ -32,8 +32,10 @@ and includes the route modules. The main implementation areas are:
 - `app/routes/`: auth, tanks, fish, sensors, devices, alerts, public, management,
   and dashboard endpoints. `devices.py` owns fixed-tank sensor ingestion and
   the device-key actuator boundary.
-- `app/services/decision_engine.py`: threshold checks, status calculation, and
-  alert creation.
+- `app/services/decision_engine.py`: effective threshold checks, status
+  calculation, and alert creation.
+- `app/services/thresholds.py`: global fallback and tank override resolution,
+  plus tank-effective historical threshold segments.
 - `app/services/species_suitability.py`: pure, staff-only derived species-care
   evaluation using the latest sensor reading and species preference fields.
 - `app/services/tank_lifecycle.py`: centralized active-tank write guards,
@@ -83,7 +85,8 @@ from current web and backend work.
    authenticates with a device key. Device keys resolve to one server-side tank;
    bridge requests cannot choose a tank.
 2. The backend persists the reading.
-3. The decision engine evaluates enabled threshold configurations.
+3. The decision engine resolves each tank's complete per-parameter override,
+   falling back to the global default, then evaluates enabled configurations.
 4. Warning or critical alerts are created when values violate configured bounds,
    while unresolved alert duplication is controlled by the service logic.
 5. A successfully accepted reading resolves the tank's active monitoring

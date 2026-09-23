@@ -1,6 +1,6 @@
 # Water Status Evaluation
 
-**Current implementation and Phase 02 hardening record — reviewed 2026-08-21.**
+**Current implementation and Phase 02 hardening record — reviewed 2026-09-23.**
 
 ## 1. Purpose
 
@@ -23,7 +23,10 @@ value is missing or its threshold is disabled.
 - No reading is Offline.
 - A reading older than 90 seconds by server `received_at` is Offline.
 - For a fresh reading, each present and enabled parameter is evaluated against
-  its threshold.
+  its effective threshold: a complete tank override when present, otherwise
+  the global default. Historical status projections use the configuration
+  effective at the reading's server `received_at`, so a later settings change
+  does not reclassify that reading.
 - Missing parameters are Unavailable and do not become Normal by default.
 - The overall tank status is the worst severity among present, fresh, enabled
   values: Critical dominates Warning, which dominates Normal.
@@ -37,5 +40,5 @@ timestamps drive freshness and operational latest-reading selection.
 ## 4. Deferred behavior
 
 There is no separate Stale state, per-device status aggregation in this engine,
-or external notification behavior. Per-tank threshold overrides remain deferred.
-
+or external notification behavior. Species preferences remain a separate
+advisory evaluation and never generate monitoring thresholds.

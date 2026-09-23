@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-23
 
 ## Read first
 
@@ -60,9 +60,16 @@ Last reviewed: 2026-08-23
 - `/admin/devices`: administrator-only registered-device workspace with derived
   status, fixed tank mapping, activation controls, and confirmation-gated
   one-time key rotation. The browser never persists device keys.
-- Threshold and alert surfaces use strict threshold-boundary behavior, display
-  disabled parameters as unavailable, and explain that exact boundaries remain
-  Normal. The operator-facing alert action is **Mark handled**; its legacy
+- Global threshold settings are labeled as defaults. The tank workspace shows
+  effective values and inherited/override state; administrators can save or
+  reset complete overrides while staff can view them. Tank units stay fixed to
+  the parameter unit. Analytics shows effective bands for one selected tank
+  and hides shared bands with an explicit vary-by-tank explanation when fleet
+  or multi-tank histories differ. Public pages receive resulting statuses but
+  never numeric threshold values. Species Care remains separate from
+  operational thresholds. Threshold and alert surfaces use strict
+  threshold-boundary behavior, display disabled parameters as unavailable, and
+  explain that exact boundaries remain Normal. The operator-facing alert action is **Mark handled**; its legacy
   `/alerts/{alert_id}/resolve` route and `operator` resolution metadata remain
   unchanged, while automatic history continues to say automatically resolved.
   Manual handling does not confirm water recovery. The current notification
@@ -100,8 +107,9 @@ current-release species checks.
 `/admin/tanks/:tankId` is the staff tank workspace. It independently polls
 operations and Species Care, owns assignment management, and uses the shared
 configuration drawer via `?edit=1`. The directory uses `?edit=:tankId` for
-configuration only. Operational status uses global monitoring thresholds;
-Species Care is an advisory comparison against assigned-species water
+configuration only. Operational status uses the tank's effective monitoring
+thresholds, inheriting global defaults unless overridden; Species Care is an
+advisory comparison against assigned-species water
 preferences. Do not reuse or alter operational-health badges for species
 preference results. Offline readings remain visible as last-known values and
 reporting age is derived from server receipt time, never observation time.

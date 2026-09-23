@@ -1,6 +1,6 @@
 # Alert Lifecycle
 
-**Current implementation and Phase 02 hardening record — reviewed 2026-08-22.**
+**Current implementation and Phase 02 hardening record — reviewed 2026-09-23.**
 
 ## 1. Purpose
 
@@ -33,9 +33,10 @@ after the outage grace period, and the same accepted reading may both recover
 the monitoring incident and create or update a water-quality alert according to
 its values. Invalid, heartbeat, and no-reading events do not recover it.
 
-Threshold changes are prospective. Disabling a threshold does not alter an
-active alert at save time; the next usable reading resolves it with the system
-reason `threshold_disabled`.
+Global threshold and tank override changes are prospective. Saving a change or
+reset does not alter an active alert at save time. The next usable reading uses
+the new effective threshold; a disabled effective threshold resolves an active
+alert on that reading with the system reason `threshold_disabled`.
 
 ## 3. Resolution history
 

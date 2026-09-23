@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-23
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -114,9 +114,12 @@ The device-key bridge routes are not browser routes:
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
-| GET | `/analytics/fleet` | Staff | Fleet/tank trends, historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
-| GET | `/thresholds` | Staff | Read threshold configuration |
-| PUT | `/thresholds/{parameter}` | Admin | Update one parameter threshold |
+| GET | `/analytics/fleet` | Staff | Fleet/tank trends, effective historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
+| GET | `/thresholds` | Staff | Read global threshold defaults |
+| PUT | `/thresholds/{parameter}` | Admin | Update one global parameter default |
+| GET | `/tanks/{tank_id}/thresholds` | Staff | Read each parameter's effective threshold and whether it is inherited or overridden |
+| PUT | `/tanks/{tank_id}/thresholds/{parameter}` | Admin | Save a complete override for an active tank and parameter |
+| DELETE | `/tanks/{tank_id}/thresholds/{parameter}` | Admin | Remove a tank override so it inherits the global default again |
 | GET/POST | `/customers` | Staff reads; admin creates |
 | PUT/DELETE | `/customers/{customer_id}` | Admin | Update or delete customers |
 | GET | `/users` | Admin | List staff users with derived lifecycle status, password-change timestamp, active-session count, and latest activity |
@@ -291,10 +294,22 @@ use a hosted species-photo URL through the existing `photo_url` field.
   active queue but does not confirm that water conditions recovered; a later
   abnormal reading may create a new alert incident.
 
-- Threshold updates are administrator-only, require strict ordering of supplied
-  bounds, and apply prospectively to the next valid reading. Exact warning and
-  critical boundaries remain Normal. Disabled thresholds expose the parameter
-  as unavailable and create no new alerts.
+- Thresholds resolve per tank: a complete tank override replaces the global
+  default for that parameter; otherwise the tank inherits the global default.
+  Tank overrides include the full bound set and enabled state, and their unit is
+  fixed from the global parameter configuration. Reset removes the override.
+  Global and tank writes are administrator-only, require strict ordering of
+  supplied bounds, and are prospective. Exact warning and critical boundaries
+  remain Normal. Disabled effective thresholds expose the parameter as
+  unavailable and create no new alerts. Saves and resets do not recalculate
+  existing alerts or reclassify the latest reading's displayed status;
+  operational and public status projections use the threshold revisions active
+  at that reading's server `received_at`. A later usable reading applies the
+  changed configuration.
+- `GET /tanks/{tank_id}/thresholds` is an authenticated staff contract; numeric
+  threshold configuration is not included in public tank responses. Public
+  operational status and parameter statuses still use that tank's effective
+  thresholds.
 
 - `GET /health` is the deployment health check.
 - CORS is configured from `CORS_ORIGINS`; production rejects wildcard CORS.
@@ -348,7 +363,11 @@ use a hosted species-photo URL through the existing `photo_url` field.
   and all requests are capped at 1,000 buckets. The response contains complete
   nullable timelines, fleet and selected-tank series, previous-period
   statistics, alert events, effective threshold segments, and classified
-  reporting uptime.
+  reporting uptime. A single selected tank receives that tank's effective
+  historical segments. Fleet or multi-tank scopes return shared segments only
+  when effective histories match; otherwise `thresholds_vary_by_tank=true`,
+  `threshold_scope="varies"`, and an empty `threshold_segments` list prevent a
+  misleading shared threshold line.
 - Analytics aggregation places readings, reporting intervals, and gaps by server
   `received_at`. Observation `timestamp` remains available for historical and
   hardware-clock context, and late observations are ordered operationally by

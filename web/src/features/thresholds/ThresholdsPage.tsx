@@ -67,6 +67,10 @@ export function Thresholds() {
       });
       notify.success(`${threshold.parameter.replaceAll('_', ' ')} thresholds saved.`);
       client.invalidateQueries({ queryKey: ['thresholds'] });
+      client.invalidateQueries({ queryKey: ['tank-thresholds'] });
+      client.invalidateQueries({ queryKey: ['tank-operations'] });
+      client.invalidateQueries({ queryKey: ['fleet'] });
+      client.invalidateQueries({ queryKey: ['analytics'] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save thresholds');
       setErrorParameter(threshold.parameter);
@@ -78,8 +82,8 @@ export function Thresholds() {
     <section>
       <PageHeader
         eyebrow="System configuration"
-        title="Global thresholds"
-        description="Changes apply to the next supported sensor reading across all tanks. Values must pass a configured boundary to trigger Warning or Critical; exact boundary values remain within the Normal range."
+        title="Global threshold defaults"
+        description="These settings are inherited by every tank unless an administrator saves a tank override. Changes apply prospectively. Values must pass a configured boundary to trigger Warning or Critical; exact boundary values remain within the Normal range."
       />
       {error && <Notice tone="error">{error}</Notice>}
       {query.isLoading ? (

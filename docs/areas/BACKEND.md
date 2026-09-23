@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-23
 
 ## Read first
 
@@ -21,7 +21,10 @@ Last reviewed: 2026-08-23
 - `backend/app/services/decision_engine.py`: sensor status and alert rules.
   Threshold comparisons are strict at configured boundaries; active alerts can
   escalate, downgrade, and resolve automatically on the next fresh normal
-  value for the same parameter.
+  value for the same parameter. It uses the tank's complete override when
+  present and otherwise the global default.
+- `backend/app/services/thresholds.py`: shared effective-threshold resolution
+  and analytics history that falls back to the global timeline after resets.
 - `backend/app/services/species_suitability.py`: derived species preference
   checks; keep this policy separate from threshold and alert behavior.
 - `backend/app/routes/tanks.py`: tank detail, active/retired/all directory
@@ -58,6 +61,8 @@ Last reviewed: 2026-08-23
 - `backend/alembic/versions/0012_retired_tank_lifecycle.py`: additive tank
   retirement metadata, monitoring expectation, indexes, and active-row
   backfill.
+- `backend/alembic/versions/0014_tank_threshold_overrides.py`: optional
+  complete tank overrides and append-only override/reset history.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.

@@ -65,6 +65,8 @@ class ThresholdSegment(BaseModel):
     critical_min: Optional[float]
     critical_max: Optional[float]
     enabled: bool
+    source: Literal["global", "tank_override", "shared"]
+    tank_id: Optional[int] = None
 
 
 class TankOption(BaseModel):
@@ -113,6 +115,9 @@ class AnalyticsResponse(BaseModel):
     alert_series: List[AlertBucket]
     alert_events: List[AnalyticsAlert]
     threshold_segments: List[ThresholdSegment]
+    threshold_scope: Literal["shared", "tank", "varies"]
+    threshold_tank_id: Optional[int] = None
+    thresholds_vary_by_tank: bool = False
     uptime: List[TankUptime]
     uptime_comparison: UptimeComparison
     uptime_thresholds: UptimeThresholds

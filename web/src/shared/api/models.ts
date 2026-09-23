@@ -260,6 +260,11 @@ export type Threshold = {
   enabled: boolean;
 };
 
+export type TankThreshold = Threshold & {
+  source: 'global' | 'tank';
+  updated_at: string;
+};
+
 export type SpeciesSuitabilityStatus = 'suitable' | 'attention' | 'unavailable';
 
 export type SpeciesSuitabilityReason =

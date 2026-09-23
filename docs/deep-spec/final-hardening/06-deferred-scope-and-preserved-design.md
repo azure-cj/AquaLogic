@@ -2,7 +2,7 @@
 
 Classification: **Scope boundary and redesign guardrail**  
 Status: Authoritative for the final hardening pass  
-Last reviewed: 2026-08-22
+Last reviewed: 2026-09-23
 
 ## Purpose
 
@@ -49,9 +49,11 @@ delivery. Do not claim otherwise.
 
 ## Preserved design — global thresholds and Species Care
 
-Global thresholds are administrator-configured, system-wide,
-species-independent, and drive operational status/alerts. Species preferences
-are advisory care guidance and do not alter thresholds or generate alerts.
+Global thresholds are administrator-configured defaults. A tank may have a
+complete administrator-configured override per parameter, and assigned species
+preferences never generate or alter those operational thresholds. Effective
+thresholds drive operational status and alerts; Species Care remains advisory
+care guidance and does not generate alerts.
 
 Keep the engines separate. Exact operational threshold boundaries remain Normal
 under the current strict/open algorithm. Species preferred-range endpoints
