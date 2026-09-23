@@ -2,6 +2,9 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
 from .services.reading_freshness import READING_FRESHNESS_SECONDS
 
 
@@ -10,6 +13,19 @@ MAX_ACCESS_TOKEN_MINUTES = 15
 MAX_REFRESH_SESSION_DAYS = 7
 DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS = 900
 DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
+
+
+def normalize_database_url(database_url: str) -> str:
+    """Normalize common PostgreSQL URL aliases for SQLAlchemy."""
+    database_url = database_url.strip()
+    if database_url.startswith("postgres://"):
+        return "postgresql://" + database_url[len("postgres://") :]
+    return database_url
+
+
+def escape_alembic_config_url(database_url: str) -> str:
+    """Escape percent signs for Alembic's ConfigParser interpolation layer."""
+    return database_url.replace("%", "%%")
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -61,6 +77,18 @@ class Settings:
 
 
 def _validate_production(settings: Settings) -> None:
+    if not settings.database_url:
+        raise ValueError("Production requires DATABASE_URL pointing to PostgreSQL")
+    try:
+        database_url = make_url(settings.database_url)
+    except (ArgumentError, ValueError):
+        raise ValueError("Production DATABASE_URL must be a valid PostgreSQL URL") from None
+    if database_url.drivername not in {"postgresql", "postgresql+psycopg2"}:
+        raise ValueError(
+            "Production DATABASE_URL must use PostgreSQL (postgresql:// or postgresql+psycopg2://)"
+        )
+    if not database_url.host or not database_url.database:
+        raise ValueError("Production DATABASE_URL must include a PostgreSQL host and database name")
     if settings.jwt_secret_key == DEFAULT_JWT_SECRET or len(settings.jwt_secret_key.encode()) < 32:
         raise ValueError("Production requires a non-default JWT_SECRET_KEY of at least 32 bytes")
     if len(set(settings.jwt_secret_key)) < 12:
@@ -91,11 +119,16 @@ def _validate_monitoring(settings: Settings) -> None:
 @lru_cache
 def get_settings() -> Settings:
     environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    configured_database_url = os.getenv("DATABASE_URL")
+    if configured_database_url is None:
+        database_url = "" if environment == "production" else "sqlite:///./aqualogic.db"
+    else:
+        database_url = normalize_database_url(configured_database_url)
     settings = Settings(
         app_name=os.getenv("APP_NAME", "AquaLogic API"),
         environment=environment,
         debug=_parse_bool(os.getenv("DEBUG")),
-        database_url=os.getenv("DATABASE_URL", "sqlite:///./aqualogic.db"),
+        database_url=database_url,
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", DEFAULT_JWT_SECRET),
         jwt_issuer=os.getenv("JWT_ISSUER", "aqualogic-api"),
         jwt_audience=os.getenv("JWT_AUDIENCE", "aqualogic-web"),

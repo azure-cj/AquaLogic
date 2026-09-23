@@ -6,6 +6,24 @@ Last reviewed: 2026-09-23
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-09-23 — Require PostgreSQL for production and retain SQLite locally
+
+**Decision:** Keep SQLite as the backend default for local development and
+tests. When `ENVIRONMENT=production`, require a valid PostgreSQL `DATABASE_URL`
+and fail startup on a missing, malformed, or SQLite URL. Use synchronous
+SQLAlchemy with `psycopg2-binary`; normalize the common `postgres://` alias and
+escape percent signs only while passing the URL through Alembic's
+ConfigParser-backed settings.
+
+**Reason:** Railway PostgreSQL should run the existing synchronous backend and
+shared migration history without changing local development or introducing a
+production fallback to a local SQLite file.
+
+**Consequences:** Migrations that alter referenced tables use native PostgreSQL
+operations while retaining SQLite batch operations. The clean SQLite migration
+chain is validated locally; a full PostgreSQL upgrade remains pending until a
+usable local PostgreSQL role or the production database is available.
+
 ## 2026-09-23 — Keep global defaults with complete optional tank overrides
 
 **Decision:** Keep `ThresholdConfig` as the global fallback and allow an

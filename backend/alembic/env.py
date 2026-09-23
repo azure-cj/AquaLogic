@@ -10,14 +10,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 from app import models  # noqa: F401
-from app.config import settings
+from app.config import escape_alembic_config_url, settings
 from app.database import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", escape_alembic_config_url(settings.database_url))
 
 target_metadata = Base.metadata
 

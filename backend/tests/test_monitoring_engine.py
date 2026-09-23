@@ -105,7 +105,7 @@ def test_partial_and_unusable_readings_have_explicit_statuses(db_session):
     assert status_for_reading(db_session, unusable, evaluated_at=now) == "offline"
 
 
-def test_disabled_threshold_is_unavailable_and_resolves_on_next_reading(db_session):
+def test_disabled_threshold_is_unavailable_and_resolves_on_next_reading(client, auth_headers, db_session):
     ensure_default_thresholds(db_session)
     tank = _tank(db_session, "Disabled threshold")
     critical = ingest_reading(db_session, tank.id, _values(31.0))
@@ -119,8 +119,19 @@ def test_disabled_threshold_is_unavailable_and_resolves_on_next_reading(db_sessi
         select(ThresholdConfig).where(ThresholdConfig.parameter == "temperature")
     )
     assert threshold is not None
-    threshold.enabled = False
-    db_session.commit()
+    disabled = client.put(
+        "/thresholds/temperature",
+        headers=auth_headers,
+        json={
+            "unit": threshold.unit,
+            "warning_min": threshold.warning_min,
+            "warning_max": threshold.warning_max,
+            "critical_min": threshold.critical_min,
+            "critical_max": threshold.critical_max,
+            "enabled": False,
+        },
+    )
+    assert disabled.status_code == 200
 
     next_reading = ingest_reading(db_session, tank.id, _values(25.0))
     db_session.refresh(alert)

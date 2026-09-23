@@ -13,8 +13,8 @@ Last reviewed: 2026-09-23
 ## Important locations
 
 - `backend/app/main.py`: application creation, startup, middleware, routers.
-- `backend/app/config.py`: environment-driven settings and production CORS
-  validation.
+- `backend/app/config.py`: environment-driven settings, production validation,
+  and normalized database URL handling.
 - `backend/app/models/`: SQLAlchemy entities.
 - `backend/app/schemas/`: API request/response validation.
 - `backend/app/routes/`: HTTP route modules.
@@ -96,6 +96,22 @@ Last reviewed: 2026-09-23
   notification delivery is deferred; in-app alerts are the current surface.
 - Runtime packages belong in `requirements.txt`; pytest, HTTP clients, and
   audit tooling belong in `requirements-dev.txt`.
+
+## Database configuration
+
+Development and tests may use SQLite; when `DATABASE_URL` is absent, the
+backend defaults to `sqlite:///./aqualogic.db`. With
+`ENVIRONMENT=production`, `DATABASE_URL` is required and must point to
+PostgreSQL. Production rejects missing, malformed, and SQLite URLs instead of
+falling back. `postgres://` is normalized to `postgresql://`; the synchronous
+SQLAlchemy backend uses `psycopg2-binary`. Alembic escapes percent signs while
+passing the URL through ConfigParser so percent-encoded credentials survive.
+
+The migration chain keeps SQLite batch alterations for local development and
+uses native PostgreSQL column/constraint alterations for referenced tables in
+revisions `0009` and `0012`. `0010` uses a Boolean `IS TRUE` predicate in both
+database dialects. SQLite-only connection arguments, foreign-key pragmas, and
+`BEGIN IMMEDIATE` writer locks remain guarded by the SQLite dialect.
 
 ## Common checks
 

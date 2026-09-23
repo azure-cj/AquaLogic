@@ -81,6 +81,11 @@ Last reviewed: 2026-09-23
 - SQLite foreign-key enforcement is enabled for application and test engines;
   cascade, nullable-reference, uniqueness, assignment-protection, and rollback
   behavior are covered by integrity tests.
+- PostgreSQL readiness code is in place: production requires a PostgreSQL
+  `DATABASE_URL`, the synchronous driver is declared, percent-encoded Alembic
+  URLs are supported, and migrations `0009`, `0010`, and `0012` use
+  SQLite/PostgreSQL-compatible operations. A live PostgreSQL migration check is
+  still pending.
 - Local recovery tooling is implemented under `backend/scripts/`: paired
   SQLite-plus-media bundles include versioned manifests and checksums, while
   restores are isolated-only, migration-aware, integrity-checked, and revoke
@@ -336,8 +341,9 @@ equipment safety controls are not yet implemented in the Flutter client.
 
 - Cloud resources are configured in files but have not been provisioned or
   validated end to end.
-- SQLite is the normal local database; PostgreSQL production behavior remains
-  to be exercised.
+- SQLite is the normal local database; a live PostgreSQL migration check remains
+  pending because the available local PostgreSQL service did not accept the
+  available local role credentials.
 - Dashboard list endpoints do not yet paginate.
 - Fleet analytics stream required reading columns and aggregate them in the
   application; custom windows are therefore capped at 30 days and 1,000
@@ -358,6 +364,28 @@ equipment safety controls are not yet implemented in the Flutter client.
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-09-23
+
+- `python -m pip install -r requirements.txt` succeeded and installed
+  `psycopg2-binary 2.9.13`; configuration tests cover development SQLite
+  defaults, production rejection of a missing or SQLite URL, accepted
+  PostgreSQL URL forms, and Alembic percent-encoded credential round-tripping.
+- Backend baseline was 126 passed and 3 failed. The failures were test setup
+  issues: the restore fixture used the latest model schema but stamped it as
+  revision `0008`; the analytics threshold-history test had no tank in scope;
+  and the disabled-threshold test changed the ORM row directly without writing
+  the history revision that production reads use. The fixtures now use a real
+  revision-`0008` migration, create an active tank for analytics scope, and
+  disable the threshold through its API. Assertions were preserved.
+- Final backend suite: `python -m pytest -q` passed with 136 tests.
+- A clean temporary SQLite database upgraded from revision `0001` through head;
+  a second `alembic upgrade head` ran with no migration work. FastAPI started
+  against temporary file-backed SQLite and `/health` returned HTTP 200.
+- A PostgreSQL 18 service was running locally and port 5432 responded, but no
+  available local role could authenticate. No PostgreSQL database was created;
+  the full PostgreSQL migration chain still needs verification with an
+  authorized test database.
 
 ## Validation checkpoint — 2026-08-22
 

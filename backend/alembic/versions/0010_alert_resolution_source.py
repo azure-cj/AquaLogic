@@ -22,7 +22,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE alerts SET resolution_source = 'operator' "
-            "WHERE is_resolved = 1 AND resolved_by_user_id IS NOT NULL "
+            "WHERE is_resolved IS TRUE AND resolved_by_user_id IS NOT NULL "
             "AND resolution_source IS NULL"
         )
     )
@@ -32,5 +32,8 @@ def downgrade() -> None:
     connection = op.get_bind()
     columns = {column["name"] for column in sa.inspect(connection).get_columns("alerts")}
     if "resolution_source" in columns:
-        with op.batch_alter_table("alerts", recreate="always") as batch:
-            batch.drop_column("resolution_source")
+        if connection.dialect.name == "sqlite":
+            with op.batch_alter_table("alerts", recreate="always") as batch:
+                batch.drop_column("resolution_source")
+        else:
+            op.drop_column("alerts", "resolution_source")

@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-23
 
 ## First-time setup
 
@@ -16,6 +16,12 @@ copy .env.example .env
 alembic upgrade head
 python -m seed.seed_data
 ```
+
+The backend defaults to SQLite for development and tests. A production
+environment must provide `DATABASE_URL` using PostgreSQL; a missing URL or a
+SQLite URL fails settings validation at startup. The synchronous PostgreSQL
+driver is installed from `requirements.txt`, and `postgres://` URLs are
+normalized for SQLAlchemy.
 
 ### Web
 
@@ -308,8 +314,10 @@ rg -n "Luna Extra High|implementation roadmap|WEB_DASHBOARD_IMPLEMENTATION_REPOR
 ## Deployment preparation
 
 Deployment configuration is present in `render.yaml` and `web/vercel.json`, but
-deployment is not complete. Before a production release, configure a real
-PostgreSQL database, a unique 32-byte JWT secret, explicit CORS origins and
-trusted hosts, a public base URL, controlled image hosts, and disabled
-debug/demo flags. Verify login, refresh rotation, public QR privacy, migration,
-headers, CORS, RBAC, and sensor-ingestion smoke tests before release.
+deployment is not complete. Before a production release, provide a PostgreSQL
+`DATABASE_URL`, a unique 32-byte JWT secret, explicit CORS origins and trusted
+hosts, a public base URL, controlled image hosts, and disabled debug/demo flags.
+The backend code validates the database mode and migration URL handling, but the
+production migration chain still needs a live PostgreSQL upgrade check. Verify
+login, refresh rotation, public QR privacy, migration, headers, CORS, RBAC, and
+sensor-ingestion smoke tests before release.

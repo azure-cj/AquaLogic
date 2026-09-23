@@ -16,6 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     connection = op.get_bind()
+    is_sqlite = connection.dialect.name == "sqlite"
     inspector = sa.inspect(connection)
     columns = {column["name"] for column in inspector.get_columns("tanks")}
     additions = (
@@ -25,7 +26,7 @@ def upgrade() -> None:
         ("monitoring_expected_at", sa.DateTime(timezone=True)),
     )
     missing = [(name, column_type) for name, column_type in additions if name not in columns]
-    if missing:
+    if is_sqlite and missing:
         with op.batch_alter_table("tanks", recreate="always") as batch:
             for name, column_type in missing:
                 batch.add_column(sa.Column(name, column_type, nullable=True))
@@ -37,6 +38,18 @@ def upgrade() -> None:
                     ["id"],
                     ondelete="SET NULL",
                 )
+    elif not is_sqlite:
+        for name, column_type in missing:
+            op.add_column("tanks", sa.Column(name, column_type, nullable=True))
+        if "retired_by_user_id" not in columns:
+            op.create_foreign_key(
+                "fk_tanks_retired_by_user_id_users",
+                "tanks",
+                "users",
+                ["retired_by_user_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
 
     indexes = {index["name"] for index in sa.inspect(connection).get_indexes("tanks")}
     if "ix_tanks_retired_at" not in indexes:
@@ -63,6 +76,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     connection = op.get_bind()
+    is_sqlite = connection.dialect.name == "sqlite"
     indexes = {index["name"] for index in sa.inspect(connection).get_indexes("tanks")}
     for name in (
         "ix_tanks_monitoring_expected_at",
@@ -71,8 +85,24 @@ def downgrade() -> None:
     ):
         if name in indexes:
             op.drop_index(name, table_name="tanks")
-    with op.batch_alter_table("tanks", recreate="always") as batch:
-        batch.drop_column("monitoring_expected_at")
-        batch.drop_column("retirement_note")
-        batch.drop_column("retired_by_user_id")
-        batch.drop_column("retired_at")
+    if is_sqlite:
+        with op.batch_alter_table("tanks", recreate="always") as batch:
+            batch.drop_column("monitoring_expected_at")
+            batch.drop_column("retirement_note")
+            batch.drop_column("retired_by_user_id")
+            batch.drop_column("retired_at")
+    else:
+        foreign_keys = {foreign_key.get("name") for foreign_key in sa.inspect(connection).get_foreign_keys("tanks")}
+        if "fk_tanks_retired_by_user_id_users" in foreign_keys:
+            op.drop_constraint(
+                "fk_tanks_retired_by_user_id_users",
+                "tanks",
+                type_="foreignkey",
+            )
+        for column_name in (
+            "monitoring_expected_at",
+            "retirement_note",
+            "retired_by_user_id",
+            "retired_at",
+        ):
+            op.drop_column("tanks", column_name)

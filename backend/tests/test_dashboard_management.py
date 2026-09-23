@@ -172,6 +172,7 @@ def test_admin_staff_lifecycle_and_threshold_validation(client, db_session):
     revision_boundary = datetime.now(timezone.utc) - timedelta(minutes=20)
     revisions[0].effective_from = revision_boundary - timedelta(minutes=20)
     revisions[1].effective_from = revision_boundary
+    db_session.add(Tank(name="Threshold history scope", location="Test rack"))
     db_session.commit()
     threshold_start = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
     threshold_end = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z")

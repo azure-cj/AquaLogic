@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import subprocess
+import sys
 import tarfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base, configure_sqlite_foreign_keys
+from app.database import configure_sqlite_foreign_keys
 from app.models import AuthSession, User
 from app.security import get_password_hash
 from scripts._common import ToolError
 from scripts.backup_local import create_backup
 from scripts.restore_local import restore_bundle
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _create_backup_source(tmp_path: Path) -> tuple[Path, Path]:
@@ -25,12 +30,29 @@ def _create_backup_source(tmp_path: Path) -> tuple[Path, Path]:
     (media_root / "tanks").mkdir()
     (media_root / "tanks" / "tank.jpg").write_bytes(b"tank image")
 
-    engine = create_engine(f"sqlite:///{database_path.as_posix()}", future=True)
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = database_url
+    migration = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            str(PROJECT_ROOT / "alembic.ini"),
+            "upgrade",
+            "0008_actuator_controls",
+        ],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    if migration.returncode:
+        pytest.fail(f"Could not create the revision-0008 backup fixture: {migration.stderr or migration.stdout}")
+
+    engine = create_engine(database_url, future=True)
     configure_sqlite_foreign_keys(engine)
-    Base.metadata.create_all(bind=engine)
-    with engine.begin() as connection:
-        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('0008_actuator_controls')"))
     session_factory = sessionmaker(bind=engine, future=True)
     with session_factory() as db:
         user = User(
