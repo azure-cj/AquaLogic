@@ -17,11 +17,34 @@ alembic upgrade head
 python -m seed.seed_data
 ```
 
+The seed step above is for local development only. Do not run the demo seed
+script in production.
+
 The backend defaults to SQLite for development and tests. A production
 environment must provide `DATABASE_URL` using PostgreSQL; a missing URL or a
 SQLite URL fails settings validation at startup. The synchronous PostgreSQL
 driver is installed from `requirements.txt`, and `postgres://` URLs are
 normalized for SQLAlchemy.
+
+### Production first administrator
+
+After the production schema has been migrated, provide these one-off command
+environment variables:
+
+- `ADMIN_BOOTSTRAP_EMAIL`
+- `ADMIN_BOOTSTRAP_PASSWORD` (12–128 characters)
+- `ADMIN_BOOTSTRAP_NAME`
+
+Run from `backend/`:
+
+```powershell
+python -m app.cli.create_admin
+```
+
+The command creates only the first administrator account (`admin` role), uses
+the standard AquaLogic password hash, and makes no changes if the email or an
+administrator already exists. It never prints the password. **Do not run the
+demo seed script (`python -m seed.seed_data`) in production.**
 
 ### Web
 

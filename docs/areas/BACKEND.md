@@ -15,6 +15,9 @@ Last reviewed: 2026-09-23
 - `backend/app/main.py`: application creation, startup, middleware, routers.
 - `backend/app/config.py`: environment-driven settings, production validation,
   and normalized database URL handling.
+- `backend/app/cli/create_admin.py`: one-off production first-administrator
+  bootstrap from required `ADMIN_BOOTSTRAP_*` environment variables. It creates
+  only the account; the demo seed command is local-development-only.
 - `backend/app/models/`: SQLAlchemy entities.
 - `backend/app/schemas/`: API request/response validation.
 - `backend/app/routes/`: HTTP route modules.

@@ -36,6 +36,10 @@ Last reviewed: 2026-09-23
   revocable rotating refresh sessions, one-time setup links, database-backed
   login throttling, audit events, strict production configuration, and
   role-enforced write permissions.
+- A one-off `python -m app.cli.create_admin` command bootstraps only the first
+  administrator from required `ADMIN_BOOTSTRAP_EMAIL`,
+  `ADMIN_BOOTSTRAP_PASSWORD`, and `ADMIN_BOOTSTRAP_NAME` values. It uses the
+  standard Argon2id hash, is safe to rerun, and does not create demo data.
 - The public tank contract now exposes a privacy-safe display location only,
   omits tank codes and feeding schedules, and rounds public readings.
 - Temporary ESP32 bridge testing is implemented: registered device keys map to
