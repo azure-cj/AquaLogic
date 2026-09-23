@@ -14,6 +14,17 @@ branch_labels = None
 depends_on = None
 
 
+def _widen_alembic_version_table(connection) -> None:
+    if connection.dialect.name != "postgresql":
+        return
+    op.alter_column(
+        "alembic_version",
+        "version_num",
+        existing_type=sa.String(length=32),
+        type_=sa.String(length=64),
+    )
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     is_sqlite = connection.dialect.name == "sqlite"
@@ -72,6 +83,10 @@ def upgrade() -> None:
             "AND registered_devices.is_active IS TRUE)"
         )
     )
+
+    # Alembic stores a revision only after its upgrade function returns. Widen
+    # its default VARCHAR(32) here so revision 0013 (36 characters) can be saved.
+    _widen_alembic_version_table(connection)
 
 
 def downgrade() -> None:

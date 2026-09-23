@@ -112,6 +112,9 @@ uses native PostgreSQL column/constraint alterations for referenced tables in
 revisions `0009` and `0012`. `0010` uses a Boolean `IS TRUE` predicate in both
 database dialects. SQLite-only connection arguments, foreign-key pragmas, and
 `BEGIN IMMEDIATE` writer locks remain guarded by the SQLite dialect.
+Revision `0012` also widens PostgreSQL's `alembic_version.version_num` to
+`VARCHAR(64)` before storing the 36-character `0013` revision ID; SQLite keeps
+its existing version-table behavior.
 
 ## Common checks
 

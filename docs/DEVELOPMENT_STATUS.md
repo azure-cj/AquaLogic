@@ -378,14 +378,20 @@ equipment safety controls are not yet implemented in the Flutter client.
   the history revision that production reads use. The fixtures now use a real
   revision-`0008` migration, create an active tank for analytics scope, and
   disable the threshold through its API. Assertions were preserved.
-- Final backend suite: `python -m pytest -q` passed with 136 tests.
+- Final backend suite: `python -m pytest -q` passed with 137 tests, including a
+  migration-version-capacity regression check.
 - A clean temporary SQLite database upgraded from revision `0001` through head;
   a second `alembic upgrade head` ran with no migration work. FastAPI started
   against temporary file-backed SQLite and `/health` returned HTTP 200.
+- The Railway PostgreSQL error exposed revision `0013`'s 36-character ID
+  exceeding Alembic's default `VARCHAR(32)` version column. Migration `0012`
+  now widens that column to `VARCHAR(64)` on PostgreSQL before Alembic records
+  the next revision; SQLite skips the alteration. A scan found no other
+  revision IDs over 32 characters.
 - A PostgreSQL 18 service was running locally and port 5432 responded, but no
   available local role could authenticate. No PostgreSQL database was created;
-  the full PostgreSQL migration chain still needs verification with an
-  authorized test database.
+  the new version-column alteration and full PostgreSQL migration chain still
+  need verification with an authorized test database.
 
 ## Validation checkpoint — 2026-08-22
 
