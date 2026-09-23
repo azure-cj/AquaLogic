@@ -280,7 +280,7 @@
 .tank-detail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .back-link { display: inline-flex; gap: 0.35rem; align-items: center; margin-bottom: 0.8rem; color: var(--teal-700); font-size: 0.75rem; font-weight: 700; }
 .private-state { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
-.tank-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.tank-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
 .tank-summary-card { display: grid; gap: 0.42rem; min-height: 92px; padding: 0.85rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .tank-status-explanation { margin: -0.35rem 0 1rem; color: var(--muted); font-size: 0.72rem; line-height: 1.5; }
 .tank-status-explanation strong { color: var(--text); }
@@ -334,7 +334,7 @@
 .hero-image-empty { display: flex; align-items: center; gap: .5rem; min-height: 72px; padding: .8rem; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: .7rem; }
 .form-section-visibility { gap: .55rem; }
 
-@media (max-width: 980px) { .tank-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .tank-primary-grid { grid-template-columns: 1fr; } }
+@media (max-width: 980px) { .tank-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tank-primary-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .tank-summary-grid, .tank-secondary-grid, .reading-grid, .tank-info-list { grid-template-columns: 1fr; } .tank-summary-card { min-height: auto; } .tank-detail-actions { width: 100%; } .tank-detail-actions .button { flex: 1 1 120px; min-height: 42px; } .care-filter { width: 100%; overflow-x: auto; } }
 
 @media (max-width: 767px) {
@@ -361,7 +361,7 @@
 .back-link { margin-bottom: 1rem; font-size: .82rem; }
 
 .tank-summary-grid { gap: 1rem; margin-bottom: 1.25rem; }
-.tank-summary-card { min-height: 112px; align-content: space-between; padding: 1rem 1.05rem; border-radius: 16px; box-shadow: 0 8px 22px rgba(20, 58, 69, .045); }
+.tank-summary-card { min-height: 92px; align-content: space-between; padding: .85rem .95rem; border-radius: 16px; box-shadow: 0 8px 22px rgba(20, 58, 69, .045); }
 .tank-summary-card small { font-size: .72rem; letter-spacing: .01em; }
 .tank-summary-card strong { font-size: 1.45rem; letter-spacing: -.04em; }
 .tank-summary-card .status-badge, .tank-summary-card .care-status { margin-top: .35rem; }
@@ -463,6 +463,18 @@
 .tank-hero-preview { display: block; width: 128px; height: 82px; margin: 0 1rem 1rem auto; border: 1px solid var(--border); border-radius: 10px; object-fit: cover; }
 .tank-hero-fallback { display: grid; width: 128px; min-height: 82px; margin: 0 1rem 1rem auto; place-items: center; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); background: #f7f9fa; font-size: .7rem; text-align: center; }
 
+.tank-detail-tabs { display: flex; justify-content: flex-start; width: max-content; max-width: 100%; margin: 0 0 1rem; overflow-x: auto; scrollbar-width: thin; }
+.tank-detail-tabs.monitoring-incident-mode > button { flex: 0 0 auto; min-width: 6.25rem; min-height: 2.55rem; padding: .55rem .9rem; border: 1px solid transparent; color: var(--text); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.tank-detail-tabs.monitoring-incident-mode > button:hover:not(.active) { color: var(--teal-700); background: var(--teal-100); }
+.tank-detail-tabs.monitoring-incident-mode > button.active { border-color: var(--teal-700); color: var(--teal-700); background: var(--teal-100); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--teal-700) 8%, transparent); }
+.tank-detail-tabs.monitoring-incident-mode > button:focus-visible { outline: 2px solid var(--teal-600); outline-offset: 2px; }
+.tank-detail .tank-tab-panel[hidden] { display: none !important; }
+.tank-tab-panel { display: grid; gap: 1.1rem; min-width: 0; }
+.tank-tab-panel:focus-visible { outline: 2px solid var(--teal-600); outline-offset: 3px; }
+.tank-overview-grid { margin-top: 0; }
+.tank-history-tab { gap: 1.1rem; }
+.tank-alert-history-panel .alert-feed-item > span:last-child { justify-self: end; }
+
 @media (max-width: 1120px) {
   .tank-primary-grid { grid-template-columns: 1fr; }
   .tank-operations-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
@@ -475,8 +487,7 @@
   .tank-detail-actions { justify-content: flex-start; max-width: none; }
   .tank-detail-actions .button { flex: 1 1 calc(50% - .5rem); }
   .tank-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
-  .tank-summary-card { min-height: 92px; padding: .8rem; }
-  .tank-summary-card:last-child { grid-column: 1 / -1; }
+  .tank-summary-card { min-height: 82px; padding: .75rem .8rem; }
   .tank-operations-column, .tank-secondary-grid { grid-template-columns: 1fr; }
   .tank-operations-column .tank-readings-panel { grid-column: auto; }
   .tank-care-panel .species-care { padding: 1rem; }
@@ -500,6 +511,13 @@
   .tank-secondary-grid > .panel:last-child > .tank-hero-fallback { width: 100%; height: 140px; margin: 0; border-width: 1px 0 0; border-radius: 0; }
   .tank-alerts-panel .alert-feed-item { grid-template-columns: auto minmax(0, 1fr); }
   .tank-alerts-panel .alert-feed-item .button { grid-column: 2; justify-self: start; }
+  .tank-detail-tabs { gap: .15rem; padding: .2rem; }
+  .tank-detail-tabs.monitoring-incident-mode > button { min-width: 4.6rem; padding-inline: .65rem; font-size: .74rem; }
+  .tank-alert-history-panel .alert-feed-item > span:last-child { justify-self: start; }
+}
+
+@media (max-width: 600px) {
+  .tank-summary-grid { grid-template-columns: 1fr; }
 }
 
 .actuator-control-page, .actuator-directory-page { max-width: 1380px; margin: 0 auto; }

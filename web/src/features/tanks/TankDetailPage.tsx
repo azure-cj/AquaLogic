@@ -38,12 +38,13 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CareStatusChip, SpeciesCarePanel } from './SpeciesCarePanel';
 import { ActuatorControlPanel, StaffActuatorNotice } from './ActuatorControlPanel';
 import { TankEditorDrawer } from './TankEditorDrawer';
 import { TankRetireDialog } from './TankRetireDialog';
+import { TankThresholdsPanel } from './TankThresholdsPanel';
 import { MonitoringIncidentTankPanel } from '@/features/monitoring/MonitoringIncidentViews';
 import { publicTankUrl } from './publicLink';
 import { useMe } from '@/shared/hooks/useMe';
@@ -55,6 +56,15 @@ const measurements = [
   ['turbidity', 'Turbidity', 'NTU', 1],
   ['tds', 'TDS', 'ppm', 0],
 ] as const;
+
+const tankDetailTabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'monitor', label: 'Monitor' },
+  { id: 'control', label: 'Control' },
+  { id: 'history', label: 'History' },
+] as const;
+
+type TankDetailTab = (typeof tankDetailTabs)[number]['id'];
 
 function currentReleaseOperationalStatus(operations: TankOperations): TankOperations['status'] {
   if (operations.status === 'retired') return 'retired';
@@ -77,6 +87,7 @@ export function TankDetail() {
   const me = useMe();
   const canManage = me.data?.role !== 'staff';
   const isAdmin = me.data?.role === 'admin';
+  const [activeTab, setActiveTab] = useState<TankDetailTab>('overview');
   const [assigning, setAssigning] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
   const [removing, setRemoving] = useState<Fish | null>(null);
@@ -114,7 +125,7 @@ export function TankDetail() {
   const historicalAlerts = useQuery({
     queryKey: ['tank-alert-history', id],
     queryFn: () => api<Alert[]>(`/tanks/${id}/alerts?include_resolved=true`),
-    enabled: tank.isSuccess && tank.data?.lifecycle === 'retired',
+    enabled: tank.isSuccess && (tank.data?.lifecycle === 'retired' || activeTab === 'history'),
   });
   const fish = useQuery({
     queryKey: ['fish'],
@@ -178,6 +189,7 @@ export function TankDetail() {
     try {
       await api(`/alerts/${alertId}/resolve`, { method: 'PUT' });
       client.invalidateQueries({ queryKey: ['tank-operations', id] });
+      client.invalidateQueries({ queryKey: ['tank-alert-history', id] });
       client.invalidateQueries({ queryKey: ['alerts'] });
       client.invalidateQueries({ queryKey: ['fleet'] });
       setActionNotice('Operational alert marked as handled.');
@@ -259,6 +271,25 @@ export function TankDetail() {
   const visibleActiveAlerts = operations.data?.active_alerts.filter((alert) =>
     measurements.some(([key]) => key === alert.parameter),
   ) ?? [];
+  const visibleHistoricalAlerts = (historicalAlerts.data ?? []).filter((alert) =>
+    isRetired || (alert.is_resolved && measurements.some(([key]) => key === alert.parameter)),
+  );
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const currentIndex = tankDetailTabs.findIndex((tab) => tab.id === event.currentTarget.dataset.tab);
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tankDetailTabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tankDetailTabs.length) % tankDetailTabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tankDetailTabs.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = tankDetailTabs[nextIndex];
+    setActiveTab(nextTab.id);
+    event.currentTarget.parentElement
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]
+      ?.focus();
+  };
   const publicActions = value.is_public ? (
     <>
       <a
@@ -384,301 +415,368 @@ export function TankDetail() {
               : formatReportingAge(reportingAge, { offline: operationalStatus === 'offline' })}
           </strong>
         </div>
-        <div className="tank-summary-card">
-          <small>Assigned species</small>
-          <strong>{assigned.length}</strong>
-        </div>
       </div>
 
       <p className="tank-status-explanation">
         {isRetired ? (
           <><strong>Retired</strong> is a historical, read-only state. The last reading, assignments, alerts, configuration, media, and equipment history remain available; no new operational data or controls are accepted.</>
         ) : (
-          <><strong>Operational status</strong> uses global monitoring thresholds.{' '}
-          <strong>Species Care</strong> compares current supported readings with assigned-species preferences.</>
+          <><strong>Water status</strong> follows the standard limits unless custom limits are set for this tank.{' '}
+          <strong>Species Care</strong> compares available readings with the needs of the fish assigned here.</>
         )}
       </p>
 
-      <div className="tank-primary-grid">
-        <Panel
-          title={isRetired ? 'Species Care history' : 'Live care evaluation'}
-          description={isRetired ? 'Retained assignment records; no new evaluation is run' : 'Live suitability by assigned species'}
-          className="tank-care-panel"
-        >
-          {isRetired ? <Notice>Retired tanks do not participate in live Species Care evaluation.</Notice> : <SpeciesCarePanel
-            result={care}
-            loading={suitability.isLoading}
-            error={suitability.isError}
-            retry={() => suitability.refetch()}
-          />}
-        </Panel>
-        <div className="tank-operations-column">
-          <Panel
-            title={isRetired || isLastKnown ? 'Last known readings' : 'Current readings'}
-            description={
-                reading
-                 ? `Observed ${formatDate(reading.timestamp)} · ${formatReportingAge(reportingAge, { offline: operationalStatus === 'offline' })}`
-                : 'No sensor reading is available'
-            }
-            className="tank-readings-panel"
+      <div className="monitoring-incident-mode tank-detail-tabs" role="tablist" aria-label="Tank workspace sections">
+        {tankDetailTabs.map((tab) => (
+          <button
+            key={tab.id}
+            id={`tank-${id}-${tab.id}-tab`}
+            type="button"
+            role="tab"
+            data-tab={tab.id}
+            aria-controls={`tank-${id}-${tab.id}-panel`}
+            aria-selected={activeTab === tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            className={activeTab === tab.id ? 'active' : ''}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={handleTabKeyDown}
           >
-            {operations.isLoading ? (
-              <LoadingState label="Loading readings…" />
-            ) : operations.isError ? (
-              <ErrorState
-                message="Readings could not be loaded."
-                retry={() => operations.refetch()}
-              />
-            ) : !reading ? (
-              <EmptyState
-                title="No reading yet"
-                message="Operational status will update after the first sensor report."
-              />
-            ) : (
-              <div className="reading-grid">
-                {measurements.map(([key, label, unit, decimals]) => (
-                  <div className="reading-item" key={key}>
-                    <small>{isLastKnown && reading[key] !== null ? `Last known ${label === 'pH' ? 'pH' : label.toLowerCase()}` : label}</small>
-                    <strong>{reading[key] === null ? 'Not installed' : formatReading(reading[key], unit, decimals)}</strong>
-                    <StatusBadge value={operations.data!.parameter_statuses[key]} />
-                  </div>
-                ))}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div
+        id={`tank-${id}-overview-panel`}
+        role="tabpanel"
+        aria-labelledby={`tank-${id}-overview-tab`}
+        tabIndex={0}
+        className="tank-tab-panel"
+        hidden={activeTab !== 'overview'}
+      >
+        <div className="tank-secondary-grid tank-overview-grid">
+          <Panel
+            title="Assigned species"
+            description={isRetired ? 'Historical livestock assignment retained for this tank' : 'Manage the livestock assigned to this tank'}
+            className="tank-assignments-panel"
+            action={
+              !isRetired ? (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={() => setAssigning((open) => !open)}
+                >
+                  Add species
+                </button>
+              ) : undefined
+            }
+          >
+            {assigning &&
+              (fish.isLoading ? (
+                <LoadingState label="Loading species…" />
+              ) : fish.isError ? (
+                <ErrorState
+                  message="Species could not be loaded."
+                  retry={() => fish.refetch()}
+                />
+              ) : (
+                <label className="field assignment-picker">
+                  <span>Choose a species</span>
+                  <select
+                    defaultValue=""
+                    disabled={assignBusy}
+                    onChange={(event) => {
+                      if (event.target.value) assign(Number(event.target.value));
+                    }}
+                  >
+                    <option value="">
+                      {assignBusy ? 'Assigning…' : 'Choose a species'}
+                    </option>
+                    {fish.data
+                      ?.filter(
+                        (item) =>
+                          !assigned.some((selected) => selected.id === item.id),
+                      )
+                      .map((item) => (
+                        <option value={item.id} key={item.id}>
+                          {item.common_name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ))}
+            {assigned.length ? (
+              <div className="assignment-list">
+                {assigned.map((item) => {
+                  const speciesStatus = care?.species.find(
+                    (entry) => entry.fish_species_id === item.id,
+                  )?.status;
+                  return (
+                    <div key={item.id}>
+                      <span className="resource-avatar">
+                        {item.photo_url ? (
+                          <img src={item.photo_url} alt="" />
+                        ) : (
+                          <FishSymbol size={18} aria-hidden="true" />
+                        )}
+                      </span>
+                      <span>
+                        <strong>{item.common_name}</strong>
+                        <small>{item.scientific_name}</small>
+                      </span>
+                      {speciesStatus ? (
+                        <CareStatusChip status={speciesStatus} />
+                      ) : (
+                        <span className="muted">Care status pending</span>
+                      )}
+                      {!isRetired && (
+                        <button
+                          className="icon-button icon-danger"
+                          type="button"
+                          onClick={() => setRemoving(item)}
+                          aria-label={`Remove ${item.common_name}`}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+            ) : (
+              <EmptyState
+                title="No assigned species"
+                message="Add a species to begin care checks."
+              />
             )}
           </Panel>
+
           <Panel
-            title="Operational alerts"
-            description={isRetired ? 'Historical alert records retained with this retired tank.' : 'Persisted unresolved alerts only. Mark handled removes an alert from the active queue but does not confirm water recovery.'}
-            className="tank-alerts-panel"
-            action={
-              <Link
-                className="text-link"
-                to={`/admin/alerts?tank_id=${id}&resolved=false`}
-              >
-                View history
-              </Link>
-            }
+            title="Tank information"
+            description="Additional configuration and public profile details"
           >
-            {isRetired && historicalAlerts.isLoading ? (
-              <LoadingState label="Loading alert history…" />
-            ) : isRetired && historicalAlerts.isError ? (
-              <ErrorState
-                message="Alert history could not be loaded."
-                retry={() => historicalAlerts.refetch()}
-              />
-            ) : !isRetired && operations.isLoading ? (
-              <LoadingState label="Loading operational alerts…" />
-            ) : !isRetired && operations.isError ? (
-              <ErrorState
-                message="Operational alerts could not be loaded."
-                retry={() => operations.refetch()}
-              />
-            ) : (isRetired ? historicalAlerts.data ?? [] : visibleActiveAlerts).length ? (
-              <div className="alert-feed">
-                {(isRetired ? historicalAlerts.data ?? [] : visibleActiveAlerts).map((alert) => (
-                  <div className="alert-feed-item" key={alert.id}>
-                    <span
-                      className={`alert-symbol alert-${alert.severity}`}
-                      aria-hidden="true"
-                    >
-                      <AlertTriangle size={16} />
-                    </span>
-                    <span>
-                      <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
-                      <small>{alert.message}</small>
-                    </span>
-                    {isRetired ? (
-                      <span className="muted">{alert.is_resolved ? 'Handled' : 'Unresolved at retirement'}</span>
-                    ) : (
-                      <button
-                        className="button button-secondary"
-                        type="button"
-                        disabled={resolvingId === alert.id}
-                        onClick={() => resolve(alert.id)}
-                        aria-label={`Mark ${alert.parameter.replaceAll('_', ' ')} alert handled; this does not confirm water recovery`}
-                      >
-                        {resolvingId === alert.id ? 'Marking handled…' : 'Mark handled'}
-                      </button>
-                    )}
-                  </div>
-                ))}
+            <dl className="tank-info-list">
+              <div>
+                <dt>Description</dt>
+                <dd>{value.description ?? 'Not configured'}</dd>
               </div>
-            ) : (
-              <EmptyState
-                title={isRetired ? 'No retained alerts' : 'No active alerts'}
-                message={isRetired ? 'No alert records were stored for this tank.' : 'Species Care observations are intentionally separate.'}
-              />
-            )}
+              <div>
+                <dt>Habitat label</dt>
+                <dd>{value.habitat_label ?? 'Not configured'}</dd>
+              </div>
+              <div>
+                <dt>Public page</dt>
+                <dd>{value.is_public ? 'Published' : 'Private'}</dd>
+              </div>
+              <div>
+                <dt>Established</dt>
+                <dd>{value.established_on ?? 'Not recorded'}</dd>
+              </div>
+              <div>
+                <dt>Feeding schedule</dt>
+                <dd>{value.feeding_schedule ?? 'Not configured'}</dd>
+              </div>
+              <div>
+                <dt>Public care notes</dt>
+                <dd>{value.public_care_notes ?? 'Not configured'}</dd>
+              </div>
+            </dl>
+            {value.hero_image_url &&
+              (heroFailed ? (
+                <div className="tank-hero-fallback">Image unavailable</div>
+              ) : (
+                <img
+                  className="tank-hero-preview"
+                  src={value.hero_image_url}
+                  alt=""
+                  onError={() => setHeroFailed(true)}
+                />
+              ))}
           </Panel>
         </div>
       </div>
 
-      <div className="tank-secondary-grid">
-        <Panel
-          title="Assigned species"
-          description={isRetired ? 'Historical livestock assignment retained for this tank' : 'Manage the livestock assigned to this tank'}
-          className="tank-assignments-panel"
-          action={
-            !isRetired ? (
-              <button
-                className="button button-secondary"
-                type="button"
-                onClick={() => setAssigning((open) => !open)}
+      <div
+        id={`tank-${id}-monitor-panel`}
+        role="tabpanel"
+        aria-labelledby={`tank-${id}-monitor-tab`}
+        tabIndex={0}
+        className="tank-tab-panel"
+        hidden={activeTab !== 'monitor'}
+      >
+        <div className="tank-primary-grid">
+          <Panel
+            title={isRetired ? 'Species Care history' : 'Live care evaluation'}
+            description={isRetired ? 'Retained assignment records; no new evaluation is run' : 'Live suitability by assigned species'}
+            className="tank-care-panel"
+          >
+            {isRetired ? <Notice>Retired tanks do not participate in live Species Care evaluation.</Notice> : <SpeciesCarePanel
+              result={care}
+              loading={suitability.isLoading}
+              error={suitability.isError}
+              retry={() => suitability.refetch()}
+            />}
+          </Panel>
+          <div className="tank-operations-column">
+            <Panel
+              title={isRetired || isLastKnown ? 'Last known readings' : 'Current readings'}
+              description={
+                reading
+                  ? `Observed ${formatDate(reading.timestamp)} · ${formatReportingAge(reportingAge, { offline: operationalStatus === 'offline' })}`
+                  : 'No sensor reading is available'
+              }
+              className="tank-readings-panel"
+            >
+              {operations.isLoading ? (
+                <LoadingState label="Loading readings…" />
+              ) : operations.isError ? (
+                <ErrorState
+                  message="Readings could not be loaded."
+                  retry={() => operations.refetch()}
+                />
+              ) : !reading ? (
+                <EmptyState
+                  title="No reading yet"
+                  message="Operational status will update after the first sensor report."
+                />
+              ) : (
+                <div className="reading-grid">
+                  {measurements.map(([key, label, unit, decimals]) => (
+                    <div className="reading-item" key={key}>
+                      <small>{isLastKnown && reading[key] !== null ? `Last known ${label === 'pH' ? 'pH' : label.toLowerCase()}` : label}</small>
+                      <strong>{reading[key] === null ? 'Not installed' : formatReading(reading[key], unit, decimals)}</strong>
+                      <StatusBadge value={operations.data!.parameter_statuses[key]} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+            {!isRetired && (
+              <Panel
+                title="Operational alerts"
+                description="Persisted unresolved alerts only. Mark handled removes an alert from the active queue but does not confirm water recovery."
+                className="tank-alerts-panel"
+                action={
+                  <Link
+                    className="text-link"
+                    to={`/admin/alerts?tank_id=${id}&resolved=false`}
+                  >
+                    View history
+                  </Link>
+                }
               >
-                Add species
-              </button>
-            ) : undefined
-          }
-        >
-          {assigning &&
-            (fish.isLoading ? (
-              <LoadingState label="Loading species…" />
-            ) : fish.isError ? (
-              <ErrorState
-                message="Species could not be loaded."
-                retry={() => fish.refetch()}
-              />
-            ) : (
-              <label className="field assignment-picker">
-                <span>Choose a species</span>
-                <select
-                  defaultValue=""
-                  disabled={assignBusy}
-                  onChange={(event) => {
-                    if (event.target.value) assign(Number(event.target.value));
-                  }}
-                >
-                  <option value="">
-                    {assignBusy ? 'Assigning…' : 'Choose a species'}
-                  </option>
-                  {fish.data
-                    ?.filter(
-                      (item) =>
-                        !assigned.some((selected) => selected.id === item.id),
-                    )
-                    .map((item) => (
-                      <option value={item.id} key={item.id}>
-                        {item.common_name}
-                      </option>
+                {operations.isLoading ? (
+                  <LoadingState label="Loading operational alerts…" />
+                ) : operations.isError ? (
+                  <ErrorState
+                    message="Operational alerts could not be loaded."
+                    retry={() => operations.refetch()}
+                  />
+                ) : visibleActiveAlerts.length ? (
+                  <div className="alert-feed">
+                    {visibleActiveAlerts.map((alert) => (
+                      <div className="alert-feed-item" key={alert.id}>
+                        <span
+                          className={`alert-symbol alert-${alert.severity}`}
+                          aria-hidden="true"
+                        >
+                          <AlertTriangle size={16} />
+                        </span>
+                        <span>
+                          <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
+                          <small>{alert.message}</small>
+                        </span>
+                        <button
+                          className="button button-secondary"
+                          type="button"
+                          disabled={resolvingId === alert.id}
+                          onClick={() => resolve(alert.id)}
+                          aria-label={`Mark ${alert.parameter.replaceAll('_', ' ')} alert handled; this does not confirm water recovery`}
+                        >
+                          {resolvingId === alert.id ? 'Marking handled…' : 'Mark handled'}
+                        </button>
+                      </div>
                     ))}
-                </select>
-              </label>
-            ))}
-          {assigned.length ? (
-            <div className="assignment-list">
-              {assigned.map((item) => {
-                const speciesStatus = care?.species.find(
-                  (entry) => entry.fish_species_id === item.id,
-                )?.status;
-                return (
-                  <div key={item.id}>
-                    <span className="resource-avatar">
-                      {item.photo_url ? (
-                        <img src={item.photo_url} alt="" />
-                      ) : (
-                        <FishSymbol size={18} aria-hidden="true" />
-                      )}
-                    </span>
-                    <span>
-                      <strong>{item.common_name}</strong>
-                      <small>{item.scientific_name}</small>
-                    </span>
-                    {speciesStatus ? (
-                      <CareStatusChip status={speciesStatus} />
-                    ) : (
-                      <span className="muted">Care status pending</span>
-                    )}
-                    {!isRetired && (
-                      <button
-                        className="icon-button icon-danger"
-                        type="button"
-                        onClick={() => setRemoving(item)}
-                        aria-label={`Remove ${item.common_name}`}
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
                   </div>
-                );
-              })}
+                ) : (
+                  <EmptyState
+                    title="No active alerts"
+                    message="Species Care observations are intentionally separate."
+                  />
+                )}
+              </Panel>
+            )}
+          </div>
+        </div>
+
+        <TankThresholdsPanel tankId={id} active={value.lifecycle === 'active'} />
+      </div>
+
+      <div
+        id={`tank-${id}-control-panel`}
+        role="tabpanel"
+        aria-labelledby={`tank-${id}-control-tab`}
+        tabIndex={0}
+        className="tank-tab-panel"
+        hidden={activeTab !== 'control'}
+      >
+        {isRetired ? (
+          isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="full" readOnly /> : <StaffActuatorNotice />
+        ) : isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="summary" /> : <StaffActuatorNotice />}
+      </div>
+
+      <div
+        id={`tank-${id}-history-panel`}
+        role="tabpanel"
+        aria-labelledby={`tank-${id}-history-tab`}
+        tabIndex={0}
+        className="tank-tab-panel tank-history-tab"
+        hidden={activeTab !== 'history'}
+      >
+        <MonitoringIncidentTankPanel tankId={id} />
+        <Panel
+          title={isRetired ? 'Retained alert history' : 'Resolved alert history'}
+          description={isRetired ? 'Water-quality alerts retained with this retired tank.' : 'Handled and automatically resolved alerts. Unresolved alerts remain in Monitor.'}
+          className="tank-alerts-panel tank-alert-history-panel"
+        >
+          {historicalAlerts.isLoading ? (
+            <LoadingState label="Loading alert history…" />
+          ) : historicalAlerts.isError ? (
+            <ErrorState
+              message="Alert history could not be loaded."
+              retry={() => historicalAlerts.refetch()}
+            />
+          ) : visibleHistoricalAlerts.length ? (
+            <div className="alert-feed">
+              {visibleHistoricalAlerts.map((alert) => (
+                <div className="alert-feed-item" key={alert.id}>
+                  <span
+                    className={`alert-symbol alert-${alert.severity}`}
+                    aria-hidden="true"
+                  >
+                    <AlertTriangle size={16} />
+                  </span>
+                  <span>
+                    <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
+                    <small>{alert.message}</small>
+                    <small>Recorded {formatDate(alert.created_at)}</small>
+                  </span>
+                  <span className="muted">
+                    {alert.is_resolved
+                      ? alert.resolution_source === 'system' ? 'Automatically resolved' : 'Handled'
+                      : 'Unresolved at retirement'}
+                  </span>
+                </div>
+              ))}
             </div>
           ) : (
             <EmptyState
-              title="No assigned species"
-              message="Add a species to begin care checks."
+              title={isRetired ? 'No retained alerts' : 'No resolved alerts'}
+              message={isRetired ? 'No alert records were stored for this tank.' : 'Handled or automatically resolved alerts will appear here.'}
             />
           )}
         </Panel>
-
-        <Panel
-          title="Tank information"
-          description="Read-only configuration and public page settings"
-        >
-          <dl className="tank-info-list">
-            <div>
-              <dt>Description</dt>
-              <dd>{value.description ?? 'Not configured'}</dd>
-            </div>
-            <div>
-              <dt>Customer</dt>
-              <dd>{value.customer?.name ?? 'Unassigned'}</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
-              <dd>{value.location}</dd>
-            </div>
-            <div>
-              <dt>Water type</dt>
-              <dd>{value.water_type ?? 'Not specified'}</dd>
-            </div>
-            <div>
-              <dt>Volume</dt>
-              <dd>{value.volume_liters ? `${value.volume_liters} L` : 'Not recorded'}</dd>
-            </div>
-            <div>
-              <dt>Tank code</dt>
-              <dd>{value.tank_code ?? 'Not configured'}</dd>
-            </div>
-            <div>
-              <dt>Habitat label</dt>
-              <dd>{value.habitat_label ?? 'Not configured'}</dd>
-            </div>
-            <div>
-              <dt>Public page</dt>
-              <dd>{value.is_public ? 'Published' : 'Private'}</dd>
-            </div>
-            <div>
-              <dt>Established</dt>
-              <dd>{value.established_on ?? 'Not recorded'}</dd>
-            </div>
-            <div>
-              <dt>Feeding schedule</dt>
-              <dd>{value.feeding_schedule ?? 'Not configured'}</dd>
-            </div>
-            <div>
-              <dt>Public care notes</dt>
-              <dd>{value.public_care_notes ?? 'Not configured'}</dd>
-            </div>
-          </dl>
-          {value.hero_image_url &&
-            (heroFailed ? (
-              <div className="tank-hero-fallback">Image unavailable</div>
-            ) : (
-              <img
-                className="tank-hero-preview"
-                src={value.hero_image_url}
-                alt=""
-                onError={() => setHeroFailed(true)}
-              />
-            ))}
-        </Panel>
       </div>
-
-      <MonitoringIncidentTankPanel tankId={id} />
-
-      {isRetired ? (
-        isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="full" readOnly /> : <StaffActuatorNotice />
-      ) : isAdmin ? <ActuatorControlPanel tankId={id} tankName={value.name} variant="summary" /> : <StaffActuatorNotice />}
 
       <TankEditorDrawer
         open={!isRetired && editing}

@@ -3,7 +3,7 @@
 }
 
 .monitoring-incident-panel.is-compact {
-  --monitoring-incident-gutter: .85rem;
+  --monitoring-incident-gutter: 1.05rem;
 }
 
 .monitoring-incident-panel > .notice {
@@ -166,6 +166,42 @@
   margin-inline: var(--monitoring-incident-gutter);
 }
 
+.monitoring-incident-panel.is-compact > .notice {
+  margin-top: 1.15rem;
+  margin-bottom: .9rem;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-list {
+  gap: .75rem;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-row {
+  gap: .85rem;
+  padding: .95rem 1.05rem;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-main dl {
+  gap: .9rem 1rem;
+  margin: .8rem 0 .45rem;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-footer {
+  align-items: center;
+  margin-top: 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-pagination {
+  justify-content: flex-end;
+  gap: .6rem;
+  margin-left: auto;
+}
+
+.monitoring-incident-panel.is-compact .monitoring-incident-pagination .button {
+  min-width: 96px;
+  justify-content: center;
+}
+
 @media (max-width: 720px) {
   .monitoring-incident-main dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -181,7 +217,22 @@
     flex-direction: column;
   }
 
+  .monitoring-incident-panel.is-compact .monitoring-incident-footer {
+    align-items: stretch;
+    gap: .75rem;
+  }
+
   .monitoring-incident-pagination {
     justify-content: space-between;
+  }
+
+  .monitoring-incident-panel.is-compact .monitoring-incident-pagination {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .monitoring-incident-panel.is-compact .monitoring-incident-pagination .button {
+    min-width: 0;
+    flex: 1 1 0;
   }
 }
