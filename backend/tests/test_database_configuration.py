@@ -58,12 +58,36 @@ def test_production_rejects_sqlite_database_url(clean_database_environment, monk
     ("database_url", "normalized_url"),
     [
         (
+            "postgres://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+        ),
+        (
+            "postgresql://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+        ),
+        (
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic?sslmode=require",
+        ),
+        ("sqlite:///path/to/db", "sqlite:///path/to/db"),
+    ],
+)
+def test_normalize_database_url_selects_psycopg2_and_preserves_other_urls(
+    database_url, normalized_url
+):
+    assert app_config.normalize_database_url(database_url) == normalized_url
+
+
+@pytest.mark.parametrize(
+    ("database_url", "normalized_url"),
+    [
+        (
             "postgres://aqua:p%40ss%23@db.example:5432/aqualogic",
-            "postgresql://aqua:p%40ss%23@db.example:5432/aqualogic",
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic",
         ),
         (
             "postgresql://aqua:p%40ss%23@db.example:5432/aqualogic",
-            "postgresql://aqua:p%40ss%23@db.example:5432/aqualogic",
+            "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic",
         ),
         (
             "postgresql+psycopg2://aqua:p%40ss%23@db.example:5432/aqualogic",
@@ -82,6 +106,21 @@ def test_production_accepts_supported_postgresql_urls(
     settings = app_config.get_settings()
 
     assert settings.database_url == normalized_url
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql://aqua:secret@db.example:not-a-port/aqualogic",
+    ],
+)
+def test_production_rejects_malformed_postgresql_database_urls(
+    clean_database_environment, monkeypatch, database_url
+):
+    _set_valid_production_environment(monkeypatch, database_url)
+
+    with pytest.raises(ValueError, match="Production DATABASE_URL must be a valid PostgreSQL URL"):
+        app_config.get_settings()
 
 
 def test_alembic_config_round_trips_percent_encoded_credentials():

@@ -16,10 +16,12 @@ DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
 
 
 def normalize_database_url(database_url: str) -> str:
-    """Normalize common PostgreSQL URL aliases for SQLAlchemy."""
+    """Select psycopg2 explicitly for PostgreSQL URLs."""
     database_url = database_url.strip()
     if database_url.startswith("postgres://"):
-        return "postgresql://" + database_url[len("postgres://") :]
+        return "postgresql+psycopg2://" + database_url[len("postgres://") :]
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + database_url[len("postgresql://") :]
     return database_url
 
 

@@ -106,8 +106,9 @@ Development and tests may use SQLite; when `DATABASE_URL` is absent, the
 backend defaults to `sqlite:///./aqualogic.db`. With
 `ENVIRONMENT=production`, `DATABASE_URL` is required and must point to
 PostgreSQL. Production rejects missing, malformed, and SQLite URLs instead of
-falling back. `postgres://` is normalized to `postgresql://`; the synchronous
-SQLAlchemy backend uses `psycopg2-binary`. Alembic escapes percent signs while
+falling back. `postgres://` and `postgresql://` are normalized to
+`postgresql+psycopg2://`; SQLAlchemy is constrained below 2.1 and the
+synchronous driver is `psycopg2-binary`. Alembic escapes percent signs while
 passing the URL through ConfigParser so percent-encoded credentials survive.
 
 The migration chain keeps SQLite batch alterations for local development and
