@@ -190,6 +190,65 @@ def test_translates_and_validates_firmware_status_payloads():
     assert pump == {"active": True, "dose_count": 2, "last_dispensed": "12:34:56", "volume_ml": 1.0}
 
 
+@pytest.mark.parametrize(
+    "status",
+    [
+        {
+            "active": False,
+            "dose_count": 0,
+            "last_dispensed": "Never",
+            "volume_ml": 1.0,
+            "remaining_ml": 5.0,
+            "capacity_ml": 5.0,
+            "schedule": [
+                {"hour": 8, "minute": 0, "enabled": False},
+                {"hour": 14, "minute": 0, "enabled": False},
+                {"hour": 20, "minute": 0, "enabled": False},
+            ],
+        },
+        {
+            "active": False,
+            "dose_count": 0,
+            "last_dispensed": "Never",
+            "volume_ml": 1.0,
+            "remaining_ml": 5.0,
+            "capacity_ml": 5.0,
+            "schedule": [
+                {"hour": 9, "minute": 0, "enabled": False},
+                {"hour": 15, "minute": 0, "enabled": False},
+                {"hour": 21, "minute": 0, "enabled": False},
+            ],
+        },
+    ],
+    ids=["pump_a-current-firmware", "pump_b-current-firmware"],
+)
+def test_translates_current_firmware_pump_status_with_extra_fields(status):
+    # Current /syringeA/status and /syringeB/status include remaining_ml and
+    # capacity_ml in addition to the fields used by the bridge.
+    assert bridge._translate_pump_status(status) == {
+        "active": False,
+        "dose_count": 0,
+        "last_dispensed": "Never",
+        "volume_ml": 1.0,
+    }
+
+
+def test_translates_pump_status_with_future_firmware_fields():
+    status = {
+        "active": False,
+        "dose_count": 0,
+        "last_dispensed": "Never",
+        "volume_ml": 1.0,
+        "schedule": [
+            {"hour": 8, "minute": 0, "enabled": False},
+            {"hour": 14, "minute": 0, "enabled": False},
+            {"hour": 20, "minute": 0, "enabled": False},
+        ],
+        "future_firmware_field": {"value": "ignored by bridge"},
+    }
+    assert bridge._translate_pump_status(status)["active"] is False
+
+
 def test_successful_command_is_sent_once_and_reported():
     config = {
         "esp32_data_url": "http://192.168.1.50/data",
@@ -247,6 +306,8 @@ def pump_status(*, active=False, dose_count=2, volume_ml=1.0):
         "dose_count": dose_count,
         "last_dispensed": "12:34:56",
         "volume_ml": volume_ml,
+        "remaining_ml": 5.0,
+        "capacity_ml": 5.0,
         "schedule": [
             {"hour": 8, "minute": 0, "enabled": False},
             {"hour": 12, "minute": 30, "enabled": False},

@@ -326,13 +326,29 @@ def _translate_pump_status(payload: object) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise BridgeError("ESP32 pump status must be a JSON object")
     required = {"active", "dose_count", "last_dispensed", "volume_ml", "schedule"}
-    _require_keys(payload, required, "ESP32 pump status")
+    missing = required - payload.keys()
+    if missing:
+        raise BridgeError("ESP32 pump status is missing required fields: " + ", ".join(sorted(missing)))
     if not isinstance(payload["active"], bool) or not _is_int(payload["dose_count"]) or not 0 <= payload["dose_count"] <= 2_147_483_647:
         raise BridgeError("ESP32 pump status contains an invalid activity or dose count")
     if not isinstance(payload["last_dispensed"], str) or len(payload["last_dispensed"]) > 80:
         raise BridgeError("ESP32 pump status contains an invalid last-dispensed value")
     if not _is_number(payload["volume_ml"]) or not 0 <= payload["volume_ml"] <= 100:
         raise BridgeError("ESP32 pump status contains an invalid volume")
+    if "remaining_ml" in payload and (
+        not _is_number(payload["remaining_ml"]) or not 0 <= payload["remaining_ml"] <= 100
+    ):
+        raise BridgeError("ESP32 pump status contains an invalid remaining volume")
+    if "capacity_ml" in payload and (
+        not _is_number(payload["capacity_ml"]) or not 0 < payload["capacity_ml"] <= 100
+    ):
+        raise BridgeError("ESP32 pump status contains an invalid capacity")
+    if (
+        "remaining_ml" in payload
+        and "capacity_ml" in payload
+        and payload["remaining_ml"] > payload["capacity_ml"]
+    ):
+        raise BridgeError("ESP32 pump status remaining volume exceeds its capacity")
     schedule = payload["schedule"]
     if not isinstance(schedule, list) or len(schedule) != FEEDER_SCHEDULE_SLOTS:
         raise BridgeError("ESP32 pump status must contain exactly three schedule slots")
