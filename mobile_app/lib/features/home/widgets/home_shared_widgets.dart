@@ -362,7 +362,7 @@ class PriorityAttentionSection extends StatelessWidget {
           title: attentionItems.length == 1
               ? 'Needs attention'
               : 'Highest priority',
-          action: isLiveData ? 'Details in M4' : 'View all alerts',
+          action: 'View all alerts',
           actionArrow: true,
           onTap: onOpenAlerts,
         ),

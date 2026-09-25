@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M3 authentication, Home, and read-only Tanks data integrated; Alerts and secondary operational data remain mock-backed
+Status: M4 authentication, Home, Tanks, and read-only Alerts/Monitoring integrated; species, equipment, and profile editing remain outside the live API slice
 Last reviewed: 2026-09-25
 
 ## Read first
@@ -12,12 +12,11 @@ Last reviewed: 2026-09-25
 
 ## Current boundary
 
-The Flutter app is an Android-first client. Authentication, Home, and the Tanks
-directory/detail talk directly to the Railway FastAPI service through the shared
-authenticated `ApiClient`. Alerts, monitoring history/detail, the species
-directory, equipment, and operational account data retain deterministic local
-demo repositories. The mobile app does not connect directly to a sensor or
-device.
+The Flutter app is an Android-first client. Authentication, Home, Tanks, Alerts,
+and Monitoring talk directly to the Railway FastAPI service through the shared
+authenticated `ApiClient`. The species directory, equipment state, activity,
+and profile editing remain outside the live API slice. The mobile app does not
+connect directly to a sensor or device.
 
 ## M1 authentication integration
 
@@ -62,11 +61,10 @@ These are local prototype credentials only and are not production security.
 
 Still mock-backed / not implemented:
 
-- Tanks, Alerts, monitoring detail/history, species, equipment, and operational
-  account repositories are not connected to Railway. Live Home navigation does
-  not pass real IDs into these mock screens; those destinations remain clearly
-  identified as M3/M4 work.
-- Profile editing and server-side data synchronization are not implemented.
+- Species directory/detail and equipment-state repositories are not connected
+  to Railway. Tank detail hides mock-only live equipment/activity content.
+- Profile editing and server-side account data synchronization are not
+  implemented; authentication identity/role comes from `/auth/me`.
 - Physical actuator commands, push notifications, and background refresh are
   not implemented.
 
@@ -112,10 +110,9 @@ with demo actions.
 Initial load has a Home-specific skeleton; full failure has a retry state;
 secondary failures and failed refreshes preserve clear partial/stale labels.
 Pull-to-refresh and resume refresh are supported; there is no periodic polling.
-Live Home tank links pass the backend tank ID to the live M3 detail route. The
-Alerts destination remains identified as M4 rather than opening mock alert data
-for live records. `MockHomeRepository` remains available to the prototype and
-widget tests.
+Live Home tank links pass the backend tank ID to the live M3 detail route. M4
+Home alert references route into the live alert/monitoring stream.
+`MockHomeRepository` remains available to the prototype and widget tests.
 
 ### M2 device smoke check
 
@@ -125,7 +122,7 @@ Verify both Owner and Staff presentations, pull-to-refresh, and refresh after
 backgrounding and reopening the app. With Home loaded, temporarily disconnect
 the phone from the network and refresh: Home should show its API failure/stale
 state without changing any tank's reported status. Restore the connection and
-retry. Alerts remains demo-backed until M4.
+retry. Alerts and monitoring have live Railway-backed lists as of M4.
 
 ## M3 live Tanks integration
 
@@ -141,7 +138,8 @@ Opening a live tank requests `GET /tanks/{id}`,
 supporting source failures are shown as unavailable while successful real data
 is retained. Active water-quality alerts come from the operations snapshot;
 monitoring incidents remain separate and only active incidents are shown.
-Resolved history and alert detail/handling belong to M4.
+M4 adds API-backed Alerts/Monitoring, resolved history, and alert
+detail/handling, as described below.
 
 Backend `normal`, `warning`, `critical`, and `offline` states and its
 `reporting_age_seconds` / receipt-time evaluation remain authoritative. The
@@ -165,8 +163,68 @@ compare the Tanks directory/detail to the web dashboard. Check filters/search,
 readings and units, assigned species, separate water-quality and monitoring
 issues, and the offline label for a backend-reported outage. Verify that failed
 phone networking reports an API problem without changing tank status. Retry
-after restoring connectivity. Alerts, equipment state, and activity remain
-outside this milestone.
+after restoring connectivity. Alerts were outside M3 and are covered by M4;
+equipment state and activity remain outside the live slice.
+
+## M4 live Alerts and Monitoring integration
+
+`ApiAlertRepository` shares M1's authenticated `ApiClient` and maps backend DTOs
+into the existing alert domain models. Active water-quality alerts use
+`GET /alerts`; history uses `GET /alerts/history?resolved=true`. Alert responses
+contain a tank ID but no tank display name, so the repository performs one
+cached `GET /tanks?lifecycle=all` lookup to enrich records. If that lookup fails,
+the alert remains usable with an explicit `Tank #id` label.
+
+Monitoring active/history uses the paginated
+`GET /monitoring-incidents?state=active|resolved&page=N&page_size=25` contract.
+The list loads further pages on demand. Water-quality history and monitoring
+history remain separate and are never combined into a single severity model.
+Monitoring details show the backend lifecycle/reason and cannot be manually
+resolved. Alert details are opened from the fetched list record; the backend
+does not expose a separate single-alert detail route.
+
+Water alert `warning`/`critical`, numeric IDs, nullable reading/resolution
+fields, UTC timestamps, `operator`/`system` resolution sources, and monitoring
+resolution reasons are parsed in DTO/mapping code. Local display dates are
+converted from parsed timestamps; backend alert and monitoring state remains
+authoritative. Mark handled is labeled as operator acknowledgement only: it
+removes an alert from the active queue but does not confirm water recovery.
+Automatically resolved alerts remain distinct from operator-handled alerts.
+
+After confirmation, Mark handled sends bodyless `PUT /alerts/{id}/resolve` once.
+The backend route is idempotent. If a timeout, network failure, or server error
+makes the result ambiguous, the mobile client fetches current alert state to
+reconcile; it does not blindly repeat the mutation. Permission and validation
+errors are surfaced as safe app-level messages.
+
+Water alerts and monitoring have independent loading, empty, retry, partial
+source-error, pull-to-refresh, and stale-on-refresh states. Alerts refresh on
+resume when the last success is at least one minute old and do not poll in the
+background. Monitoring history is paginated; initial/reference loads follow
+pages only when needed to find the requested incident. Tank Detail and Home
+alert references pass backend IDs into these same live records. Network failure
+is shown as unavailable API data and does not create a tank-offline state or a
+monitoring incident. Tank Detail issue links work from both Home and Tanks.
+Alert detail remains open after a confirmed Mark handled action and shows the
+backend lifecycle/source and resolution time. Returning to Home or Alerts
+refreshes the loaded view, and failed deep-link loads remain retryable rather
+than being reported as missing records.
+
+`MockAlertRepository` remains injectable for widget and repository tests. No
+equipment or actuator command, push notification, or profile-edit API is part
+of M4.
+
+### M4 device smoke check
+
+Install the release APK and sign in with an existing Railway account. Compare
+active water alerts and monitoring incidents with the web dashboard, switch
+between Active and History, open details from both Alerts and Tank Detail, and
+pull to refresh. Background and resume the app after a minute to verify refresh.
+Exercise Mark handled only with an appropriate test alert; confirm it leaves the
+active queue while the detail wording does not claim water recovery. Confirm a
+system-resolved alert is labeled as automatic and monitoring recovery remains
+in Monitoring history. No physical equipment command is enabled by this
+milestone.
 
 ## Mobile UI/UX refinement milestone
 
@@ -203,10 +261,10 @@ Implemented locally in the Flutter prototype:
 - Shared semantic badges, freshness labels, section headers, empty states, and
   repository seams that keep future asynchronous/API work out of the widgets.
 
-The local mock repositories are `MockTankRepository`, `MockAlertRepository`,
-`MockFishRepository`, and `MockEquipmentRepository`. They intentionally do not
-replace the FastAPI contract; they provide a stable UI seam for this milestone
-and can later be replaced by API-backed repositories.
+The mock repositories `MockTankRepository`, `MockAlertRepository`,
+`MockFishRepository`, and `MockEquipmentRepository` remain available for
+deterministic tests and unsupported feature paths. They coexist with the live
+API repositories and do not replace or redefine the FastAPI contract.
 
 ## Startup experience refinement
 
@@ -229,20 +287,20 @@ connection state; the splash does not claim backend progress. Tests can inject
 `MockAuthService` and retain deterministic startup. Focused behavior tests live in
 [`splash_screen_test.dart`](../../mobile_app/test/splash_screen_test.dart).
 
-## Deferred integration work
+## Remaining live integration work after M4
 
-The following remain outside the completed M3 integration:
+The following remain outside the completed M4 integration:
 
-- Persisted alert and monitoring-incident history/detail, alert handling, and
-  sensor history.
+- Historical sensor readings and charts.
 - Backend species-directory and assignment APIs.
+- Read-only equipment state and command-history API integration.
 - Real actuator commands, device connectivity, command reconciliation, and
   production equipment safety controls.
 - Push notifications, background workers, and external monitoring delivery.
 
-When feature repositories move to live data, update this guide, the API
-contract, and the development status together. Keep mock data clearly labeled
-as mock-backed until each repository is replaced.
+Mock repositories remain available for deterministic tests and features without
+live API support. Production composition uses API repositories for
+Authentication, Home, Tanks, Alerts, and Monitoring.
 
 ## Important locations
 
@@ -256,7 +314,8 @@ as mock-backed until each repository is replaced.
 - `mobile_app/lib/features/tanks/`: tank directory/detail, shared DTO parsing,
   mock and API repositories, readings, issues, and lifecycle.
 - `mobile_app/lib/features/alerts/`: water-quality and monitoring alert models,
-  mock repository, list/detail views, and handling semantics.
+  DTO/API and mock repositories, list/detail views, and safe handling
+  reconciliation.
 - `mobile_app/lib/features/fish/`: species directory, detail, suitability, and
   mock fish repository.
 - `mobile_app/lib/features/control/`: contextual Equipment models, mock

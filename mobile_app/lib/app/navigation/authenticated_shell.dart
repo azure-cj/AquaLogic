@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:aqualogic/app/alerts/alert_repository_scope.dart';
 import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/home/home_repository_scope.dart';
 import 'package:aqualogic/app/navigation/aqualogic_shell.dart';
 import 'package:aqualogic/app/tanks/tank_repository_scope.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
+import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 
 /// Shared authenticated composition point for future role-specific shells.
@@ -25,6 +27,8 @@ class AuthenticatedShell extends StatelessWidget {
           HomeRepositoryScope.maybeOf(context) ?? const MockHomeRepository(),
       tankRepository:
           TankRepositoryScope.maybeOf(context) ?? const MockTankRepository(),
+      alertRepository:
+          AlertRepositoryScope.maybeOf(context) ?? const MockAlertRepository(),
     );
   }
 }

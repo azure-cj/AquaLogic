@@ -76,6 +76,7 @@ class TankIssue {
     required this.message,
     required this.timeLabel,
     required this.lifecycle,
+    this.sourceId,
   });
 
   final String id;
@@ -85,6 +86,7 @@ class TankIssue {
   final String message;
   final String timeLabel;
   final TankIssueLifecycle lifecycle;
+  final String? sourceId;
 
   bool get isActive => lifecycle == TankIssueLifecycle.active;
 }

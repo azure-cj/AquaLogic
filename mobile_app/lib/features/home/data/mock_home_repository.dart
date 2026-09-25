@@ -29,9 +29,10 @@ class MockHomeRepository extends HomeRepository {
 
   /// Synchronous demo mapper retained for focused fixture tests.
   HomeDashboardData loadSnapshot(SensorSnapshot snapshot) {
-    final alertData = MockAlertRepository(
+    final alertData = buildMockAlertCenterData(
+      snapshot: snapshot,
       monitoringOutageTankIds: snapshot.isOnline ? offlineTankIds : const {},
-    ).load(snapshot: snapshot);
+    );
     final tanks = DemoData.tanks
         .map((tank) {
           final id = _tankId(tank.name);

@@ -5,6 +5,7 @@ import 'package:aqualogic/shared/network/api_client.dart';
 import 'package:aqualogic/shared/network/api_failure.dart';
 import 'package:aqualogic/features/tanks/models/tank_status.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/formatters/sensor_parameter_labels.dart';
 
 /// Home's read-only production composition over the existing authenticated
 /// client. `/fleet` is required; alerts and incident details are independent
@@ -93,7 +94,8 @@ class ApiHomeRepository extends HomeRepository {
           tankName: tank.name,
           type: HomeAttentionType.waterQuality,
           status: status,
-          title: '${status.label} ${_parameterLabel(alert.parameter)} reading',
+          title:
+              '${status.label} ${sensorParameterLabel(alert.parameter)} reading',
           message: alert.message.trim().isEmpty
               ? 'An active water-quality alert needs review.'
               : alert.message,
@@ -249,17 +251,6 @@ class ApiHomeRepository extends HomeRepository {
         'warning' => HomeOperationalStatus.warning,
         'critical' => HomeOperationalStatus.critical,
         _ => null,
-      };
-
-  static String _parameterLabel(String parameter) =>
-      switch (parameter.toLowerCase()) {
-        'temperature' => 'Temperature',
-        'ph' => 'pH',
-        'turbidity' => 'Turbidity',
-        'dissolved_oxygen' => 'Dissolved oxygen',
-        'tds' => 'TDS',
-        'ammonia' => 'Ammonia',
-        _ => parameter.replaceAll('_', ' '),
       };
 
   static String _freshnessLabel(

@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-09-25
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to

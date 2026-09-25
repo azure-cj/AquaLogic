@@ -235,16 +235,17 @@ Last reviewed: 2026-09-25
   Login handles safe validation/throttle/network messages, and forced password
   change gates the authenticated shell.
 - `MockAuthService` remains injectable for widget tests. The M3 Tanks directory
-  and detail now use read-only Railway repositories; Alerts and Monitoring
-  history/detail, fish, equipment, and operations/account data remain
-  mock-backed.
+  and detail and M4 Alerts/Monitoring now use read-only Railway repositories;
+  fish directory/detail, equipment state, activity, and profile editing remain
+  mock-backed or unavailable.
 - Local mock readings and demo equipment interactions.
-- Flutter mock sign-in interface with clearly isolated local development
-  accounts for the Owner/admin and Staff roles.
+- Flutter sign-in screen with isolated mock-only development accounts for the
+  Owner/admin and Staff roles.
 - Role-aware authenticated mobile shell that maps backend-compatible `admin` to
   the mobile `Owner` experience and `staff` to the mobile `Staff` experience.
-- Local sign-out from More/Account; feature-level demo repositories remain
-  available to tests and screens not yet connected to the API.
+- More/Account logout revokes the server session when reachable and always
+  clears local auth state; mock repositories remain available for tests and
+  screens not yet connected to the API.
 - Role-aware Home V1 with distinct Owner and Staff information hierarchies while
   sharing the same AquaLogic design system, tank rows, attention cards,
   monitoring summary, and recent activity components.
@@ -260,9 +261,8 @@ Last reviewed: 2026-09-25
   and stale-on-refresh states. It refreshes on pull and on resume when the last
   successful load is at least one minute old; it does not poll in the
   background. Live Home links do not open mock detail screens with API IDs.
-- M2 Home and M3 Tanks remain read-only. Alerts/Monitoring detail/history,
-  species directory, equipment state, activity, and operational account data
-  are pending.
+- M2 Home, M3 Tanks, and M4 Alerts/Monitoring remain read-only. Species detail,
+  equipment state, activity, and profile editing are pending.
 
 #### M3 — Read-only Tanks directory and detail — 2026-09-25
 
@@ -281,6 +281,37 @@ Last reviewed: 2026-09-25
   no corresponding read API is used. No alert/equipment mutation is exposed.
 - Directory/detail use load, error/retry, empty, pull-to-refresh, stale data,
   and one-minute app-resume refresh states; there is no background polling.
+
+#### M4 — Read-only Alerts/Monitoring and Mark handled — 2026-09-25
+
+- `ApiAlertRepository` shares the authenticated `ApiClient`. Water-quality
+  active/history lists use `/alerts` and `/alerts/history?resolved=true`;
+  because alert rows contain tank IDs but no tank names, one cached
+  `/tanks?lifecycle=all` lookup enriches names without per-alert requests.
+- Monitoring active/history uses `/monitoring-incidents` with the backend's
+  paginated `state`, `page`, and `page_size` contract. The UI loads 25 per page
+  and requests further pages on demand. Water-quality alerts and operational
+  monitoring incidents remain separate streams; monitoring is never manually
+  resolved from mobile.
+- DTOs adapt snake_case fields, numeric IDs, UTC timestamps, nullable resolution
+  data, backend resolution sources/reasons, and existing status vocabulary into
+  mobile models. Dates are localized for display; backend lifecycle and
+  reporting-recovery semantics remain authoritative. Alert detail is opened
+  from the fetched record because the API has no standalone alert-detail route.
+- Mark handled calls bodyless `PUT /alerts/{id}/resolve` after confirmation.
+  The client submits once; after timeout, network, or server ambiguity it reads
+  current alert state to reconcile and never blindly replays the mutation. The
+  UI explicitly says handling removes the alert from the active queue and does
+  not prove the water condition recovered. System resolution stays distinct
+  from operator handling.
+- Alerts and monitoring expose independent loading, empty, retry, partial-source
+  error, pull-to-refresh, and stale-on-refresh behavior, plus refresh on resume
+  when at least one minute old. There is no background polling. Alert and
+  incident links from Home and Tank Detail route to the same live record.
+  Alert detail stays open after handling and shows confirmed backend lifecycle
+  and resolution metadata; Home and Alerts refresh when returning from detail.
+  Failed deep-link loads remain retryable. No equipment or actuator command is
+  exposed.
 
 ### Mobile UI/UX refinement — 2026-09-15
 
@@ -329,12 +360,11 @@ Last reviewed: 2026-09-25
   uses opacity-only branding and handoff. Added focused splash readiness,
   timing, reduced-motion, and disposal tests.
 
-The Home summary is connected to live read-only API data. Tank directory/detail,
-sensor history, Alerts/Monitoring detail and history, species and assignment
-APIs, equipment state, operational profile data, real actuator
-commands/device connectivity, command reconciliation, push notifications, and
-production equipment safety controls are not yet integrated in the Flutter
-client.
+Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
+read-only API data. Separate sensor-history charts, species directory/detail,
+equipment state, activity, profile editing, real actuator commands/device
+connectivity, command reconciliation, push notifications, and production
+equipment safety controls are not yet integrated in the Flutter client.
 
 ## Active follow-up work
 
@@ -364,15 +394,15 @@ client.
   commands arrive, and provision a new identity if hardware is reused.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
-- Integrate read-only mobile repositories with the current backend API contract,
-  next covering Tanks/Detail, Alerts/Monitoring, and Account data.
+- Integrate remaining read-only mobile repositories for species and equipment,
+  then assess whether an operational profile or activity endpoint is needed.
 - Finalize deployment environment variables and production smoke tests.
 
 ## Planned
 
 - External monitoring notifications, delivery workers, and escalation remain
   deferred.
-- M3+ read-only backend repositories for Flutter operational data beyond Home.
+- Remaining read-only Flutter repositories for species and equipment data.
 - Additional sensor hardware and production-grade actuator safety controls;
   pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
 - Raspberry Pi deployment and hardware safety controls.
@@ -394,7 +424,9 @@ client.
   buckets.
 - The current public API exposes the latest configured sensor values; this needs
   a final privacy and threat review before production.
-- The mobile application is not a backend-connected client.
+- Flutter is directly connected to Railway for authentication, Home, Tanks,
+  Alerts, and Monitoring. Species, equipment, activity, profile editing, and
+  sensor history remain outside the live API slice.
 - Actuator state is last-known state from the bridge; a stale/offline bridge does
   not imply the physical actuator is off.
 - `outcome_unknown` is intentionally conservative: it records that a claimed
@@ -408,6 +440,17 @@ client.
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-09-25 (M4 Alerts/Monitoring)
+
+- Targeted API repository and mutation-reconciliation tests passed; the full
+  Flutter suite passed all 146 tests. `flutter analyze --no-pub` found no
+  issues, and targeted Dart formatting reported no formatting changes.
+- `flutter build apk --release` succeeded. The APK is 61,747,891 bytes at
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk`.
+- API repository tests use fake HTTP responses. The only production request was
+  the non-mutating `GET /health` check (HTTP 200); no authenticated production
+  request, alert mutation, actuator command, or device install was run.
 
 ## Validation checkpoint — 2026-09-25 (M3 Tanks)
 

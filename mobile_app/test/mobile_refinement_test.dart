@@ -67,22 +67,52 @@ void main() {
     expect(find.text('Offline'), findsNothing);
   });
 
-  test('alert repository keeps water quality and monitoring distinct', () {
-    final online = const MockAlertRepository().load(
-      snapshot: MockSensorFeed.snapshot(0),
-    );
-    expect(online.activeWaterQualityAlerts.length, 2);
-    expect(online.criticalCount, 1);
-    expect(online.warningCount, 1);
-    expect(online.activeMonitoringIncidents, isEmpty);
-    expect(online.historicalMonitoringIncidents, hasLength(1));
+  test(
+    'alert repository keeps water quality and monitoring distinct',
+    () async {
+      const repository = MockAlertRepository();
+      final snapshot = MockSensorFeed.snapshot(0);
+      final onlineWater = await repository.loadWaterQualityAlerts(
+        snapshot: snapshot,
+        history: false,
+      );
+      final onlineMonitoring = await repository.loadMonitoringIncidents(
+        snapshot: snapshot,
+        history: false,
+        page: 1,
+      );
+      final historyMonitoring = await repository.loadMonitoringIncidents(
+        snapshot: snapshot,
+        history: true,
+        page: 1,
+      );
+      expect(onlineWater, hasLength(2));
+      expect(
+        onlineWater.where((alert) => alert.severity == AlertSeverity.critical),
+        hasLength(1),
+      );
+      expect(
+        onlineWater.where((alert) => alert.severity == AlertSeverity.warning),
+        hasLength(1),
+      );
+      expect(onlineMonitoring.items, isEmpty);
+      expect(historyMonitoring.items, hasLength(1));
+      expect(historyMonitoring.items.single.lifecycleLabel, 'Recovered');
 
-    final offline = const MockAlertRepository().load(
-      snapshot: MockSensorFeed.snapshot(14),
-    );
-    expect(offline.activeWaterQualityAlerts, isEmpty);
-    expect(offline.activeMonitoringIncidents, hasLength(4));
-  });
+      final offlineSnapshot = MockSensorFeed.snapshot(14);
+      final offlineWater = await repository.loadWaterQualityAlerts(
+        snapshot: offlineSnapshot,
+        history: false,
+      );
+      final offlineMonitoring = await repository.loadMonitoringIncidents(
+        snapshot: offlineSnapshot,
+        history: false,
+        page: 1,
+      );
+      expect(offlineWater, isEmpty);
+      expect(offlineMonitoring.items, hasLength(4));
+    },
+  );
 
   testWidgets('Alerts screen offers separate streams and safe handling copy', (
     tester,
@@ -97,6 +127,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Water quality'), findsOneWidget);
     expect(
@@ -181,6 +212,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: AlertsScreen(snapshot: MockSensorFeed.snapshot(0))),
       );
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('alert-summary-strip')), findsOneWidget);
       expect(
@@ -245,12 +277,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Nursery D'), findsOneWidget);
+    expect(find.text('Nursery D'), findsNWidgets(2));
     expect(
       find.byKey(const ValueKey('monitoring-row-nursery-d-monitoring')),
       findsOneWidget,
     );
-    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Offline'), findsWidgets);
   });
 
   testWidgets('Alerts empty states stay calm across both streams and views', (
@@ -264,12 +296,16 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('No active water-quality alerts.'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('alert-stream-monitoring')));
     await tester.pumpAndSettle();
     expect(find.text('No monitoring outages.'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('alert-state-history')));
+    await tester.pumpAndSettle();
+    expect(find.text('No monitoring history yet.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('alert-stream-waterQuality')));
     await tester.pumpAndSettle();
     expect(find.text('No alert history yet.'), findsOneWidget);
   });
@@ -342,7 +378,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Nursery D'), findsOneWidget);
+    expect(find.text('Nursery D'), findsNWidgets(2));
     expect(
       find.byKey(const ValueKey('monitoring-incident-nursery-d-monitoring')),
       findsOneWidget,
@@ -365,7 +401,7 @@ void main() {
     expect(find.text('Alert detail'), findsOneWidget);
     expect(find.text('Display Reef A'), findsWidgets);
     expect(find.text('Temperature'), findsOneWidget);
-    expect(find.text('Handled'), findsOneWidget);
+    expect(find.text('Resolved automatically'), findsWidgets);
   });
 
   testWidgets('Alerts reports a missing initial reference gracefully', (
@@ -768,10 +804,41 @@ class _EmptyAlertRepository implements AlertRepository {
   const _EmptyAlertRepository();
 
   @override
-  AlertCenterData load({required SensorSnapshot snapshot}) {
-    return const AlertCenterData(
-      waterQualityAlerts: <AlertInfo>[],
-      monitoringIncidents: <MonitoringIncident>[],
-    );
+  Future<List<AlertInfo>> loadWaterQualityAlerts({
+    required SensorSnapshot snapshot,
+    required bool history,
+  }) async => const <AlertInfo>[];
+
+  @override
+  Future<MonitoringIncidentPage> loadMonitoringIncidents({
+    required SensorSnapshot snapshot,
+    required bool history,
+    required int page,
+    int pageSize = 25,
+  }) async => MonitoringIncidentPage(
+    items: const <MonitoringIncident>[],
+    page: page,
+    pageSize: pageSize,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+  );
+
+  @override
+  Future<AlertInfo?> findWaterQualityAlert({
+    required SensorSnapshot snapshot,
+    required String alertId,
+  }) async => null;
+
+  @override
+  Future<MonitoringIncident?> findMonitoringIncident({
+    required SensorSnapshot snapshot,
+    required String incidentId,
+    required bool history,
+  }) async => null;
+
+  @override
+  Future<AlertInfo> resolveAlert(String alertId) async {
+    throw StateError('No alert exists in the empty repository.');
   }
 }

@@ -4,6 +4,7 @@ import 'package:aqualogic/features/tanks/data/tank_api_models.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/features/tanks/models/tank_status.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/formatters/sensor_parameter_labels.dart';
 import 'package:aqualogic/shared/network/api_client.dart';
 import 'package:aqualogic/shared/network/api_failure.dart';
 
@@ -205,11 +206,12 @@ class ApiTankRepository implements TankRepository {
           category: TankIssueCategory.waterQuality,
           severity: severity,
           title:
-              '${severity.name == 'critical' ? 'Critical' : 'Warning'} ${_parameterLabel(alert.parameter)} reading',
+              '${severity.name == 'critical' ? 'Critical' : 'Warning'} ${sensorParameterLabel(alert.parameter)} reading',
           message: alert.message,
           timeLabel:
               'Started ${_relativeTime(_ageSeconds(DateTime.now().toUtc(), alert.createdAt))} ago',
           lifecycle: TankIssueLifecycle.active,
+          sourceId: alert.id.toString(),
         ),
       );
     }
@@ -233,6 +235,7 @@ class ApiTankRepository implements TankRepository {
           timeLabel:
               'Detected ${_relativeTime(_ageSeconds(DateTime.now().toUtc(), incident.detectedAt))} ago',
           lifecycle: TankIssueLifecycle.active,
+          sourceId: incident.id.toString(),
         ),
       );
     }
@@ -416,14 +419,6 @@ class ApiTankRepository implements TankRepository {
     'attention' => SpeciesSuitability.attention,
     'unavailable' => SpeciesSuitability.unavailable,
     _ => throw const FormatException('Unknown suitability state.'),
-  };
-
-  static String _parameterLabel(String value) => switch (value.toLowerCase()) {
-    'temperature' => 'Temperature',
-    'ph' => 'pH',
-    'turbidity' => 'Turbidity',
-    'tds' => 'TDS',
-    _ => value.replaceAll('_', ' '),
   };
 
   static String _initial(String name) =>

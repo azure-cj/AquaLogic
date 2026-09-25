@@ -24,11 +24,13 @@ class TanksScreen extends StatefulWidget {
     required this.snapshot,
     this.user,
     this.repository,
+    this.onOpenIssue,
   });
 
   final SensorSnapshot snapshot;
   final AuthUser? user;
   final TankRepository? repository;
+  final Future<void> Function(TankIssue issue)? onOpenIssue;
 
   @override
   State<TanksScreen> createState() => _TanksScreenState();
@@ -203,6 +205,7 @@ class _TanksScreenState extends State<TanksScreen> with WidgetsBindingObserver {
                               repository: _repository,
                               snapshot: widget.snapshot,
                               user: widget.user,
+                              onOpenIssue: widget.onOpenIssue,
                             )
                           : TankDetailScreen(
                               tank: tank,

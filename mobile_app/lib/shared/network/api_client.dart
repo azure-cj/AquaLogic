@@ -72,6 +72,19 @@ class ApiClient {
     headers: headers,
   );
 
+  Future<ApiResponse> put(
+    String path, {
+    Object? body,
+    bool authenticated = false,
+    Map<String, String> headers = const {},
+  }) => request(
+    'PUT',
+    path,
+    body: body,
+    authenticated: authenticated,
+    headers: headers,
+  );
+
   Future<ApiResponse> request(
     String method,
     String path, {

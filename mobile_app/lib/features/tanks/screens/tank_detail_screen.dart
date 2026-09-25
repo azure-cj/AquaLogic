@@ -27,12 +27,14 @@ class TankDetailPage extends StatefulWidget {
     required this.repository,
     required this.snapshot,
     this.user,
+    this.onOpenIssue,
   });
 
   final String tankId;
   final TankRepository repository;
   final SensorSnapshot snapshot;
   final AuthUser? user;
+  final Future<void> Function(TankIssue issue)? onOpenIssue;
 
   @override
   State<TankDetailPage> createState() => _TankDetailPageState();
@@ -149,10 +151,16 @@ class _TankDetailPageState extends State<TankDetailPage>
       tank: tank,
       snapshot: widget.snapshot,
       user: widget.user,
+      onOpenIssue: widget.onOpenIssue == null ? null : _openIssue,
       onRefresh: _load,
       onRetry: () => unawaited(_load()),
       refreshFailure: _refreshFailure?.message,
     );
+  }
+
+  Future<void> _openIssue(TankIssue issue) async {
+    await widget.onOpenIssue?.call(issue);
+    if (mounted) await _load();
   }
 }
 
@@ -280,6 +288,7 @@ class TankDetailScreen extends StatelessWidget {
     this.onRefresh,
     this.onRetry,
     this.refreshFailure,
+    this.onOpenIssue,
   });
 
   final TankInfo tank;
@@ -288,6 +297,7 @@ class TankDetailScreen extends StatelessWidget {
   final Future<void> Function()? onRefresh;
   final VoidCallback? onRetry;
   final String? refreshFailure;
+  final ValueChanged<TankIssue>? onOpenIssue;
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +343,7 @@ class TankDetailScreen extends StatelessWidget {
               operationsAvailable: tank.operationsAvailable,
               monitoringAvailable: tank.monitoringAvailable,
               onRetry: onRetry,
+              onOpenIssue: onOpenIssue,
             ),
             const SectionHeader(
               title: 'Species',
@@ -797,12 +808,14 @@ class _IssuesSection extends StatelessWidget {
     required this.operationsAvailable,
     required this.monitoringAvailable,
     required this.onRetry,
+    this.onOpenIssue,
   });
 
   final List<TankIssue> issues;
   final bool operationsAvailable;
   final bool monitoringAvailable;
   final VoidCallback? onRetry;
+  final ValueChanged<TankIssue>? onOpenIssue;
 
   @override
   Widget build(BuildContext context) {
@@ -870,7 +883,7 @@ class _IssuesSection extends StatelessWidget {
         )
       else ...[
         for (var index = 0; index < issues.length; index++) ...[
-          _IssueRow(issue: issues[index]),
+          _IssueRow(issue: issues[index], onTap: onOpenIssue),
           if (index < issues.length - 1) const SizedBox(height: 8),
         ],
       ],
@@ -888,9 +901,10 @@ class _IssuesSection extends StatelessWidget {
 }
 
 class _IssueRow extends StatelessWidget {
-  const _IssueRow({required this.issue});
+  const _IssueRow({required this.issue, this.onTap});
 
   final TankIssue issue;
+  final ValueChanged<TankIssue>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -903,73 +917,114 @@ class _IssueRow extends StatelessWidget {
             TankIssueSeverity.info => AppColors.offline,
           };
     final category = isMonitoring ? 'Monitoring' : 'Water quality';
-    return Semantics(
-      container: true,
-      label: '$category, ${issue.title}, ${issue.message}',
-      child: _DetailSurface(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isMonitoring ? LucideIcons.wifiOff : LucideIcons.circleAlert,
-                color: color,
-                size: 17,
-              ),
+    final onPressed = issue.sourceId == null || onTap == null
+        ? null
+        : () => onTap!(issue);
+    final surface = _DetailSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    category,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+            child: Icon(
+              isMonitoring ? LucideIcons.wifiOff : LucideIcons.circleAlert,
+              color: color,
+              size: 17,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  category,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    issue.title,
-                    style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 13,
-                      height: 1.2,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  issue.title,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 13,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 3),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  issue.message,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${issue.lifecycle == TankIssueLifecycle.active ? 'Active' : issue.lifecycle.name} · ${issue.timeLabel}',
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (onPressed != null) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    issue.message,
+                    isMonitoring ? 'View monitoring incident' : 'View alert',
                     style: const TextStyle(
-                      color: AppColors.muted,
+                      color: AppColors.tealDark,
                       fontSize: 11,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${issue.lifecycle == TankIssueLifecycle.active ? 'Active' : issue.lifecycle.name} · ${issue.timeLabel}',
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
-              ),
+              ],
+            ),
+          ),
+          if (onPressed != null) ...[
+            const SizedBox(width: 4),
+            const Icon(
+              LucideIcons.chevronRight,
+              color: AppColors.muted,
+              size: 18,
             ),
           ],
+        ],
+      ),
+    );
+
+    if (onPressed == null) {
+      return Semantics(
+        container: true,
+        label: '$category, ${issue.title}, ${issue.message}',
+        child: surface,
+      );
+    }
+
+    return Semantics(
+      container: true,
+      button: true,
+      label:
+          '$category, ${issue.title}, ${issue.message}, open ${isMonitoring ? 'monitoring incident' : 'alert'}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(18),
+          child: surface,
         ),
       ),
     );

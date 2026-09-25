@@ -23,6 +23,7 @@ class HomeScreen extends StatefulWidget {
     this.onOpenAlert,
     this.onOpenTank,
     this.repository = const MockHomeRepository(),
+    this.refreshTrigger = 0,
   });
 
   final AuthUser user;
@@ -31,6 +32,7 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<HomeAttentionItem>? onOpenAlert;
   final ValueChanged<HomeTankSummary>? onOpenTank;
   final HomeRepository repository;
+  final int refreshTrigger;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -57,7 +59,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.repository, widget.repository)) {
+    if (!identical(oldWidget.repository, widget.repository) ||
+        oldWidget.refreshTrigger != widget.refreshTrigger) {
       unawaited(_load());
     }
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
+import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/alerts/screens/alert_detail_screen.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
@@ -13,8 +14,10 @@ import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
+import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/features/tanks/screens/tank_detail_screen.dart';
 import 'package:aqualogic/features/tanks/screens/tanks_screen.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -24,11 +27,13 @@ class AquaLogicShell extends StatefulWidget {
     required this.user,
     this.homeRepository = const MockHomeRepository(),
     this.tankRepository = const MockTankRepository(),
+    this.alertRepository = const MockAlertRepository(),
   });
 
   final AuthUser user;
   final HomeRepository homeRepository;
   final TankRepository tankRepository;
+  final AlertRepository alertRepository;
 
   @override
   State<AquaLogicShell> createState() => _AquaLogicShellState();
@@ -48,6 +53,8 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   Timer? _timer;
   MockHomeRepository? _mockHomeRepository;
   int? _mockHomeRepositoryTick;
+  int _homeRefreshTrigger = 0;
+  int _alertRefreshTrigger = 0;
 
   @override
   void initState() {
@@ -75,6 +82,7 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     final pages = [
       HomeScreen(
         repository: homeRepository,
+        refreshTrigger: _homeRefreshTrigger,
         user: widget.user,
         onOpenAlerts: _openHomeAlerts,
         onOpenTanks: _openHomeTanks,
@@ -85,8 +93,14 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
         snapshot: _snapshot,
         user: widget.user,
         repository: widget.tankRepository,
+        onOpenIssue: _openTankIssue,
       ),
-      AlertsScreen(snapshot: _snapshot),
+      AlertsScreen(
+        snapshot: _snapshot,
+        repository: widget.alertRepository,
+        onAlertResolved: _alertResolved,
+        refreshTrigger: _alertRefreshTrigger,
+      ),
       MoreScreen(snapshot: _snapshot, user: widget.user),
     ];
 
@@ -194,9 +208,39 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     });
   }
 
-  void _openHomeAttention(HomeAttentionItem item) {
+  Future<void> _openHomeAttention(HomeAttentionItem item) async {
     if (widget.homeRepository.isLiveData) {
-      _openTankDetails(item.tankId);
+      if (item.type == HomeAttentionType.monitoring) {
+        await _openIncidentCenter(
+          stream: AlertStream.monitoring,
+          referenceId: item.sourceId,
+        );
+        return;
+      }
+      final sourceId = item.sourceId;
+      if (sourceId == null) {
+        _openIncidentCenter(stream: AlertStream.waterQuality);
+        _showHomeDestinationNotice(
+          'This tank needs attention, but its alert details are unavailable.',
+        );
+        return;
+      }
+      try {
+        final alert = await widget.alertRepository.findWaterQualityAlert(
+          snapshot: _snapshot,
+          alertId: sourceId,
+        );
+        if (!mounted) return;
+        if (alert == null) {
+          _showMissingHomeAttention(item.type);
+          return;
+        }
+        await _openAlertDetail(alert);
+      } on ApiFailure catch (failure) {
+        _showHomeDestinationNotice(failure.message);
+      } catch (_) {
+        _showHomeDestinationNotice('Alert details could not be loaded. Retry.');
+      }
       return;
     }
     final sourceId = item.sourceId;
@@ -205,29 +249,20 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
       return;
     }
 
-    final alertData = const MockAlertRepository().load(snapshot: _snapshot);
+    final alertData = buildMockAlertCenterData(snapshot: _snapshot);
     if (item.type == HomeAttentionType.waterQuality) {
       for (final alert in alertData.waterQualityAlerts) {
         if (alert.id == sourceId) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => AlertDetailScreen(alert: alert),
-            ),
-          );
+          await _openAlertDetail(alert);
           return;
         }
       }
     } else {
       for (final incident in alertData.monitoringIncidents) {
         if (incident.id == sourceId) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => AlertsScreen(
-                snapshot: _snapshot,
-                initialReferenceId: incident.id,
-                initialStream: AlertStream.monitoring,
-              ),
-            ),
+          _openIncidentCenter(
+            stream: AlertStream.monitoring,
+            referenceId: incident.id,
           );
           return;
         }
@@ -247,18 +282,81 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
           repository: widget.tankRepository,
           snapshot: _snapshot,
           user: widget.user,
+          onOpenIssue: _openTankIssue,
         ),
       ),
     );
   }
 
-  void _openHomeAlerts() {
-    if (widget.homeRepository.isLiveData) {
-      _showHomeDestinationNotice(
-        'The Alerts screen remains demo-backed until M4.',
+  Future<void> _openTankIssue(TankIssue issue) async {
+    final sourceId = issue.sourceId;
+    if (sourceId == null) {
+      _showHomeDestinationNotice('This issue has no available detail record.');
+      return;
+    }
+    if (issue.category == TankIssueCategory.monitoring) {
+      await _openIncidentCenter(
+        stream: AlertStream.monitoring,
+        referenceId: sourceId,
       );
       return;
     }
+    try {
+      final alert = await widget.alertRepository.findWaterQualityAlert(
+        snapshot: _snapshot,
+        alertId: sourceId,
+      );
+      if (!mounted) return;
+      if (alert == null) {
+        _showHomeDestinationNotice('This alert is no longer available.');
+        return;
+      }
+      await _openAlertDetail(alert);
+    } on ApiFailure catch (failure) {
+      _showHomeDestinationNotice(failure.message);
+    } catch (_) {
+      _showHomeDestinationNotice('Alert details could not be loaded. Retry.');
+    }
+  }
+
+  Future<void> _openAlertDetail(AlertInfo alert) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AlertDetailScreen(
+          alert: alert,
+          snapshot: _snapshot,
+          repository: widget.alertRepository,
+          onAlertResolved: _alertResolved,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openIncidentCenter({
+    required AlertStream stream,
+    String? referenceId,
+  }) => Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => AlertsScreen(
+        snapshot: _snapshot,
+        repository: widget.alertRepository,
+        initialReferenceId: referenceId,
+        initialStream: stream,
+        onAlertResolved: _alertResolved,
+        refreshTrigger: _alertRefreshTrigger,
+      ),
+    ),
+  );
+
+  void _alertResolved(AlertInfo alert) {
+    if (alert.isActive) return;
+    setState(() {
+      _homeRefreshTrigger++;
+      _alertRefreshTrigger++;
+    });
+  }
+
+  void _openHomeAlerts() {
     _selectDestination(2);
   }
 

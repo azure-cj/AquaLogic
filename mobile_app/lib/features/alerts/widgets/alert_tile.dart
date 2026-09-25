@@ -10,11 +10,15 @@ class AlertTile extends StatelessWidget {
     required this.alert,
     this.onTap,
     this.onMarkHandled,
+    this.resolving = false,
+    this.resolveDisabled = false,
   });
 
   final AlertInfo alert;
   final VoidCallback? onTap;
   final VoidCallback? onMarkHandled;
+  final bool resolving;
+  final bool resolveDisabled;
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +105,7 @@ class AlertTile extends StatelessWidget {
                       label: 'Mark ${alert.tankName} alert as handled',
                       child: TextButton(
                         key: ValueKey('alert-handle-${alert.id}'),
-                        onPressed: onMarkHandled,
+                        onPressed: resolveDisabled ? null : onMarkHandled,
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.muted,
                           minimumSize: const Size(44, 44),
@@ -111,7 +115,22 @@ class AlertTile extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        child: const Text('Mark handled'),
+                        child: resolving
+                            ? const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 15,
+                                    height: 15,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 7),
+                                  Text('Saving'),
+                                ],
+                              )
+                            : const Text('Mark handled'),
                       ),
                     ),
                 ],
@@ -163,9 +182,11 @@ class AlertHistoryRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 );
-                final status = const _IncidentStatePill(
-                  label: 'Handled',
-                  color: AppColors.muted,
+                final status = _IncidentStatePill(
+                  label: alert.statusLabel,
+                  color: alert.lifecycle == AlertLifecycle.handled
+                      ? AppColors.muted
+                      : AppColors.tealDark,
                 );
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,10 +286,13 @@ class MonitoringIncidentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusLabel = incident.lifecycleLabel;
     final statusColor = incident.isActive
         ? AppColors.offline
-        : AppColors.tealDark;
-    final statusLabel = incident.isActive ? 'Offline' : 'Recovered';
+        : incident.resolutionReason ==
+              MonitoringResolutionReason.reportingRecovered
+        ? AppColors.tealDark
+        : AppColors.muted;
     final timeLabel = incident.isActive
         ? incident.startedLabel
         : incident.recoveredLabel ?? incident.startedLabel;
@@ -533,6 +557,7 @@ String _alertSemanticsLabel(AlertInfo alert) {
     _compactAlertTitle(alert),
     alert.parameter,
     alert.startedLabel,
+    alert.statusLabel,
     if (recommendation != null && alert.isActive) recommendation,
   ].join(', ');
 }

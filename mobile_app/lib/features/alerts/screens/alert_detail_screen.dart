@@ -1,22 +1,55 @@
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/features/alerts/data/alert_mutation_service.dart';
+import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/alerts/widgets/alert_tile.dart';
 import 'package:aqualogic/features/alerts/widgets/alerts_header.dart';
+import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
+import 'package:aqualogic/shared/formatters/local_timestamps.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:aqualogic/shared/widgets/soft_card.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-class AlertDetailScreen extends StatelessWidget {
-  const AlertDetailScreen({super.key, required this.alert, this.onMarkHandled});
+class AlertDetailScreen extends StatefulWidget {
+  const AlertDetailScreen({
+    super.key,
+    required this.alert,
+    required this.snapshot,
+    this.repository,
+    this.onAlertResolved,
+  });
 
   final AlertInfo alert;
-  final VoidCallback? onMarkHandled;
+  final SensorSnapshot snapshot;
+  final AlertRepository? repository;
+  final ValueChanged<AlertInfo>? onAlertResolved;
+
+  @override
+  State<AlertDetailScreen> createState() => _AlertDetailScreenState();
+}
+
+class _AlertDetailScreenState extends State<AlertDetailScreen> {
+  late AlertInfo _alert = widget.alert;
+  ApiFailure? _resolveFailure;
+  bool _resolving = false;
+
+  @override
+  void didUpdateWidget(covariant AlertDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.alert.id != widget.alert.id) {
+      _alert = widget.alert;
+      _resolveFailure = null;
+      _resolving = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final repository = widget.repository;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -25,7 +58,7 @@ class AlertDetailScreen extends StatelessWidget {
           header: AlertsHeader(
             title: 'Alert detail',
             subtitle: 'Review the condition and its current state',
-            onBack: () => Navigator.of(context).pop(),
+            onBack: () => Navigator.of(context).maybePop(),
           ),
           children: [
             SoftCard(
@@ -34,9 +67,9 @@ class AlertDetailScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      AlertSeverityPill(severity: alert.severity),
+                      AlertSeverityPill(severity: _alert.severity),
                       const Spacer(),
-                      _StateLabel(active: alert.isActive),
+                      _StateLabel(alert: _alert),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -44,13 +77,13 @@ class AlertDetailScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       TankIdentityMarker(
-                        initial: _tankInitial(alert.tankName),
+                        initial: _tankInitial(_alert.tankName),
                         size: 54,
                       ),
                       const SizedBox(width: 11),
                       Expanded(
                         child: Text(
-                          alert.tankName,
+                          _alert.tankName,
                           style: const TextStyle(
                             color: AppColors.text,
                             fontSize: 21,
@@ -63,7 +96,7 @@ class AlertDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    alert.parameter,
+                    _alert.parameter,
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 13,
@@ -72,7 +105,7 @@ class AlertDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 15),
                   Text(
-                    alert.message,
+                    _alert.message,
                     style: const TextStyle(
                       color: AppColors.text,
                       fontSize: 14,
@@ -80,52 +113,198 @@ class AlertDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  InfoRow(
-                    label: 'Started',
-                    value: alert.startedLabel,
+                  _AlertInfoRow(
+                    label: 'Created',
+                    value: _alert.startedAt == null
+                        ? _alert.startedLabel
+                        : formatLocalTimestamp(_alert.startedAt!),
                     icon: LucideIcons.clock3,
                   ),
-                  if (alert.recommendation != null) ...[
+                  if (_alert.resolvedAt != null) ...[
                     const Divider(height: 1),
-                    InfoRow(
+                    _AlertInfoRow(
+                      label: _alert.statusLabel,
+                      value: formatLocalTimestamp(_alert.resolvedAt!),
+                      icon:
+                          _alert.resolutionSource ==
+                              AlertResolutionSource.operator
+                          ? LucideIcons.userRoundCheck
+                          : LucideIcons.circleCheck,
+                    ),
+                  ],
+                  if (_alert.resolutionSource ==
+                      AlertResolutionSource.operator) ...[
+                    const Divider(height: 1),
+                    const _AlertInfoRow(
+                      label: 'Resolution source',
+                      value: 'Operator acknowledgement',
+                      icon: LucideIcons.userRound,
+                    ),
+                  ] else if (_alert.resolutionSource ==
+                      AlertResolutionSource.system) ...[
+                    const Divider(height: 1),
+                    const _AlertInfoRow(
+                      label: 'Resolution source',
+                      value: 'Automatic backend resolution',
+                      icon: LucideIcons.workflow,
+                    ),
+                  ],
+                  if (_alert.recommendation != null && _alert.isActive) ...[
+                    const Divider(height: 1),
+                    _AlertInfoRow(
                       label: 'Suggested follow-up',
-                      value: alert.recommendation!,
+                      value: _alert.recommendation!,
                       icon: LucideIcons.notebookPen,
                     ),
                   ],
                 ],
               ),
             ),
-            if (alert.isActive && onMarkHandled != null)
+            if (_resolveFailure != null)
+              _ResolveFailureNotice(failure: _resolveFailure!),
+            if (_alert.isActive && repository != null)
               FilledButton.icon(
-                onPressed: onMarkHandled,
-                icon: const Icon(LucideIcons.check),
-                label: const Text('Mark handled'),
+                key: const ValueKey('alert-detail-mark-handled'),
+                onPressed: _resolving ? null : _confirmAndResolve,
+                icon: _resolving
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(LucideIcons.check),
+                label: Text(_resolving ? 'Saving' : 'Mark handled'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
                 ),
               ),
-            const EmptyState(
-              title: 'Handling is an acknowledgement',
-              message:
-                  'Mark handled removes this item from the active list. It does not confirm that the water condition has returned to normal.',
-              icon: LucideIcons.info,
+            EmptyState(
+              title: _alert.isActive
+                  ? 'Handling is an acknowledgement'
+                  : _alert.statusLabel,
+              message: _alert.isActive
+                  ? 'Mark handled removes this item from the active list. It does not confirm that the water condition has returned to normal.'
+                  : _alert.lifecycle == AlertLifecycle.handled
+                  ? 'An operator marked this alert handled. This acknowledges a response and does not confirm that the water condition recovered.'
+                  : _alert.lifecycle == AlertLifecycle.resolvedAutomatically
+                  ? 'The backend resolved this alert automatically. That does not indicate an operator marked it handled.'
+                  : 'The backend reports this alert as resolved. No additional resolution detail is available.',
+              icon: _alert.isActive
+                  ? LucideIcons.info
+                  : LucideIcons.circleCheck,
             ),
           ],
         ),
       ),
     );
   }
+
+  Future<void> _confirmAndResolve() async {
+    final repository = widget.repository;
+    if (repository == null || !_alert.isActive || _resolving) return;
+    final shouldResolve = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Mark this alert as handled?'),
+        content: const Text(
+          'This removes it from active alerts. It does not confirm that the water condition has returned to normal.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Mark handled'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || shouldResolve != true) return;
+    setState(() {
+      _resolving = true;
+      _resolveFailure = null;
+    });
+    final outcome = await markAlertHandled(
+      repository: repository,
+      snapshot: widget.snapshot,
+      alert: _alert,
+    );
+    if (!mounted) return;
+    if (outcome.isResolved) {
+      final resolvedAlert = outcome.alert!;
+      setState(() {
+        _alert = resolvedAlert;
+        _resolving = false;
+        _resolveFailure = null;
+      });
+      widget.onAlertResolved?.call(resolvedAlert);
+      return;
+    }
+    setState(() {
+      _resolveFailure =
+          outcome.failure ??
+          const ApiFailure(
+            kind: ApiFailureKind.unknown,
+            message: 'The alert remains active. Refresh and try again.',
+            retryable: true,
+          );
+      _resolving = false;
+    });
+  }
+}
+
+class _ResolveFailureNotice extends StatelessWidget {
+  const _ResolveFailureNotice({required this.failure});
+
+  final ApiFailure failure;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('alert-resolution-failure'),
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      border: Border.all(color: AppColors.line),
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: Row(
+      children: [
+        const Icon(LucideIcons.cloudAlert, color: AppColors.offline, size: 19),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            failure.message,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontSize: 11,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _StateLabel extends StatelessWidget {
-  const _StateLabel({required this.active});
+  const _StateLabel({required this.alert});
 
-  final bool active;
+  final AlertInfo alert;
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.warning : AppColors.muted;
+    final color = alert.isActive
+        ? alert.severity == AlertSeverity.critical
+              ? AppColors.critical
+              : AppColors.warning
+        : alert.lifecycle == AlertLifecycle.handled
+        ? AppColors.muted
+        : AppColors.tealDark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -134,7 +313,7 @@ class _StateLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        active ? 'Active' : 'Handled',
+        alert.statusLabel,
         style: TextStyle(
           color: color,
           fontSize: 9,
@@ -143,6 +322,52 @@ class _StateLabel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AlertInfoRow extends StatelessWidget {
+  const _AlertInfoRow({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.muted),
+        const SizedBox(width: 9),
+        SizedBox(
+          width: 104,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontSize: 11,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 String _tankInitial(String tankName) {
