@@ -3,6 +3,8 @@ import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/shared/network/api_client.dart';
 import 'package:aqualogic/shared/network/api_failure.dart';
+import 'package:aqualogic/features/tanks/models/tank_status.dart';
+import 'package:aqualogic/shared/models/aqualogic_status.dart';
 
 /// Home's read-only production composition over the existing authenticated
 /// client. `/fleet` is required; alerts and incident details are independent
@@ -95,7 +97,7 @@ class ApiHomeRepository extends HomeRepository {
           message: alert.message.trim().isEmpty
               ? 'An active water-quality alert needs review.'
               : alert.message,
-          actionLabel: 'Details in M4',
+          actionLabel: 'View tank',
           sourceId: alert.id.toString(),
           occurredAt: alert.createdAt,
         ),
@@ -118,7 +120,7 @@ class ApiHomeRepository extends HomeRepository {
             status: status,
             title: '${status.label} water-quality status',
             message: 'The backend fleet status requires a review.',
-            actionLabel: 'Details in M4',
+            actionLabel: 'View tank',
           ),
         );
       }
@@ -199,7 +201,7 @@ class ApiHomeRepository extends HomeRepository {
       message: age == null
           ? 'The backend fleet status reports no current sensor reading.'
           : 'The last report was received ${_durationLabel(age)} ago.',
-      actionLabel: 'Details in M4',
+      actionLabel: 'View tank',
       occurredAt: tank.lastReadingAt,
     );
   }
@@ -219,24 +221,28 @@ class ApiHomeRepository extends HomeRepository {
       message: age == null
           ? 'An active monitoring incident is recorded for this tank.'
           : 'The last report was received ${_durationLabel(age)} ago.',
-      actionLabel: 'Details in M4',
+      actionLabel: 'View tank',
       sourceId: incident.id.toString(),
       occurredAt: incident.detectedAt,
     );
   }
 
-  static HomeOperationalStatus _fleetStatus(String value) =>
-      switch (value.toLowerCase()) {
-        'normal' => HomeOperationalStatus.normal,
-        'warning' => HomeOperationalStatus.warning,
-        'critical' => HomeOperationalStatus.critical,
-        'offline' => HomeOperationalStatus.offline,
-        _ => throw const ApiFailure(
-          kind: ApiFailureKind.unknown,
-          message: 'AquaLogic returned a fleet status that could not be read.',
-          retryable: true,
-        ),
+  static HomeOperationalStatus _fleetStatus(String value) {
+    try {
+      return switch (operationalStatusFromCode(value)) {
+        OperationalStatus.normal => HomeOperationalStatus.normal,
+        OperationalStatus.warning => HomeOperationalStatus.warning,
+        OperationalStatus.critical => HomeOperationalStatus.critical,
+        OperationalStatus.offline => HomeOperationalStatus.offline,
       };
+    } on FormatException {
+      throw const ApiFailure(
+        kind: ApiFailureKind.unknown,
+        message: 'AquaLogic returned a fleet status that could not be read.',
+        retryable: true,
+      );
+    }
+  }
 
   static HomeOperationalStatus? _alertStatus(String value) =>
       switch (value.toLowerCase()) {

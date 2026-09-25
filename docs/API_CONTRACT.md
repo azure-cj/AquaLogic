@@ -50,6 +50,20 @@ User creation and reset responses return one-time `setup_url` values rather
 than plaintext passwords. Setup links are fragment tokens and expire after 30
 minutes. Password changes and resets revoke existing sessions.
 
+## Mobile Tanks reads
+
+The Flutter Tanks directory uses one `GET /fleet` request and applies search
+and status filters locally. Live detail combines `GET /tanks/{tank_id}`,
+`GET /tanks/{tank_id}/operations`,
+`GET /tanks/{tank_id}/monitoring-incidents?state=active&page=1&page_size=100`,
+and `GET /tanks/{tank_id}/species-suitability`. These require staff access;
+`admin` is accepted by the backend's staff guard. Tank metadata is required;
+operations, incident, or suitability failures are presented independently as
+unavailable data. Operations supplies the current reading, parameter status,
+and active water-quality alerts. Active monitoring incidents are operational
+state, separate from water-quality alerts. No equipment-state or recent tank
+activity API is used by the mobile M3 detail view.
+
 ## Core staff resources
 
 | Method | Route | Purpose |

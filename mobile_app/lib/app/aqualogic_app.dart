@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/home/home_repository_scope.dart';
+import 'package:aqualogic/app/tanks/tank_repository_scope.dart';
 import 'package:aqualogic/app/startup/splash_screen.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/api_auth_service.dart';
@@ -9,15 +10,23 @@ import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:aqualogic/features/home/data/api_home_repository.dart';
 import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
+import 'package:aqualogic/features/tanks/data/api_tank_repository.dart';
+import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 import 'package:flutter/material.dart';
 
 const _startupPreview = bool.fromEnvironment('AQUALOGIC_STARTUP_PREVIEW');
 
 class AquaLogicApp extends StatefulWidget {
-  const AquaLogicApp({super.key, this.authService, this.homeRepository});
+  const AquaLogicApp({
+    super.key,
+    this.authService,
+    this.homeRepository,
+    this.tankRepository,
+  });
 
   final AuthService? authService;
   final HomeRepository? homeRepository;
+  final TankRepository? tankRepository;
 
   @override
   State<AquaLogicApp> createState() => _AquaLogicAppState();
@@ -27,6 +36,7 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
   late final AuthService _authService;
   late final bool _ownsAuthService;
   late final HomeRepository _homeRepository;
+  late final TankRepository _tankRepository;
 
   @override
   void initState() {
@@ -40,6 +50,14 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
             apiClient: apiAuthService.apiClient,
           ),
           _ => const MockHomeRepository(),
+        };
+    _tankRepository =
+        widget.tankRepository ??
+        switch (_authService) {
+          ApiAuthService apiAuthService => ApiTankRepository(
+            apiClient: apiAuthService.apiClient,
+          ),
+          _ => const MockTankRepository(),
         };
     unawaited(_authService.initialize());
   }
@@ -95,10 +113,13 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
         authService: _authService,
         child: HomeRepositoryScope(
           repository: _homeRepository,
-          child: const SplashScreen(
-            minimumDisplayDuration: _startupPreview
-                ? Duration(seconds: 6)
-                : Duration(milliseconds: 600),
+          child: TankRepositoryScope(
+            repository: _tankRepository,
+            child: const SplashScreen(
+              minimumDisplayDuration: _startupPreview
+                  ? Duration(seconds: 6)
+                  : Duration(milliseconds: 600),
+            ),
           ),
         ),
       ),

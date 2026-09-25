@@ -16,6 +16,6 @@ OperationalStatus operationalStatusFromCode(String status) {
     'warning' || 'monitor' => OperationalStatus.warning,
     'critical' => OperationalStatus.critical,
     'offline' => OperationalStatus.offline,
-    _ => OperationalStatus.offline,
+    _ => throw FormatException('Unknown tank operational status: $status'),
   };
 }

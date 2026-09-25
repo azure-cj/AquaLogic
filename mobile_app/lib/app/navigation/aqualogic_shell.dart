@@ -12,6 +12,8 @@ import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
+import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
+import 'package:aqualogic/features/tanks/screens/tank_detail_screen.dart';
 import 'package:aqualogic/features/tanks/screens/tanks_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -21,10 +23,12 @@ class AquaLogicShell extends StatefulWidget {
     super.key,
     required this.user,
     this.homeRepository = const MockHomeRepository(),
+    this.tankRepository = const MockTankRepository(),
   });
 
   final AuthUser user;
   final HomeRepository homeRepository;
+  final TankRepository tankRepository;
 
   @override
   State<AquaLogicShell> createState() => _AquaLogicShellState();
@@ -75,8 +79,13 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
         onOpenAlerts: _openHomeAlerts,
         onOpenTanks: _openHomeTanks,
         onOpenAlert: _openHomeAttention,
+        onOpenTank: _openHomeTank,
       ),
-      TanksScreen(snapshot: _snapshot, user: widget.user),
+      TanksScreen(
+        snapshot: _snapshot,
+        user: widget.user,
+        repository: widget.tankRepository,
+      ),
       AlertsScreen(snapshot: _snapshot),
       MoreScreen(snapshot: _snapshot, user: widget.user),
     ];
@@ -187,11 +196,7 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
 
   void _openHomeAttention(HomeAttentionItem item) {
     if (widget.homeRepository.isLiveData) {
-      _showHomeDestinationNotice(
-        item.type == HomeAttentionType.monitoring
-            ? 'Monitoring details are not connected yet. The Alerts and Tanks screens remain demo-backed until M3/M4.'
-            : 'Alert details are not connected yet. The Alerts screen remains demo-backed until M4.',
-      );
+      _openTankDetails(item.tankId);
       return;
     }
     final sourceId = item.sourceId;
@@ -232,6 +237,21 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     _showMissingHomeAttention(item.type);
   }
 
+  void _openHomeTank(HomeTankSummary tank) => _openTankDetails(tank.id);
+
+  void _openTankDetails(String tankId) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TankDetailPage(
+          tankId: tankId,
+          repository: widget.tankRepository,
+          snapshot: _snapshot,
+          user: widget.user,
+        ),
+      ),
+    );
+  }
+
   void _openHomeAlerts() {
     if (widget.homeRepository.isLiveData) {
       _showHomeDestinationNotice(
@@ -243,12 +263,6 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   }
 
   void _openHomeTanks() {
-    if (widget.homeRepository.isLiveData) {
-      _showHomeDestinationNotice(
-        'The Tanks screen remains demo-backed until M3.',
-      );
-      return;
-    }
     _selectDestination(1);
   }
 

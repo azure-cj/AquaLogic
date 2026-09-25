@@ -353,6 +353,7 @@ Color _conditionColor(ReadingCondition condition) {
     ReadingCondition.normal => AppColors.success,
     ReadingCondition.warning => AppColors.warning,
     ReadingCondition.critical => AppColors.critical,
+    ReadingCondition.stale => AppColors.offline,
     ReadingCondition.unavailable => AppColors.offline,
   };
 }
@@ -362,6 +363,7 @@ IconData _conditionIcon(ReadingCondition condition) {
     ReadingCondition.normal => LucideIcons.circleCheck,
     ReadingCondition.warning => LucideIcons.triangleAlert,
     ReadingCondition.critical => LucideIcons.circleAlert,
+    ReadingCondition.stale => LucideIcons.clock3,
     ReadingCondition.unavailable => LucideIcons.circleHelp,
   };
 }

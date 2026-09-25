@@ -1,46 +1,9 @@
+export '../../tanks/data/tank_api_models.dart' show FleetTankDto;
+
 /// Small DTOs for the Home endpoints. These intentionally parse only fields
 /// used by the Home domain mapper; widgets never receive wire-format JSON.
-class FleetTankDto {
-  const FleetTankDto({
-    required this.id,
-    required this.name,
-    required this.location,
-    required this.status,
-    required this.reportingAgeSeconds,
-    required this.lastReadingAt,
-    required this.activeWarningCount,
-    required this.activeCriticalCount,
-    required this.activeMonitoringIncidentCount,
-  });
-
-  final int id;
-  final String name;
-  final String location;
-  final String status;
-  final int? reportingAgeSeconds;
-  final DateTime? lastReadingAt;
-  final int activeWarningCount;
-  final int activeCriticalCount;
-  final int activeMonitoringIncidentCount;
-
-  factory FleetTankDto.fromJson(Object? value) {
-    final json = _jsonMap(value, 'fleet tank');
-    return FleetTankDto(
-      id: _requiredInt(json, 'id'),
-      name: _requiredString(json, 'name'),
-      location: _requiredString(json, 'location'),
-      status: _requiredString(json, 'status'),
-      reportingAgeSeconds: _optionalInt(json, 'reporting_age_seconds'),
-      lastReadingAt: _optionalUtcDateTime(json, 'last_reading_at'),
-      activeWarningCount: _requiredInt(json, 'active_warning_count'),
-      activeCriticalCount: _requiredInt(json, 'active_critical_count'),
-      activeMonitoringIncidentCount: _requiredInt(
-        json,
-        'active_monitoring_incident_count',
-      ),
-    );
-  }
-}
+/// FleetTankDto is shared with Tanks so both surfaces use the same status and
+/// identity parsing for the backend's /fleet resource.
 
 class HomeAlertDto {
   const HomeAlertDto({

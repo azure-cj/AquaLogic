@@ -1,4 +1,5 @@
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/features/tanks/models/tank_status.dart';
 
 enum TankLifecycle { active, retired }
 
@@ -20,12 +21,14 @@ enum ReadingCondition {
   normal,
   warning,
   critical,
+  stale,
   unavailable;
 
   String get label => switch (this) {
     ReadingCondition.normal => 'Normal',
     ReadingCondition.warning => 'Warning',
     ReadingCondition.critical => 'Critical',
+    ReadingCondition.stale => 'Last known',
     ReadingCondition.unavailable => 'Unavailable',
   };
 }
@@ -44,6 +47,9 @@ class TankReading {
     required this.condition,
     required this.timestampLabel,
     this.note,
+    this.observedAt,
+    this.receivedAt,
+    this.isMock = false,
   });
 
   final SensorParameter parameter;
@@ -52,8 +58,13 @@ class TankReading {
   final ReadingCondition condition;
   final String timestampLabel;
   final String? note;
+  final DateTime? observedAt;
+  final DateTime? receivedAt;
+  final bool isMock;
 
-  bool get isAvailable => condition != ReadingCondition.unavailable;
+  /// A reading can have a valid numeric value even when the backend cannot
+  /// evaluate its threshold state. Missing values remain explicitly absent.
+  bool get isAvailable => value.trim().isNotEmpty && value != '—';
 }
 
 class TankIssue {
@@ -133,6 +144,11 @@ class TankInfo {
     this.species = const <TankSpeciesSummary>[],
     this.equipmentCount = 0,
     this.recentActivity = const <TankActivity>[],
+    this.isLiveData = false,
+    this.operationsAvailable = true,
+    this.monitoringAvailable = true,
+    this.suitabilityAvailable = true,
+    this.assignedSpeciesCount,
   });
 
   final String initial;
@@ -158,6 +174,11 @@ class TankInfo {
   final List<TankSpeciesSummary> species;
   final int equipmentCount;
   final List<TankActivity> recentActivity;
+  final bool isLiveData;
+  final bool operationsAvailable;
+  final bool monitoringAvailable;
+  final bool suitabilityAvailable;
+  final int? assignedSpeciesCount;
 
   String get tankId => id ?? _slugify(name);
 
@@ -170,11 +191,8 @@ class TankInfo {
 
   OperationalStatus get operationalStatus {
     return switch (status.trim().toLowerCase()) {
-      'normal' || 'good' => OperationalStatus.normal,
-      'warning' || 'monitor' => OperationalStatus.warning,
-      'critical' => OperationalStatus.critical,
-      'offline' => OperationalStatus.offline,
-      _ => OperationalStatus.offline,
+      'good' => OperationalStatus.normal,
+      _ => operationalStatusFromCode(status),
     };
   }
 
@@ -204,6 +222,11 @@ class TankInfo {
     List<TankSpeciesSummary>? species,
     int? equipmentCount,
     List<TankActivity>? recentActivity,
+    bool? isLiveData,
+    bool? operationsAvailable,
+    bool? monitoringAvailable,
+    bool? suitabilityAvailable,
+    int? assignedSpeciesCount,
   }) {
     return TankInfo(
       initial: initial ?? this.initial,
@@ -228,6 +251,11 @@ class TankInfo {
       species: species ?? this.species,
       equipmentCount: equipmentCount ?? this.equipmentCount,
       recentActivity: recentActivity ?? this.recentActivity,
+      isLiveData: isLiveData ?? this.isLiveData,
+      operationsAvailable: operationsAvailable ?? this.operationsAvailable,
+      monitoringAvailable: monitoringAvailable ?? this.monitoringAvailable,
+      suitabilityAvailable: suitabilityAvailable ?? this.suitabilityAvailable,
+      assignedSpeciesCount: assignedSpeciesCount ?? this.assignedSpeciesCount,
     );
   }
 }

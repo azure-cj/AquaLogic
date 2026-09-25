@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenAlerts,
     required this.onOpenTanks,
     this.onOpenAlert,
+    this.onOpenTank,
     this.repository = const MockHomeRepository(),
   });
 
@@ -28,6 +29,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
   final ValueChanged<HomeAttentionItem>? onOpenAlert;
+  final ValueChanged<HomeTankSummary>? onOpenTank;
   final HomeRepository repository;
 
   @override
@@ -141,12 +143,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onOpenAlerts: widget.onOpenAlerts,
               onOpenTanks: widget.onOpenTanks,
               onOpenAlert: widget.onOpenAlert,
+              onOpenTank: widget.onOpenTank,
             ),
             UserRole.staff => StaffHomeContent(
               data: data,
               isLiveData: data.isLiveData,
               onOpenAlerts: widget.onOpenAlerts,
               onOpenTanks: widget.onOpenTanks,
+              onOpenTank: widget.onOpenTank,
+              onOpenAlert: widget.onOpenAlert,
             ),
           };
 

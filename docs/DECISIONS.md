@@ -6,6 +6,27 @@ Last reviewed: 2026-09-25
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-09-25 — Connect Flutter Tanks through read-only existing endpoints
+
+**Decision:** M3 uses `GET /fleet` for the tank directory and the existing
+tank metadata, operations, active monitoring-incidents, and species-suitability
+routes for detail. Reuse the shared authenticated `ApiClient` and existing
+`TankInfo` presentation model; retain mock repository injection. Keep the
+directory request bounded to one fleet read, make detail supporting sources
+independently unavailable, and omit live detail sections with no read API.
+Expose no alert or equipment mutations in M3.
+
+**Reason:** The deployed staff endpoints already supply the required live tank
+identity, status, readings, active alerts, monitoring state, and assigned
+species/advisory data. Keeping backend wire models in DTOs preserves the current
+widgets and role-aware Home while avoiding duplicate freshness rules, N+1 list
+requests, and demo content on live detail.
+
+**Consequences:** No backend route, database, or deployment change is required.
+Alert history/handling, equipment-state reads, activity, physical controls, and
+push notifications remain separate follow-up milestones. Tests use fake HTTP
+responses and do not call production.
+
 ## 2026-09-25 — Use native secure refresh storage for Flutter auth
 
 **Decision:** The production Flutter composition calls the Railway FastAPI root

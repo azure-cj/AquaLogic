@@ -11,6 +11,7 @@ class OwnerHomeContent extends StatelessWidget {
     required this.onOpenTanks,
     this.isLiveData = false,
     this.onOpenAlert,
+    this.onOpenTank,
   });
 
   final HomeDashboardData data;
@@ -18,6 +19,7 @@ class OwnerHomeContent extends StatelessWidget {
   final VoidCallback onOpenTanks;
   final bool isLiveData;
   final ValueChanged<HomeAttentionItem>? onOpenAlert;
+  final ValueChanged<HomeTankSummary>? onOpenTank;
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +35,14 @@ class OwnerHomeContent extends StatelessWidget {
         ),
         SectionTitle(
           title: 'Fleet overview',
-          action: isLiveData ? 'Details in M3' : 'View all',
+          action: 'View all',
           onTap: onOpenTanks,
         ),
         const SizedBox(height: 8),
-        TankFleetCard(tanks: data.tanks, onTap: (_) => onOpenTanks()),
+        TankFleetCard(
+          tanks: data.tanks,
+          onTap: onOpenTank ?? (_) => onOpenTanks(),
+        ),
         const SizedBox(height: 18),
         MonitoringSummaryCard(summary: data.monitoring),
         const SizedBox(height: 18),

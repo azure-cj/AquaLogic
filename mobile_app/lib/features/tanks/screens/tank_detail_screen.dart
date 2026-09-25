@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
@@ -6,13 +8,268 @@ import 'package:aqualogic/features/fish/screens/fish_library_screen.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/sensors/widgets/reading_grid.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
+import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 import 'package:aqualogic/features/tanks/widgets/tank_visuals.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/formatters/freshness_labels.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
 import 'package:aqualogic/shared/widgets/semantic_status_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+/// Async detail route used by live Home and Tanks identities. It intentionally
+/// keeps the last successful tank visible when a refresh fails.
+class TankDetailPage extends StatefulWidget {
+  const TankDetailPage({
+    super.key,
+    required this.tankId,
+    required this.repository,
+    required this.snapshot,
+    this.user,
+  });
+
+  final String tankId;
+  final TankRepository repository;
+  final SensorSnapshot snapshot;
+  final AuthUser? user;
+
+  @override
+  State<TankDetailPage> createState() => _TankDetailPageState();
+}
+
+class _TankDetailPageState extends State<TankDetailPage>
+    with WidgetsBindingObserver {
+  static const _foregroundRefreshInterval = Duration(minutes: 1);
+
+  TankInfo? _tank;
+  ApiFailure? _initialFailure;
+  ApiFailure? _refreshFailure;
+  bool _loading = true;
+  DateTime? _lastSuccessfulLoadAt;
+  Future<void>? _loadInFlight;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(covariant TankDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tankId != widget.tankId ||
+        !identical(oldWidget.repository, widget.repository)) {
+      _tank = null;
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final lastSuccess = _lastSuccessfulLoadAt;
+    if (_tank == null ||
+        lastSuccess == null ||
+        DateTime.now().toUtc().difference(lastSuccess) >=
+            _foregroundRefreshInterval) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load() {
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+    final request = _loadDetail();
+    _loadInFlight = request;
+    return request.whenComplete(() {
+      if (identical(_loadInFlight, request)) _loadInFlight = null;
+    });
+  }
+
+  Future<void> _loadDetail() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _initialFailure = null;
+      });
+    }
+    try {
+      final tank = await widget.repository.loadTankDetail(
+        widget.tankId,
+        snapshot: widget.snapshot,
+      );
+      if (!mounted) return;
+      setState(() {
+        _tank = tank;
+        _lastSuccessfulLoadAt = DateTime.now().toUtc();
+        _initialFailure = null;
+        _refreshFailure = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final failure = error is ApiFailure
+          ? error
+          : const ApiFailure(
+              kind: ApiFailureKind.unknown,
+              message: 'Tank details could not be loaded. Try again.',
+              retryable: true,
+            );
+      setState(() {
+        if (_tank == null) {
+          _initialFailure = failure;
+        } else {
+          _refreshFailure = failure;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tank = _tank;
+    if (tank == null) {
+      return _TankDetailRouteState(
+        tankId: widget.tankId,
+        loading: _loading,
+        failure: _initialFailure,
+        onRetry: () => unawaited(_load()),
+      );
+    }
+    return TankDetailScreen(
+      tank: tank,
+      snapshot: widget.snapshot,
+      user: widget.user,
+      onRefresh: _load,
+      onRetry: () => unawaited(_load()),
+      refreshFailure: _refreshFailure?.message,
+    );
+  }
+}
+
+class _TankDetailRouteState extends StatelessWidget {
+  const _TankDetailRouteState({
+    required this.tankId,
+    required this.loading,
+    required this.failure,
+    required this.onRetry,
+  });
+
+  final String tankId;
+  final bool loading;
+  final ApiFailure? failure;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final notFound = failure?.kind == ApiFailureKind.notFound;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        top: false,
+        child: AppPage(
+          header: _TankDetailRouteHeader(),
+          children: [
+            if (loading)
+              _DetailSurface(
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.tealDark,
+                        value: reduceMotion ? 0.65 : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Loading tank details from AquaLogic',
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              _TankSourceNotice(
+                key: const ValueKey('tank-detail-load-error'),
+                title: notFound
+                    ? 'Tank not found or no longer accessible'
+                    : "Couldn't load tank details",
+                message: notFound
+                    ? 'This tank may have been retired, removed, or is not available to this account.'
+                    : '${failure?.message ?? 'Check your connection and retry.'} The tank has not been marked offline by this phone connection failure.',
+                onRetry: notFound ? null : onRetry,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TankDetailRouteHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final safeTop = MediaQuery.paddingOf(context).top;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(12, safeTop + 8, 16, 18),
+      decoration: BoxDecoration(
+        image: const DecorationImage(
+          image: AssetImage('assets/images/tank_header.png'),
+          fit: BoxFit.cover,
+          alignment: Alignment.centerRight,
+          opacity: 0.2,
+        ),
+        border: Border(
+          bottom: BorderSide(color: AppColors.line.withValues(alpha: 0.72)),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(LucideIcons.arrowLeft),
+            style: IconButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              foregroundColor: AppColors.tealDark,
+              backgroundColor: Colors.white.withValues(alpha: 0.76),
+              side: const BorderSide(color: AppColors.line),
+            ),
+          ),
+          const SizedBox(width: 9),
+          const Text(
+            'Tank details',
+            style: TextStyle(
+              color: AppColors.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class TankDetailScreen extends StatelessWidget {
   const TankDetailScreen({
@@ -20,11 +277,17 @@ class TankDetailScreen extends StatelessWidget {
     required this.tank,
     required this.snapshot,
     this.user,
+    this.onRefresh,
+    this.onRetry,
+    this.refreshFailure,
   });
 
   final TankInfo tank;
   final SensorSnapshot snapshot;
   final AuthUser? user;
+  final Future<void> Function()? onRefresh;
+  final VoidCallback? onRetry;
+  final String? refreshFailure;
 
   @override
   Widget build(BuildContext context) {
@@ -37,45 +300,69 @@ class TankDetailScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: AppPage(
+          onRefresh: onRefresh,
           header: _TankDetailHeader(tank: tank),
           children: [
+            if (refreshFailure != null)
+              _TankSourceNotice(
+                key: const ValueKey('tank-detail-stale-data'),
+                title: "Couldn't refresh tank details",
+                message: '$refreshFailure Showing the last successful data.',
+                onRetry: onRetry,
+              ),
             const SectionHeader(
               title: 'Current readings',
               subtitle: 'Live readings from installed sensors',
             ),
-            ReadingGrid(snapshot: snapshot, readings: tank.readings),
+            if (tank.operationsAvailable)
+              ReadingGrid(snapshot: snapshot, readings: tank.readings)
+            else
+              _TankSourceNotice(
+                key: const ValueKey('tank-detail-readings-unavailable'),
+                title: 'Current readings unavailable',
+                message:
+                    'AquaLogic could not load the operations snapshot. This does not mean the tank is offline.',
+                onRetry: onRetry,
+              ),
             const SectionHeader(
               title: 'Issues',
               subtitle: 'Water quality and monitoring',
             ),
-            _IssuesSection(issues: tank.issues),
+            _IssuesSection(
+              issues: tank.issues,
+              operationsAvailable: tank.operationsAvailable,
+              monitoringAvailable: tank.monitoringAvailable,
+              onRetry: onRetry,
+            ),
             const SectionHeader(
               title: 'Species',
               subtitle: 'Advisory suitability for this tank',
             ),
             _SpeciesSnapshot(
               tank: tank,
-              onSpeciesTap: (speciesId) {
-                final assignment = tank.species.firstWhere(
-                  (species) => species.speciesId == speciesId,
-                );
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => SpeciesDetailScreen(
-                      speciesId: speciesId,
-                      assignedTankName: tank.name,
-                      suitability: assignment.suitability,
-                    ),
-                  ),
-                );
-              },
+              onSpeciesTap: tank.isLiveData
+                  ? null
+                  : (speciesId) {
+                      final assignment = tank.species.firstWhere(
+                        (species) => species.speciesId == speciesId,
+                      );
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => SpeciesDetailScreen(
+                            speciesId: speciesId,
+                            assignedTankName: tank.name,
+                            suitability: assignment.suitability,
+                          ),
+                        ),
+                      );
+                    },
             ),
             const SectionHeader(
               title: 'Monitoring',
               subtitle: 'Reporting state, not water quality',
             ),
             _MonitoringRow(tank: tank),
-            if (canManageEquipment) ...[
+            if (canManageEquipment && !tank.isLiveData) ...[
               const SectionHeader(
                 title: 'Equipment',
                 subtitle: 'Tank-specific devices and controls',
@@ -92,11 +379,13 @@ class TankDetailScreen extends StatelessWidget {
                 },
               ),
             ],
-            const SectionHeader(
-              title: 'Recent activity',
-              subtitle: 'Latest tank events',
-            ),
-            _ActivitySection(activities: tank.recentActivity),
+            if (!tank.isLiveData) ...[
+              const SectionHeader(
+                title: 'Recent activity',
+                subtitle: 'Latest tank events',
+              ),
+              _ActivitySection(activities: tank.recentActivity),
+            ],
           ],
         ),
       ),
@@ -113,7 +402,9 @@ class _TankDetailHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
     final isOffline =
-        !tank.isRetired && tank.operationalStatus == OperationalStatus.offline;
+        !tank.isRetired &&
+        tank.operationsAvailable &&
+        tank.operationalStatus == OperationalStatus.offline;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -189,6 +480,8 @@ class _TankDetailHeader extends StatelessWidget {
                         const Spacer(),
                         tank.isRetired
                             ? const LifecycleBadge(compact: true)
+                            : !tank.operationsAvailable
+                            ? const _UnknownStatusBadge()
                             : OperationalStatusBadge(
                                 status: tank.operationalStatus,
                                 compact: true,
@@ -232,10 +525,14 @@ class _TankDetailHeader extends StatelessWidget {
                               Row(
                                 children: [
                                   Icon(
-                                    isOffline
+                                    !tank.operationsAvailable
+                                        ? LucideIcons.circleHelp
+                                        : isOffline
                                         ? LucideIcons.wifiOff
                                         : LucideIcons.clock3,
-                                    color: isOffline
+                                    color: !tank.operationsAvailable
+                                        ? AppColors.muted
+                                        : isOffline
                                         ? AppColors.offline
                                         : AppColors.muted,
                                     size: 14,
@@ -243,13 +540,17 @@ class _TankDetailHeader extends StatelessWidget {
                                   const SizedBox(width: 5),
                                   Flexible(
                                     child: Text(
-                                      formatFreshnessLabel(
-                                        tank.lastReportLabel,
-                                      ),
+                                      !tank.operationsAvailable
+                                          ? 'Status unavailable'
+                                          : formatFreshnessLabel(
+                                              tank.lastReportLabel,
+                                            ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: isOffline
+                                        color: !tank.operationsAvailable
+                                            ? AppColors.muted
+                                            : isOffline
                                             ? AppColors.offline
                                             : AppColors.muted,
                                         fontSize: 11,
@@ -279,6 +580,89 @@ class _TankDetailHeader extends StatelessWidget {
   }
 }
 
+class _UnknownStatusBadge extends StatelessWidget {
+  const _UnknownStatusBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.82),
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: const Text(
+        'Status unavailable',
+        style: TextStyle(
+          color: AppColors.muted,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _TankSourceNotice extends StatelessWidget {
+  const _TankSourceNotice({
+    super.key,
+    required this.title,
+    required this.message,
+    this.onRetry,
+  });
+
+  final String title;
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DetailSurface(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(LucideIcons.circleHelp, color: AppColors.muted, size: 19),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+                if (onRetry != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      key: ValueKey('tank-source-retry-$title'),
+                      onPressed: onRetry,
+                      child: const Text('Retry'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TankMetadataStrip extends StatelessWidget {
   const _TankMetadataStrip({required this.tank});
 
@@ -286,6 +670,16 @@ class _TankMetadataStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metadata = <(IconData, String, String)>[
+      if (tank.locationOrType.trim().isNotEmpty)
+        (LucideIcons.mapPin, 'Location', tank.locationOrType),
+      if (tank.volumeLabel.trim().isNotEmpty)
+        (LucideIcons.waves, 'Volume', tank.volumeLabel),
+      if (!tank.isLiveData && tank.lastFedLabel.trim().isNotEmpty)
+        (LucideIcons.utensils, 'Last fed', tank.lastFedLabel),
+    ];
+    if (metadata.isEmpty) return const SizedBox.shrink();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
       decoration: BoxDecoration(
@@ -296,37 +690,21 @@ class _TankMetadataStrip extends StatelessWidget {
       child: IntrinsicHeight(
         child: Row(
           children: [
-            Expanded(
-              child: _MetadataItem(
-                icon: LucideIcons.mapPin,
-                label: 'Location',
-                value: tank.locationOrType,
+            for (var index = 0; index < metadata.length; index++) ...[
+              Expanded(
+                child: _MetadataItem(
+                  icon: metadata[index].$1,
+                  label: metadata[index].$2,
+                  value: metadata[index].$3,
+                ),
               ),
-            ),
-            const VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: AppColors.line,
-            ),
-            Expanded(
-              child: _MetadataItem(
-                icon: LucideIcons.waves,
-                label: 'Volume',
-                value: tank.volumeLabel,
-              ),
-            ),
-            const VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: AppColors.line,
-            ),
-            Expanded(
-              child: _MetadataItem(
-                icon: LucideIcons.utensils,
-                label: 'Last fed',
-                value: tank.lastFedLabel,
-              ),
-            ),
+              if (index < metadata.length - 1)
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: AppColors.line,
+                ),
+            ],
           ],
         ),
       ),
@@ -414,13 +792,21 @@ class _DetailSurface extends StatelessWidget {
 }
 
 class _IssuesSection extends StatelessWidget {
-  const _IssuesSection({required this.issues});
+  const _IssuesSection({
+    required this.issues,
+    required this.operationsAvailable,
+    required this.monitoringAvailable,
+    required this.onRetry,
+  });
 
   final List<TankIssue> issues;
+  final bool operationsAvailable;
+  final bool monitoringAvailable;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (issues.isEmpty) {
+    if (issues.isEmpty && operationsAvailable && monitoringAvailable) {
       return Semantics(
         container: true,
         label: 'No active water-quality or monitoring issues',
@@ -460,11 +846,41 @@ class _IssuesSection extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
+    final sections = <Widget>[
+      if (!operationsAvailable)
+        _TankSourceNotice(
+          title: 'Water-quality issues unavailable',
+          message:
+              'The operations snapshot could not be loaded, so this is not an empty-alert result.',
+          onRetry: onRetry,
+        ),
+      if (!monitoringAvailable)
+        _TankSourceNotice(
+          title: 'Monitoring incident details unavailable',
+          message:
+              'The current reporting state is shown separately below when the operations snapshot is available.',
+          onRetry: onRetry,
+        ),
+      if (issues.isEmpty && operationsAvailable && monitoringAvailable)
+        const SizedBox.shrink()
+      else if (issues.isEmpty && operationsAvailable)
+        const _TankSourceNotice(
+          title: 'No active water-quality alerts',
+          message: 'Monitoring incident details are shown separately.',
+        )
+      else ...[
         for (var index = 0; index < issues.length; index++) ...[
           _IssueRow(issue: issues[index]),
           if (index < issues.length - 1) const SizedBox(height: 8),
+        ],
+      ],
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < sections.length; index++) ...[
+          sections[index],
+          if (index < sections.length - 1) const SizedBox(height: 8),
         ],
       ],
     );
@@ -564,7 +980,7 @@ class _SpeciesSnapshot extends StatelessWidget {
   const _SpeciesSnapshot({required this.tank, required this.onSpeciesTap});
 
   final TankInfo tank;
-  final ValueChanged<String> onSpeciesTap;
+  final ValueChanged<String>? onSpeciesTap;
 
   @override
   Widget build(BuildContext context) {
@@ -589,20 +1005,34 @@ class _SpeciesSnapshot extends StatelessWidget {
       );
     }
 
-    return _DetailSurface(
-      padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          for (var index = 0; index < tank.species.length; index++) ...[
-            _SpeciesRow(
-              species: tank.species[index],
-              onTap: () => onSpeciesTap(tank.species[index].speciesId),
-            ),
-            if (index < tank.species.length - 1)
-              const Divider(height: 1, indent: 13, endIndent: 13),
-          ],
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!tank.suitabilityAvailable)
+          const _TankSourceNotice(
+            title: 'Suitability unavailable',
+            message:
+                'Assigned species are real; AquaLogic could not load the suitability advisory.',
+          ),
+        if (!tank.suitabilityAvailable) const SizedBox(height: 8),
+        _DetailSurface(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (var index = 0; index < tank.species.length; index++) ...[
+                _SpeciesRow(
+                  species: tank.species[index],
+                  onTap: onSpeciesTap == null
+                      ? null
+                      : () => onSpeciesTap!(tank.species[index].speciesId),
+                ),
+                if (index < tank.species.length - 1)
+                  const Divider(height: 1, indent: 13, endIndent: 13),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -611,12 +1041,12 @@ class _SpeciesRow extends StatelessWidget {
   const _SpeciesRow({required this.species, required this.onTap});
 
   final TankSpeciesSummary species;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      button: true,
+      button: onTap != null,
       onTap: onTap,
       label:
           '${species.name}, species suitability ${species.suitability.label}',
@@ -662,11 +1092,12 @@ class _SpeciesRow extends StatelessWidget {
                     compact: true,
                   ),
                   const SizedBox(width: 4),
-                  const Icon(
-                    LucideIcons.chevronRight,
-                    color: AppColors.muted,
-                    size: 17,
-                  ),
+                  if (onTap != null)
+                    const Icon(
+                      LucideIcons.chevronRight,
+                      color: AppColors.muted,
+                      size: 17,
+                    ),
                 ],
               ),
             ),
@@ -727,6 +1158,23 @@ class _MonitoringRow extends StatelessWidget {
       );
     }
 
+    if (!tank.operationsAvailable) {
+      final incident = tank.issues.where(
+        (issue) => issue.category == TankIssueCategory.monitoring,
+      );
+      if (incident.isNotEmpty) {
+        return _TankSourceNotice(
+          title: 'Monitoring incident active',
+          message: incident.first.message,
+        );
+      }
+      return const _TankSourceNotice(
+        title: 'Monitoring status unavailable',
+        message:
+            'AquaLogic could not load tank operations. Phone connectivity has not been used to infer tank status.',
+      );
+    }
+
     final offline = tank.operationalStatus == OperationalStatus.offline;
     return Semantics(
       container: true,
@@ -780,7 +1228,9 @@ class _MonitoringRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    offline
+                    !tank.monitoringAvailable
+                        ? 'The reporting state comes from Operations; incident details could not be loaded.'
+                        : offline
                         ? 'A reporting interruption does not automatically mean the water is unsafe.'
                         : 'Recent data received for this tank.',
                     style: const TextStyle(

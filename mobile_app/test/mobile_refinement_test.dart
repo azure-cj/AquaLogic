@@ -393,6 +393,7 @@ void main() {
         home: Scaffold(body: TanksScreen(snapshot: MockSensorFeed.snapshot(0))),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('tanks-page-title')), findsOneWidget);
     expect(find.text('Monitor your aquarium fleet'), findsOneWidget);
@@ -757,7 +758,8 @@ void main() {
     for (final screen in screens) {
       await tester.pumpWidget(MaterialApp(home: Scaffold(body: screen)));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+      final exception = tester.takeException();
+      expect(exception, isNull, reason: screen.runtimeType.toString());
     }
   });
 }

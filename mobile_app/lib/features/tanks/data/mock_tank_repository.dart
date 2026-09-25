@@ -2,11 +2,17 @@ import 'package:aqualogic/features/demo/demo_data.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/models/tank_info.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 
 abstract class TankRepository {
-  List<TankInfo> list({required SensorSnapshot snapshot});
+  bool get isLiveData;
 
-  TankInfo? findById(String tankId, {required SensorSnapshot snapshot});
+  Future<List<TankInfo>> loadTanks({required SensorSnapshot snapshot});
+
+  Future<TankInfo> loadTankDetail(
+    String tankId, {
+    required SensorSnapshot snapshot,
+  });
 }
 
 /// Local tank directory composed from backend-compatible presentation fields.
@@ -19,6 +25,22 @@ class MockTankRepository implements TankRepository {
   final Set<String> offlineTankIds;
 
   @override
+  bool get isLiveData => false;
+
+  @override
+  Future<List<TankInfo>> loadTanks({required SensorSnapshot snapshot}) async =>
+      list(snapshot: snapshot);
+
+  @override
+  Future<TankInfo> loadTankDetail(
+    String tankId, {
+    required SensorSnapshot snapshot,
+  }) async {
+    final tank = findById(tankId, snapshot: snapshot);
+    if (tank == null) throw ApiFailure.fromStatus(404);
+    return tank;
+  }
+
   List<TankInfo> list({required SensorSnapshot snapshot}) {
     return DemoData.tanks
         .map(
@@ -32,7 +54,6 @@ class MockTankRepository implements TankRepository {
         .toList(growable: false);
   }
 
-  @override
   TankInfo? findById(String tankId, {required SensorSnapshot snapshot}) {
     for (final tank in list(snapshot: snapshot)) {
       if (tank.tankId == tankId) return tank;

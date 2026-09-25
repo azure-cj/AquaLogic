@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M2 authentication and read-only Home data integrated; other operational data remains mock-backed
+Status: M3 authentication, Home, and read-only Tanks data integrated; Alerts and secondary operational data remain mock-backed
 Last reviewed: 2026-09-25
 
 ## Read first
@@ -12,12 +12,12 @@ Last reviewed: 2026-09-25
 
 ## Current boundary
 
-The Flutter app is an Android-first client. Authentication and the Home
-dashboard talk directly to the Railway FastAPI service through the shared
-authenticated `ApiClient`. Tanks, Alerts, monitoring detail/history, species,
-equipment, and operational account data still use deterministic local demo data
-behind repository seams. The mobile app does not connect directly to a sensor
-or device.
+The Flutter app is an Android-first client. Authentication, Home, and the Tanks
+directory/detail talk directly to the Railway FastAPI service through the shared
+authenticated `ApiClient`. Alerts, monitoring history/detail, the species
+directory, equipment, and operational account data retain deterministic local
+demo repositories. The mobile app does not connect directly to a sensor or
+device.
 
 ## M1 authentication integration
 
@@ -112,9 +112,10 @@ with demo actions.
 Initial load has a Home-specific skeleton; full failure has a retry state;
 secondary failures and failed refreshes preserve clear partial/stale labels.
 Pull-to-refresh and resume refresh are supported; there is no periodic polling.
-Live Home links identify the not-yet-integrated Tanks and Alerts destinations
-instead of opening demo detail for real backend IDs. `MockHomeRepository`
-remains available to the prototype and widget tests.
+Live Home tank links pass the backend tank ID to the live M3 detail route. The
+Alerts destination remains identified as M4 rather than opening mock alert data
+for live records. `MockHomeRepository` remains available to the prototype and
+widget tests.
 
 ### M2 device smoke check
 
@@ -124,8 +125,48 @@ Verify both Owner and Staff presentations, pull-to-refresh, and refresh after
 backgrounding and reopening the app. With Home loaded, temporarily disconnect
 the phone from the network and refresh: Home should show its API failure/stale
 state without changing any tank's reported status. Restore the connection and
-retry. Tanks and Alerts tabs are still demo-backed at M2; use the Home links'
-M3/M4 notices rather than treating those demo screens as production data.
+retry. Alerts remains demo-backed until M4.
+
+## M3 live Tanks integration
+
+`ApiTankRepository` uses the M1 authenticated client. `GET /fleet` supplies the
+directory in one request; search and All / Needs attention / Offline filters
+are applied locally using the server's status. The app does not query each tank
+for list cards and does not apply its own reporting-age threshold.
+
+Opening a live tank requests `GET /tanks/{id}`,
+`GET /tanks/{id}/operations`,
+`GET /tanks/{id}/monitoring-incidents?state=active&page=1&page_size=100`, and
+`GET /tanks/{id}/species-suitability` concurrently. Tank metadata is required;
+supporting source failures are shown as unavailable while successful real data
+is retained. Active water-quality alerts come from the operations snapshot;
+monitoring incidents remain separate and only active incidents are shown.
+Resolved history and alert detail/handling belong to M4.
+
+Backend `normal`, `warning`, `critical`, and `offline` states and its
+`reporting_age_seconds` / receipt-time evaluation remain authoritative. The
+detail view shows temperature (°C), pH, turbidity (NTU), and TDS (ppm). Missing
+values stay unavailable (never zero-filled), stale numeric values are labelled
+last known, and `is_mock` provenance is retained when present. A phone/API
+failure does not set a tank offline. The endpoint has no activity feed or
+equipment-state payload, so those demo-only sections are hidden for live detail
+rather than mixed with Railway data. Assigned species and suitability are
+shown from their API payloads; live rows do not open demo species detail.
+
+Directory/detail screens retain their existing design, repository seam, and
+mock implementations. They provide first-load, retry, empty, pull-to-refresh,
+stale-data, and resume refresh states; successful data is refreshed on resume
+only when at least one minute old. There is no background polling.
+
+### M3 device smoke check
+
+Install the latest release APK, sign in with an existing Railway account, and
+compare the Tanks directory/detail to the web dashboard. Check filters/search,
+readings and units, assigned species, separate water-quality and monitoring
+issues, and the offline label for a backend-reported outage. Verify that failed
+phone networking reports an API problem without changing tank status. Retry
+after restoring connectivity. Alerts, equipment state, and activity remain
+outside this milestone.
 
 ## Mobile UI/UX refinement milestone
 
@@ -190,10 +231,10 @@ connection state; the splash does not claim backend progress. Tests can inject
 
 ## Deferred integration work
 
-The following remain outside this milestone:
+The following remain outside the completed M3 integration:
 
-- Live tank directory/detail, persisted alert and monitoring-incident
-  history/detail, and sensor history.
+- Persisted alert and monitoring-incident history/detail, alert handling, and
+  sensor history.
 - Backend species-directory and assignment APIs.
 - Real actuator commands, device connectivity, command reconciliation, and
   production equipment safety controls.
@@ -212,8 +253,8 @@ as mock-backed until each repository is replaced.
 - `mobile_app/lib/features/home/`: role-aware Home compositions, mock and API
   repositories, wire DTO mapping, local Home presentation models, and shared
   Home widgets.
-- `mobile_app/lib/features/tanks/`: tank directory, detail, readings, issues,
-  lifecycle, and the mock tank repository.
+- `mobile_app/lib/features/tanks/`: tank directory/detail, shared DTO parsing,
+  mock and API repositories, readings, issues, and lifecycle.
 - `mobile_app/lib/features/alerts/`: water-quality and monitoring alert models,
   mock repository, list/detail views, and handling semantics.
 - `mobile_app/lib/features/fish/`: species directory, detail, suitability, and

@@ -14,6 +14,7 @@ class TankOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final speciesCount = tank.assignedSpeciesCount ?? tank.species.length;
     final isOffline =
         !tank.isRetired && tank.operationalStatus == OperationalStatus.offline;
     final condition = tank.isRetired
@@ -120,10 +121,10 @@ class TankOverviewCard extends StatelessWidget {
                       label: compactFreshnessLabel(tank.lastReportLabel),
                       isUnavailable: isOffline,
                     ),
-                    if (tank.species.isNotEmpty)
+                    if (speciesCount > 0)
                       _MetaLabel(
                         icon: LucideIcons.fish,
-                        label: '${tank.species.length} species',
+                        label: '$speciesCount species',
                       ),
                     _MetaLabel(
                       icon: LucideIcons.mapPin,

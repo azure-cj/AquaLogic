@@ -234,9 +234,10 @@ Last reviewed: 2026-09-25
 - Protected requests refresh once on expiry/401 with shared in-flight refresh;
   Login handles safe validation/throttle/network messages, and forced password
   change gates the authenticated shell.
-- `MockAuthService` remains injectable for widget tests. Tanks, Alerts and
-  Monitoring detail/history, fish, equipment, and operations/account data
-  remain mock-backed.
+- `MockAuthService` remains injectable for widget tests. The M3 Tanks directory
+  and detail now use read-only Railway repositories; Alerts and Monitoring
+  history/detail, fish, equipment, and operations/account data remain
+  mock-backed.
 - Local mock readings and demo equipment interactions.
 - Flutter mock sign-in interface with clearly isolated local development
   accounts for the Owner/admin and Staff roles.
@@ -259,8 +260,27 @@ Last reviewed: 2026-09-25
   and stale-on-refresh states. It refreshes on pull and on resume when the last
   successful load is at least one minute old; it does not poll in the
   background. Live Home links do not open mock detail screens with API IDs.
-- M2 remains read-only. Tanks/detail, Alerts/Monitoring detail/history,
-  species, equipment, activity, and operational account data are pending.
+- M2 Home and M3 Tanks remain read-only. Alerts/Monitoring detail/history,
+  species directory, equipment state, activity, and operational account data
+  are pending.
+
+#### M3 — Read-only Tanks directory and detail — 2026-09-25
+
+- `ApiTankRepository` reads the active directory from `/fleet` without per-tank
+  list calls. Detail combines tank metadata, operations/current readings,
+  active monitoring incidents, and assigned-species suitability through the
+  existing authenticated `ApiClient`.
+- Existing `TankInfo`, directory/detail screens, repository seam, mock data,
+  Home routes, search, and status filters are retained. DTOs adapt backend
+  snake_case and numeric IDs before presentation. Server status and receipt-age
+  semantics remain authoritative; missing readings are not converted to zero,
+  and phone connectivity failures are not reported as tank outages.
+- Primary detail metadata errors fail the detail route. Secondary-source
+  failures are independent unavailable states; resolved monitoring incidents
+  are excluded. Live detail hides mock activity and equipment surfaces because
+  no corresponding read API is used. No alert/equipment mutation is exposed.
+- Directory/detail use load, error/retry, empty, pull-to-refresh, stale data,
+  and one-minute app-resume refresh states; there is no background polling.
 
 ### Mobile UI/UX refinement — 2026-09-15
 
@@ -389,7 +409,20 @@ client.
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
 
-## Validation checkpoint — 2026-09-25
+## Validation checkpoint — 2026-09-25 (M3 Tanks)
+
+- Mobile M3: `flutter pub get` succeeded; `dart format` reported 0 unformatted
+  changes across the touched Dart files; `flutter analyze` found no issues;
+  `flutter test --reporter expanded` passed all 108 tests, including Tanks
+  loading/filter/retry/refresh, partial reading, offline, species, partial
+  source failure, 404, and live navigation coverage.
+- `flutter build apk --release` succeeded in 178.3 seconds. The APK is
+  61,402,275 bytes (58.6 MiB) at
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk`.
+- `git diff --check` passed. Repository tests use fake HTTP responses; no
+  authenticated production API request, mutation, or device install was run.
+
+## Validation checkpoint — 2026-09-25 (M2 Home)
 
 - Mobile M2 Home: `flutter pub get`, changed/new-file `dart format`,
   `flutter analyze` (no issues), and `flutter test --reporter expanded`
