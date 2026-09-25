@@ -12,8 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('Home data uses backend-compatible operational statuses', () {
-    final data = const MockHomeRepository().load(
-      snapshot: MockSensorFeed.snapshot(0),
+    final data = const MockHomeRepository().loadSnapshot(
+      MockSensorFeed.snapshot(0),
     );
 
     expect(data.normalTankCount, 2);
@@ -47,7 +47,6 @@ void main() {
         totalTankCount: 1,
         reportingTankCount: 1,
         outageCount: 0,
-        sensorFeedOnline: true,
       ),
       recentActivity: [],
     );
@@ -107,7 +106,7 @@ void main() {
   test('offline tanks remain distinct from critical water-quality states', () {
     final data = const MockHomeRepository(
       offlineTankIds: {'nursery-d'},
-    ).load(snapshot: MockSensorFeed.snapshot(0));
+    ).loadSnapshot(MockSensorFeed.snapshot(0));
 
     final offlineTank = data.tanks.singleWhere(
       (tank) => tank.id == 'nursery-d',
@@ -157,7 +156,6 @@ void main() {
           totalTankCount: 0,
           reportingTankCount: 0,
           outageCount: 0,
-          sensorFeedOnline: true,
         ),
         recentActivity: const [],
       );
@@ -195,11 +193,10 @@ void main() {
   test(
     'an unavailable local sensor feed does not become critical water quality',
     () {
-      final data = const MockHomeRepository().load(
-        snapshot: MockSensorFeed.snapshot(14),
-      );
+      final data = const MockHomeRepository(
+        snapshotTick: 14,
+      ).loadSnapshot(MockSensorFeed.snapshot(14));
 
-      expect(data.monitoring.sensorFeedOnline, isFalse);
       expect(data.monitoring.reportingTankCount, 0);
       expect(data.monitoring.outageCount, 4);
       expect(
@@ -237,7 +234,6 @@ void main() {
         totalTankCount: 1,
         reportingTankCount: 1,
         outageCount: 0,
-        sensorFeedOnline: true,
       ),
       recentActivity: [],
     );
@@ -269,7 +265,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: HomeScreen(
-            snapshot: MockSensorFeed.snapshot(0),
             user: const AuthUser(
               id: 'owner',
               name: 'JRed Owner',
@@ -281,6 +276,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.byType(HomeHero), findsOneWidget);

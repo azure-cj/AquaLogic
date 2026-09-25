@@ -23,6 +23,18 @@ Login and password-change responses rotate the refresh cookie when issuing a
 new session; a refresh response without a replacement cookie is the backend's
 five-second replay grace path, so clients retain the existing value.
 
+## Mobile Home reads
+
+The Flutter Home repository uses the shared authenticated client for
+`GET /fleet`, `GET /alerts` (unresolved by default), and
+`GET /monitoring-incidents?state=active&page=1&page_size=100`. All three require
+staff access; backend `admin` is accepted by `require_staff`. Fleet operational
+status and `reporting_age_seconds` are authoritative. The incident response is
+paginated: Home uses `total` for the count and only the newest page for priority
+incident details. Alert handling remains a separate operator mutation through
+`PUT /alerts/{alert_id}/resolve`; monitoring incidents have no manual resolve
+route. These reads do not provide recent activity.
+
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |
 | POST | `/auth/login` | Public | Authenticate an active user |

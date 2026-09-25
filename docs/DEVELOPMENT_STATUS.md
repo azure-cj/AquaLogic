@@ -234,24 +234,33 @@ Last reviewed: 2026-09-25
 - Protected requests refresh once on expiry/401 with shared in-flight refresh;
   Login handles safe validation/throttle/network messages, and forced password
   change gates the authenticated shell.
-- `MockAuthService` remains injectable for widget tests. Home, Tanks, Alerts,
-  Monitoring, fish, equipment, and operations/account data remain mock-backed.
+- `MockAuthService` remains injectable for widget tests. Tanks, Alerts and
+  Monitoring detail/history, fish, equipment, and operations/account data
+  remain mock-backed.
 - Local mock readings and demo equipment interactions.
 - Flutter mock sign-in interface with clearly isolated local development
   accounts for the Owner/admin and Staff roles.
 - Role-aware authenticated mobile shell that maps backend-compatible `admin` to
   the mobile `Owner` experience and `staff` to the mobile `Staff` experience.
-- Local sign-out from More/Account; shared dashboard features remain on local
-  demo data.
+- Local sign-out from More/Account; feature-level demo repositories remain
+  available to tests and screens not yet connected to the API.
 - Role-aware Home V1 with distinct Owner and Staff information hierarchies while
   sharing the same AquaLogic design system, tank rows, attention cards,
   monitoring summary, and recent activity components.
 - Backend-compatible Home presentation for `normal`, `warning`, `critical`, and
   `offline` operational tank states; offline monitoring remains separate from
   water-quality alerts.
-- Local `HomeDashboardData` and `MockHomeRepository` boundary for future API
-  replacement without rebuilding Home widgets. The fabricated health
-  percentage is no longer the primary Home summary.
+- `HomeRepository` has mock and API implementations. `ApiHomeRepository`
+  shares the authenticated client and loads fleet status, unresolved alerts,
+  and the current active-monitoring incident page. Fleet status/freshness stay
+  server-authoritative; the Home omits unavailable activity instead of showing
+  demo actions. The fabricated health percentage is not the primary summary.
+- Home exposes loading, full error/retry, partial secondary-source failure,
+  and stale-on-refresh states. It refreshes on pull and on resume when the last
+  successful load is at least one minute old; it does not poll in the
+  background. Live Home links do not open mock detail screens with API IDs.
+- M2 remains read-only. Tanks/detail, Alerts/Monitoring detail/history,
+  species, equipment, activity, and operational account data are pending.
 
 ### Mobile UI/UX refinement — 2026-09-15
 
@@ -300,12 +309,12 @@ Last reviewed: 2026-09-25
   uses opacity-only branding and handoff. Added focused splash readiness,
   timing, reduced-motion, and disposal tests.
 
-Home data and the UI/UX refinements remain local/demo behavior. Operational
-repository integration for live fleet/tank data, persisted alerts and monitoring
-incidents, sensor history, species and assignment APIs, equipment state, real
-actuator commands/device connectivity, command reconciliation, push
-notifications, and production equipment safety controls are not yet implemented
-in the Flutter client.
+The Home summary is connected to live read-only API data. Tank directory/detail,
+sensor history, Alerts/Monitoring detail and history, species and assignment
+APIs, equipment state, operational profile data, real actuator
+commands/device connectivity, command reconciliation, push notifications, and
+production equipment safety controls are not yet integrated in the Flutter
+client.
 
 ## Active follow-up work
 
@@ -336,14 +345,14 @@ in the Flutter client.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
 - Integrate read-only mobile repositories with the current backend API contract,
-  beginning with Home and then Tanks/Detail, Alerts/Monitoring, and Account data.
+  next covering Tanks/Detail, Alerts/Monitoring, and Account data.
 - Finalize deployment environment variables and production smoke tests.
 
 ## Planned
 
 - External monitoring notifications, delivery workers, and escalation remain
   deferred.
-- M2+ read-only backend repositories for Flutter operational data.
+- M3+ read-only backend repositories for Flutter operational data beyond Home.
 - Additional sensor hardware and production-grade actuator safety controls;
   pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
 - Raspberry Pi deployment and hardware safety controls.
@@ -381,6 +390,16 @@ in the Flutter client.
   compatible fix.
 
 ## Validation checkpoint — 2026-09-25
+
+- Mobile M2 Home: `flutter pub get`, changed/new-file `dart format`,
+  `flutter analyze` (no issues), and `flutter test --reporter expanded`
+  (83 passed) succeeded. `flutter build apk --release` succeeded; the current
+  APK is 61,320,355 bytes (58.5 MiB). `git diff --check` passed.
+- API repository tests use fake HTTP responses. No authenticated production
+  API requests or mutations were made. The APK path is
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk`.
+
+## Validation checkpoint — 2026-09-25 (M1)
 
 - Mobile M1: `flutter pub get`, changed-file `dart format` check,
   `flutter analyze` (no issues), and `flutter test` (70 passed) succeeded.

@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M1 backend authentication integrated; operational data remains mock-backed
+Status: M2 authentication and read-only Home data integrated; other operational data remains mock-backed
 Last reviewed: 2026-09-25
 
 ## Read first
@@ -12,11 +12,12 @@ Last reviewed: 2026-09-25
 
 ## Current boundary
 
-The Flutter app is an Android-first client. Authentication talks directly to
-the Railway FastAPI service through one shared HTTP client. Home, tank, alert,
-fish, equipment, and operational account data still use deterministic local
-demo data behind the existing repository seams. No sensor or device connection
-is made by the mobile app.
+The Flutter app is an Android-first client. Authentication and the Home
+dashboard talk directly to the Railway FastAPI service through the shared
+authenticated `ApiClient`. Tanks, Alerts, monitoring detail/history, species,
+equipment, and operational account data still use deterministic local demo data
+behind repository seams. The mobile app does not connect directly to a sensor
+or device.
 
 ## M1 authentication integration
 
@@ -61,8 +62,10 @@ These are local prototype credentials only and are not production security.
 
 Still mock-backed / not implemented:
 
-- Home, Tanks, Alerts, Monitoring, species, equipment, and operational account
-  repositories are not connected to Railway.
+- Tanks, Alerts, monitoring detail/history, species, equipment, and operational
+  account repositories are not connected to Railway. Live Home navigation does
+  not pass real IDs into these mock screens; those destinations remain clearly
+  identified as M3/M4 work.
 - Profile editing and server-side data synchronization are not implemented.
 - Physical actuator commands, push notifications, and background refresh are
   not implemented.
@@ -86,6 +89,43 @@ Implemented:
 The primary Home no longer uses a fabricated health percentage as its
 operational summary. The former Owner Brief/pager was retired from the main
 Home flow because it duplicated the overview and centered that percentage.
+
+## M2 live Home integration
+
+`ApiHomeRepository` uses the M1 authenticated client for three concurrent,
+read-only requests: `GET /fleet`, `GET /alerts` (unresolved by default), and
+`GET /monitoring-incidents?state=active&page=1&page_size=100`. Fleet is required;
+alert and monitoring detail failures are represented as partial data while the
+fleet remains visible. Monitoring outage totals use the endpoint's exact
+paginated `total`, and the newest page supplies detail for the priority card.
+If the incident request fails, the per-tank fleet incident counts remain the
+safe count fallback.
+
+Backend fleet `normal`/`warning`/`critical`/`offline` status and
+`reporting_age_seconds` remain authoritative. The app does not compute a
+second freshness threshold, infer device status from phone connectivity, or
+turn network errors into tank outages. Water-quality alerts and monitoring
+incidents remain separate. The Home API currently has no recent-activity
+source, so the activity section is omitted for live data rather than filled
+with demo actions.
+
+Initial load has a Home-specific skeleton; full failure has a retry state;
+secondary failures and failed refreshes preserve clear partial/stale labels.
+Pull-to-refresh and resume refresh are supported; there is no periodic polling.
+Live Home links identify the not-yet-integrated Tanks and Alerts destinations
+instead of opening demo detail for real backend IDs. `MockHomeRepository`
+remains available to the prototype and widget tests.
+
+### M2 device smoke check
+
+Install the latest release APK, sign in with an existing Railway account, and
+check the Home fleet summary against the same account in the web dashboard.
+Verify both Owner and Staff presentations, pull-to-refresh, and refresh after
+backgrounding and reopening the app. With Home loaded, temporarily disconnect
+the phone from the network and refresh: Home should show its API failure/stale
+state without changing any tank's reported status. Restore the connection and
+retry. Tanks and Alerts tabs are still demo-backed at M2; use the Home links'
+M3/M4 notices rather than treating those demo screens as production data.
 
 ## Mobile UI/UX refinement milestone
 
@@ -152,9 +192,8 @@ connection state; the splash does not claim backend progress. Tests can inject
 
 The following remain outside this milestone:
 
-- Live sensor sync, persisted alert and monitoring-incident queries, sensor
-  history, backend freshness calculations, and offline cache/sync conflict
-  handling.
+- Live tank directory/detail, persisted alert and monitoring-incident
+  history/detail, and sensor history.
 - Backend species-directory and assignment APIs.
 - Real actuator commands, device connectivity, command reconciliation, and
   production equipment safety controls.
@@ -170,8 +209,9 @@ as mock-backed until each repository is replaced.
 - `mobile_app/lib/app/auth/`: auth scope and the startup authentication gate.
 - `mobile_app/lib/features/auth/`: API and mock auth services, secure refresh
   storage, user and role models, forced password-change gate, and login screen.
-- `mobile_app/lib/features/home/`: role-aware Home compositions, local Home
-  presentation models/data, and shared Home widgets.
+- `mobile_app/lib/features/home/`: role-aware Home compositions, mock and API
+  repositories, wire DTO mapping, local Home presentation models, and shared
+  Home widgets.
 - `mobile_app/lib/features/tanks/`: tank directory, detail, readings, issues,
   lifecycle, and the mock tank repository.
 - `mobile_app/lib/features/alerts/`: water-quality and monitoring alert models,

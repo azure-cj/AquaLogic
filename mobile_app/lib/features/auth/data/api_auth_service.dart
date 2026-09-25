@@ -31,6 +31,10 @@ class ApiAuthService extends AuthService {
   final ApiClient _apiClient;
   final RefreshCredentialStore _credentialStore;
 
+  /// Exposes the authenticated client for production repositories that share
+  /// this auth/session lifecycle. Callers must not close it independently.
+  ApiClient get apiClient => _apiClient;
+
   AuthStatus _status = AuthStatus.checking;
   AuthUser? _currentUser;
   String? _accessToken;

@@ -1,18 +1,23 @@
 import 'dart:async';
 
 import 'package:aqualogic/app/auth/auth_scope.dart';
+import 'package:aqualogic/app/home/home_repository_scope.dart';
 import 'package:aqualogic/app/startup/splash_screen.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/api_auth_service.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
+import 'package:aqualogic/features/home/data/api_home_repository.dart';
+import 'package:aqualogic/features/home/data/home_repository.dart';
+import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:flutter/material.dart';
 
 const _startupPreview = bool.fromEnvironment('AQUALOGIC_STARTUP_PREVIEW');
 
 class AquaLogicApp extends StatefulWidget {
-  const AquaLogicApp({super.key, this.authService});
+  const AquaLogicApp({super.key, this.authService, this.homeRepository});
 
   final AuthService? authService;
+  final HomeRepository? homeRepository;
 
   @override
   State<AquaLogicApp> createState() => _AquaLogicAppState();
@@ -21,12 +26,21 @@ class AquaLogicApp extends StatefulWidget {
 class _AquaLogicAppState extends State<AquaLogicApp> {
   late final AuthService _authService;
   late final bool _ownsAuthService;
+  late final HomeRepository _homeRepository;
 
   @override
   void initState() {
     super.initState();
     _ownsAuthService = widget.authService == null;
     _authService = widget.authService ?? ApiAuthService();
+    _homeRepository =
+        widget.homeRepository ??
+        switch (_authService) {
+          ApiAuthService apiAuthService => ApiHomeRepository(
+            apiClient: apiAuthService.apiClient,
+          ),
+          _ => const MockHomeRepository(),
+        };
     unawaited(_authService.initialize());
   }
 
@@ -79,10 +93,13 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
       ),
       home: AuthScope(
         authService: _authService,
-        child: const SplashScreen(
-          minimumDisplayDuration: _startupPreview
-              ? Duration(seconds: 6)
-              : Duration(milliseconds: 600),
+        child: HomeRepositoryScope(
+          repository: _homeRepository,
+          child: const SplashScreen(
+            minimumDisplayDuration: _startupPreview
+                ? Duration(seconds: 6)
+                : Duration(milliseconds: 600),
+          ),
         ),
       ),
     );

@@ -28,6 +28,27 @@ Cold start validates the refresh session and hydrates `/auth/me`; network
 unavailability preserves the refresh credential and offers retry. Physical
 equipment controls and operational data remain outside this milestone.
 
+## 2026-09-25 — Connect Flutter Home through the existing API boundary
+
+**Decision:** M2 Home uses the shared authenticated `ApiClient` through an
+`ApiHomeRepository`, reading `/fleet`, active `/alerts`, and the first page of
+active `/monitoring-incidents`. Keep `MockHomeRepository` injectable. Use the
+server's fleet status and reporting age, and the paginated incident total;
+omit recent activity until an existing backend source supports it. Preserve
+partial fleet data when either secondary Home source fails, and never route a
+real backend ID into a mock detail screen.
+
+**Reason:** The existing endpoints already provide role-authorized Home
+summaries, and their status, receipt-age, and monitoring semantics are
+authoritative. A new aggregate route or duplicate client freshness logic would
+create unnecessary compatibility and consistency risk.
+
+**Consequences:** Home is live while Tanks, Alerts/Monitoring detail, and other
+operational features remain mock-backed until their own milestones. Network
+failure stays distinct from tank/device Offline, water-quality alerts stay
+distinct from monitoring incidents, and no mutation or physical control is
+introduced by this integration.
+
 ## 2026-09-23 — Require PostgreSQL for production and retain SQLite locally
 
 **Decision:** Keep SQLite as the backend default for local development and

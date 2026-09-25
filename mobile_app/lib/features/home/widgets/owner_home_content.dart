@@ -9,12 +9,14 @@ class OwnerHomeContent extends StatelessWidget {
     required this.data,
     required this.onOpenAlerts,
     required this.onOpenTanks,
+    this.isLiveData = false,
     this.onOpenAlert,
   });
 
   final HomeDashboardData data;
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
+  final bool isLiveData;
   final ValueChanged<HomeAttentionItem>? onOpenAlert;
 
   @override
@@ -26,11 +28,12 @@ class OwnerHomeContent extends StatelessWidget {
           attentionItems: data.attentionItems,
           onOpenAlerts: onOpenAlerts,
           onOpenTanks: onOpenTanks,
+          isLiveData: isLiveData,
           onOpenAlert: onOpenAlert,
         ),
         SectionTitle(
           title: 'Fleet overview',
-          action: 'View all',
+          action: isLiveData ? 'Details in M3' : 'View all',
           onTap: onOpenTanks,
         ),
         const SizedBox(height: 8),

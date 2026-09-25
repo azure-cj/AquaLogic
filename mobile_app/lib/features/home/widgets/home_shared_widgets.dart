@@ -18,12 +18,14 @@ class HomeHero extends StatelessWidget {
     required this.isOnline,
     required this.data,
     required this.showFleetStatus,
+    this.isLoading = false,
   });
 
   final AuthUser user;
-  final bool isOnline;
-  final HomeDashboardData data;
+  final bool? isOnline;
+  final HomeDashboardData? data;
   final bool showFleetStatus;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -157,17 +159,65 @@ class HomeHero extends StatelessWidget {
             ),
           ),
         ),
-        if (showFleetStatus)
+        if (showFleetStatus && (data != null || isLoading))
           Padding(
             padding: const EdgeInsets.only(top: 186),
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.pageGutter,
               ),
-              child: FleetStatusSheet(data: data),
+              child: data == null
+                  ? const _FleetStatusLoadingSheet()
+                  : FleetStatusSheet(data: data!),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _FleetStatusLoadingSheet extends StatelessWidget {
+  const _FleetStatusLoadingSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Container(
+      key: const ValueKey('fleet-status-loading'),
+      height: 113,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.line),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.tealDark.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Loading fleet status',
+            style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            minHeight: 3,
+            backgroundColor: AppColors.background,
+            color: AppColors.teal,
+            value: reduceMotion ? 0.65 : null,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -181,7 +231,7 @@ class FleetStatusSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final headline = _fleetStatusHeadline(data);
     final hasAttention = data.needsAttentionCount > 0;
-    final headlineColor = hasAttention
+    final headlineColor = hasAttention && data.attentionItems.isNotEmpty
         ? _statusColor(data.attentionItems.first.status)
         : AppColors.tealDark;
     final tankWord = data.tanks.length == 1 ? 'tank' : 'tanks';
@@ -290,12 +340,14 @@ class PriorityAttentionSection extends StatelessWidget {
     required this.attentionItems,
     required this.onOpenAlerts,
     required this.onOpenTanks,
+    this.isLiveData = false,
     this.onOpenAlert,
   });
 
   final List<HomeAttentionItem> attentionItems;
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
+  final bool isLiveData;
   final ValueChanged<HomeAttentionItem>? onOpenAlert;
 
   @override
@@ -310,7 +362,7 @@ class PriorityAttentionSection extends StatelessWidget {
           title: attentionItems.length == 1
               ? 'Needs attention'
               : 'Highest priority',
-          action: 'View all alerts',
+          action: isLiveData ? 'Details in M4' : 'View all alerts',
           actionArrow: true,
           onTap: onOpenAlerts,
         ),
@@ -627,6 +679,26 @@ class TankFleetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (tanks.isEmpty) {
+      return SoftCard(
+        child: Row(
+          children: [
+            const CircleAvatar(
+              radius: 21,
+              backgroundColor: AppColors.mint,
+              child: Icon(LucideIcons.circleCheck, color: AppColors.tealDark),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'No active tanks are assigned to this fleet.',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return SoftCard(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -697,7 +769,7 @@ class TankStatusRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       showContext
-                          ? tank.contextLabel
+                          ? '${tank.contextLabel} · ${formatFreshnessLabel(tank.lastReportLabel)}'
                           : formatFreshnessLabel(tank.lastReportLabel),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -732,9 +804,16 @@ class MonitoringSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = summary.sensorFeedOnline
+    final status = !summary.incidentDetailsAvailable
+        ? HomeOperationalStatus.warning
+        : summary.outageCount == 0
         ? HomeOperationalStatus.normal
         : HomeOperationalStatus.offline;
+    final badgeLabel = !summary.incidentDetailsAvailable
+        ? 'Unavailable'
+        : summary.outageCount == 0
+        ? 'No incidents'
+        : '${summary.outageCount} active';
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -759,9 +838,7 @@ class MonitoringSummaryCard extends StatelessWidget {
               ),
               OperationalStatusBadge(
                 status: status.asOperationalStatus,
-                label: summary.sensorFeedOnline
-                    ? 'Feed online'
-                    : 'Feed unavailable',
+                label: badgeLabel,
               ),
             ],
           ),
@@ -779,7 +856,7 @@ class MonitoringSummaryCard extends StatelessWidget {
               Expanded(
                 child: _MonitoringMetric(
                   value: '${summary.outageCount}',
-                  label: 'monitoring outages',
+                  label: 'active incidents',
                   icon: LucideIcons.wifiOff,
                 ),
               ),
@@ -803,6 +880,7 @@ class RecentActivitySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (activities.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1030,7 +1108,11 @@ String _fleetStatusHeadline(HomeDashboardData data) {
     return '${data.needsAttentionCount} $tankWord need attention';
   }
   if (data.offlineTankCount == data.tanks.length) {
-    return 'Monitoring unavailable';
+    return 'All tanks offline';
+  }
+  if (data.offlineTankCount > 0) {
+    final tankWord = data.offlineTankCount == 1 ? 'tank is' : 'tanks are';
+    return '${data.offlineTankCount} $tankWord offline';
   }
   return 'All tanks look good';
 }

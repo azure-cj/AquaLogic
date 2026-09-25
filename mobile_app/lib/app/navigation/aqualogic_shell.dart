@@ -5,6 +5,8 @@ import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
 import 'package:aqualogic/features/alerts/screens/alert_detail_screen.dart';
 import 'package:aqualogic/features/alerts/screens/alerts_screen.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
+import 'package:aqualogic/features/home/data/home_repository.dart';
+import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
@@ -15,9 +17,14 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AquaLogicShell extends StatefulWidget {
-  const AquaLogicShell({super.key, required this.user});
+  const AquaLogicShell({
+    super.key,
+    required this.user,
+    this.homeRepository = const MockHomeRepository(),
+  });
 
   final AuthUser user;
+  final HomeRepository homeRepository;
 
   @override
   State<AquaLogicShell> createState() => _AquaLogicShellState();
@@ -35,17 +42,21 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   var _tick = 0;
   late SensorSnapshot _snapshot;
   Timer? _timer;
+  MockHomeRepository? _mockHomeRepository;
+  int? _mockHomeRepositoryTick;
 
   @override
   void initState() {
     super.initState();
     _snapshot = MockSensorFeed.snapshot(_tick);
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      setState(() {
-        _tick += 1;
-        _snapshot = MockSensorFeed.snapshot(_tick);
+    if (widget.homeRepository.refreshDemoData) {
+      _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+        setState(() {
+          _tick += 1;
+          _snapshot = MockSensorFeed.snapshot(_tick);
+        });
       });
-    });
+    }
   }
 
   @override
@@ -56,12 +67,13 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
 
   @override
   Widget build(BuildContext context) {
+    final homeRepository = _homeRepositoryForCurrentTick();
     final pages = [
       HomeScreen(
-        snapshot: _snapshot,
+        repository: homeRepository,
         user: widget.user,
-        onOpenAlerts: () => _selectDestination(2),
-        onOpenTanks: () => _selectDestination(1),
+        onOpenAlerts: _openHomeAlerts,
+        onOpenTanks: _openHomeTanks,
         onOpenAlert: _openHomeAttention,
       ),
       TanksScreen(snapshot: _snapshot, user: widget.user),
@@ -115,6 +127,16 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     );
   }
 
+  HomeRepository _homeRepositoryForCurrentTick() {
+    final repository = widget.homeRepository;
+    if (repository is! MockHomeRepository) return repository;
+    if (_mockHomeRepository == null || _mockHomeRepositoryTick != _tick) {
+      _mockHomeRepository = repository.withTick(_tick);
+      _mockHomeRepositoryTick = _tick;
+    }
+    return _mockHomeRepository!;
+  }
+
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) {
       return false;
@@ -164,6 +186,14 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   }
 
   void _openHomeAttention(HomeAttentionItem item) {
+    if (widget.homeRepository.isLiveData) {
+      _showHomeDestinationNotice(
+        item.type == HomeAttentionType.monitoring
+            ? 'Monitoring details are not connected yet. The Alerts and Tanks screens remain demo-backed until M3/M4.'
+            : 'Alert details are not connected yet. The Alerts screen remains demo-backed until M4.',
+      );
+      return;
+    }
     final sourceId = item.sourceId;
     if (sourceId == null) {
       _showMissingHomeAttention(item.type);
@@ -200,6 +230,32 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
     }
 
     _showMissingHomeAttention(item.type);
+  }
+
+  void _openHomeAlerts() {
+    if (widget.homeRepository.isLiveData) {
+      _showHomeDestinationNotice(
+        'The Alerts screen remains demo-backed until M4.',
+      );
+      return;
+    }
+    _selectDestination(2);
+  }
+
+  void _openHomeTanks() {
+    if (widget.homeRepository.isLiveData) {
+      _showHomeDestinationNotice(
+        'The Tanks screen remains demo-backed until M3.',
+      );
+      return;
+    }
+    _selectDestination(1);
+  }
+
+  void _showHomeDestinationNotice(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showMissingHomeAttention(HomeAttentionType type) {

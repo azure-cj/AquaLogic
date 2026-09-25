@@ -1,22 +1,34 @@
 import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/demo/demo_data.dart';
+import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
+import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 
-abstract class HomeRepository {
-  HomeDashboardData load({required SensorSnapshot snapshot});
-}
-
 /// Local Home composition data. This is the seam for a future API repository.
-class MockHomeRepository implements HomeRepository {
-  const MockHomeRepository({this.offlineTankIds = const <String>{}});
+class MockHomeRepository extends HomeRepository {
+  const MockHomeRepository({
+    this.offlineTankIds = const <String>{},
+    this.snapshotTick = 0,
+  });
 
   /// Optional fixture override used to exercise the distinct offline state.
   final Set<String> offlineTankIds;
+  final int snapshotTick;
 
   @override
-  HomeDashboardData load({required SensorSnapshot snapshot}) {
+  bool get refreshDemoData => true;
+
+  MockHomeRepository withTick(int tick) =>
+      MockHomeRepository(offlineTankIds: offlineTankIds, snapshotTick: tick);
+
+  @override
+  Future<HomeDashboardData> load() async =>
+      loadSnapshot(MockSensorFeed.snapshot(snapshotTick));
+
+  /// Synchronous demo mapper retained for focused fixture tests.
+  HomeDashboardData loadSnapshot(SensorSnapshot snapshot) {
     final alertData = MockAlertRepository(
       monitoringOutageTankIds: snapshot.isOnline ? offlineTankIds : const {},
     ).load(snapshot: snapshot);
@@ -64,7 +76,6 @@ class MockHomeRepository implements HomeRepository {
         outageCount: tanks
             .where((tank) => tank.status == HomeOperationalStatus.offline)
             .length,
-        sensorFeedOnline: snapshot.isOnline,
       ),
       recentActivity: [
         HomeActivityItem(
@@ -82,6 +93,7 @@ class MockHomeRepository implements HomeRepository {
           type: HomeActivityType.uvCycle,
         ),
       ],
+      loadedAt: snapshot.updatedAt.toUtc(),
     );
   }
 

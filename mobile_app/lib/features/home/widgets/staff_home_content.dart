@@ -9,11 +9,13 @@ class StaffHomeContent extends StatelessWidget {
     required this.data,
     required this.onOpenAlerts,
     required this.onOpenTanks,
+    this.isLiveData = false,
   });
 
   final HomeDashboardData data;
   final VoidCallback onOpenAlerts;
   final VoidCallback onOpenTanks;
+  final bool isLiveData;
 
   @override
   Widget build(BuildContext context) {
@@ -24,12 +26,13 @@ class StaffHomeContent extends StatelessWidget {
           attentionItems: data.attentionItems,
           onOpenAlerts: onOpenAlerts,
           onOpenTanks: onOpenTanks,
+          isLiveData: isLiveData,
         ),
         MonitoringSummaryCard(summary: data.monitoring),
         const SizedBox(height: 18),
         SectionTitle(
           title: 'Tank rounds',
-          action: 'View all',
+          action: isLiveData ? 'Details in M3' : 'View all',
           onTap: onOpenTanks,
         ),
         const SizedBox(height: 8),

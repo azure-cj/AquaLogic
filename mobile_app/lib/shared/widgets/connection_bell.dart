@@ -5,13 +5,24 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 class ConnectionBell extends StatelessWidget {
   const ConnectionBell({super.key, required this.isOnline, this.light = false});
 
-  final bool isOnline;
+  /// Null means the AquaLogic API connection has not been checked yet.
+  final bool? isOnline;
   final bool light;
 
   @override
   Widget build(BuildContext context) {
+    final icon = isOnline == false ? LucideIcons.wifiOff : LucideIcons.bell;
+    final statusColor = isOnline == true
+        ? AppColors.success
+        : isOnline == false
+        ? AppColors.critical
+        : AppColors.muted;
     return Semantics(
-      label: isOnline ? 'Notifications' : 'Monitoring unavailable',
+      label: switch (isOnline) {
+        true => 'AquaLogic API reachable',
+        false => 'AquaLogic connection unavailable',
+        null => 'AquaLogic connection status unknown',
+      },
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -21,7 +32,7 @@ class ConnectionBell extends StatelessWidget {
                 ? Colors.white.withValues(alpha: 0.72)
                 : Colors.white.withValues(alpha: 0.16),
             child: Icon(
-              isOnline ? LucideIcons.bell : LucideIcons.wifiOff,
+              icon,
               color: light ? AppColors.tealDark : Colors.white,
               size: 20,
             ),
@@ -29,12 +40,7 @@ class ConnectionBell extends StatelessWidget {
           Positioned(
             right: 3,
             top: 4,
-            child: CircleAvatar(
-              radius: 4,
-              backgroundColor: isOnline
-                  ? AppColors.success
-                  : AppColors.critical,
-            ),
+            child: CircleAvatar(radius: 4, backgroundColor: statusColor),
           ),
         ],
       ),

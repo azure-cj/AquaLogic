@@ -44,6 +44,7 @@ class HomeTankSummary {
     required this.lastReportLabel,
     required this.contextLabel,
     this.lastReportedAt,
+    this.reportingAgeSeconds,
   });
 
   final String id;
@@ -52,6 +53,7 @@ class HomeTankSummary {
   final String subtitle;
   final HomeOperationalStatus status;
   final DateTime? lastReportedAt;
+  final int? reportingAgeSeconds;
   final String lastReportLabel;
   final String contextLabel;
 }
@@ -67,6 +69,7 @@ class HomeAttentionItem {
     required this.message,
     required this.actionLabel,
     this.sourceId,
+    this.occurredAt,
   });
 
   final String id;
@@ -78,6 +81,7 @@ class HomeAttentionItem {
   final String message;
   final String actionLabel;
   final String? sourceId;
+  final DateTime? occurredAt;
 }
 
 class HomeMonitoringSummary {
@@ -85,13 +89,13 @@ class HomeMonitoringSummary {
     required this.totalTankCount,
     required this.reportingTankCount,
     required this.outageCount,
-    required this.sensorFeedOnline,
+    this.incidentDetailsAvailable = true,
   });
 
   final int totalTankCount;
   final int reportingTankCount;
   final int outageCount;
-  final bool sensorFeedOnline;
+  final bool incidentDetailsAvailable;
 }
 
 class HomeActivityItem {
@@ -118,12 +122,23 @@ class HomeDashboardData {
     required this.attentionItems,
     required this.monitoring,
     required this.recentActivity,
+    this.alertsAvailable = true,
+    this.monitoringIncidentsAvailable = true,
+    this.loadedAt,
+    this.isLiveData = false,
   });
 
   final List<HomeTankSummary> tanks;
   final List<HomeAttentionItem> attentionItems;
   final HomeMonitoringSummary monitoring;
   final List<HomeActivityItem> recentActivity;
+  final bool alertsAvailable;
+  final bool monitoringIncidentsAvailable;
+  final DateTime? loadedAt;
+  final bool isLiveData;
+
+  bool get hasPartialFailure =>
+      !alertsAvailable || !monitoringIncidentsAvailable;
 
   int get normalTankCount => _count(HomeOperationalStatus.normal);
 
