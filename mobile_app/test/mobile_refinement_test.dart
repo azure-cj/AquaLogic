@@ -598,7 +598,7 @@ void main() {
     expect(find.text('JRed Owner'), findsOneWidget);
     expect(find.text('owner@aqualogic.local'), findsOneWidget);
     expect(find.text('JRed Aquatics'), findsOneWidget);
-    expect(find.text('Local prototype account'), findsOneWidget);
+    expect(find.text('Authenticated AquaLogic account'), findsOneWidget);
     expect(find.text('OWNER'), findsOneWidget);
     expect(find.text('Fish species'), findsOneWidget);
     expect(find.text('Sync / local data'), findsOneWidget);
@@ -655,7 +655,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('account-profile-panel')));
     await tester.pumpAndSettle();
-    expect(find.text('Your local prototype identity'), findsOneWidget);
+    expect(find.text('Your authenticated AquaLogic identity'), findsOneWidget);
     expect(find.text('Session'), findsNothing);
     expect(
       find.byKey(const ValueKey('account-sign-out-button')),

@@ -96,7 +96,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('JRed Aquatics'), findsNothing);
-    expect(find.text('Needs attention'), findsOneWidget);
+    expect(find.text('Highest priority'), findsOneWidget);
     expect(find.text('Tank rounds'), findsOneWidget);
     expect(find.text('Aquarium status'), findsNothing);
   });
@@ -131,7 +131,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('account-profile-panel')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Your local prototype identity'), findsOneWidget);
+    expect(find.text('Your authenticated AquaLogic identity'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('account-sign-out-button')));
     await tester.pumpAndSettle();
 
@@ -148,7 +148,7 @@ void main() {
     expect(owner?.role.backendValue, 'admin');
     expect(owner?.roleLabel, 'Owner');
 
-    service.signOut();
+    await service.signOut();
     final staff = await service.signIn(
       email: 'staff@aqualogic.local',
       password: 'staff123',

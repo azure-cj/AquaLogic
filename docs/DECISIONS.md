@@ -1,10 +1,32 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-25
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-09-25 — Use native secure refresh storage for Flutter auth
+
+**Decision:** The production Flutter composition calls the Railway FastAPI root
+directly. `ApiClient` keeps access JWTs in memory, refreshes from the
+backend-provided `expires_at` and after one 401, and serializes concurrent
+refresh attempts. The client stores only the opaque `aqualogic_refresh` cookie
+value in platform secure storage and sends it only to `/auth/refresh`. Release
+builds default to Railway and require HTTPS; debug Android manifests alone
+permit local HTTP development. `MockAuthService` and existing feature mocks
+remain injectable and available.
+
+**Reason:** Native Flutter is not governed by the browser's same-origin proxy,
+SameSite, or CORS behavior. Keeping a single native auth transport reuses the
+existing bearer/rotating-session backend without persisting JWTs or adding a
+second auth system. Preserving mock injection keeps widget tests deterministic
+while the operational repositories are integrated in later milestones.
+
+**Consequences:** No FastAPI, Railway, or Vercel change is required for M1.
+Cold start validates the refresh session and hydrates `/auth/me`; network
+unavailability preserves the refresh credential and offers retry. Physical
+equipment controls and operational data remain outside this milestone.
 
 ## 2026-09-23 — Require PostgreSQL for production and retain SQLite locally
 

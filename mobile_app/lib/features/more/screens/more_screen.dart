@@ -41,9 +41,13 @@ class MoreScreen extends StatelessWidget {
                 MaterialPageRoute<void>(
                   builder: (_) => AccountScreen(
                     user: user,
-                    onSignOut: () {
-                      AuthScope.of(context).signOut();
-                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    onSignOut: () async {
+                      await AuthScope.of(context).signOut();
+                      if (context.mounted) {
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
+                      }
                     },
                   ),
                 ),

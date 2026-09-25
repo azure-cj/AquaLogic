@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-25
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -13,6 +13,15 @@ Authenticated routes use the 15-minute bearer token returned by `POST /auth/logi
 or `POST /auth/refresh`. The browser keeps this token in memory; the seven-day
 opaque refresh token is an HttpOnly, SameSite=Strict cookie. All access tokens
 carry session and token-version claims, so legacy tokens intentionally fail.
+
+The Flutter client calls the FastAPI root directly at the configured Railway
+base URL; it does not use the Vercel web app's `/api` proxy. Native auth keeps
+the access token in memory, stores only the opaque refresh-cookie value in
+platform secure storage, and sends `Cookie: aqualogic_refresh=...` only to
+`POST /auth/refresh`. It does not depend on browser SameSite or CORS behavior.
+Login and password-change responses rotate the refresh cookie when issuing a
+new session; a refresh response without a replacement cookie is the backend's
+five-second replay grace path, so clients retain the existing value.
 
 | Method | Route | Access | Purpose |
 | --- | --- | --- | --- |

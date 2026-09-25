@@ -1,4 +1,5 @@
 import 'package:aqualogic/app/aqualogic_app.dart';
+import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:aqualogic/features/auth/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +8,7 @@ void main() {
   testWidgets(
     'AquaLogic shell renders dashboard, alert shortcut, and tank flow',
     (WidgetTester tester) async {
-      await tester.pumpWidget(const AquaLogicApp());
+      await tester.pumpWidget(AquaLogicApp(authService: MockAuthService()));
 
       expect(find.text('AquaLogic'), findsOneWidget);
       expect(find.text('Preparing AquaLogic'), findsOneWidget);

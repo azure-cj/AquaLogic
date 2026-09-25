@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-25
 
 ## Completed and working locally
 
@@ -224,6 +224,18 @@ Last reviewed: 2026-09-23
 
 - Flutter Android-first dashboard prototype with home, tanks, sensor cards,
   alerts, fish library, equipment status, and navigation shell.
+- M1 mobile authentication is connected directly to the Railway FastAPI auth
+  routes through a shared `ApiClient` and `ApiAuthService`. Release defaults to
+  the Railway root URL; debug defaults to the Android emulator host alias with
+  a compile-time URL override for local/physical-device development.
+- Access JWTs remain in memory. The opaque refresh-cookie value is held by
+  Android secure storage, restored through `/auth/refresh` plus `/auth/me`,
+  rotated when returned, and cleared on invalid session or local logout.
+- Protected requests refresh once on expiry/401 with shared in-flight refresh;
+  Login handles safe validation/throttle/network messages, and forced password
+  change gates the authenticated shell.
+- `MockAuthService` remains injectable for widget tests. Home, Tanks, Alerts,
+  Monitoring, fish, equipment, and operations/account data remain mock-backed.
 - Local mock readings and demo equipment interactions.
 - Flutter mock sign-in interface with clearly isolated local development
   accounts for the Owner/admin and Staff roles.
@@ -288,13 +300,12 @@ Last reviewed: 2026-09-23
   uses opacity-only branding and handoff. Added focused splash readiness,
   timing, reduced-motion, and disposal tests.
 
-Mobile authentication, Home data, and this UI/UX refinement are intentionally
-frontend-only. FastAPI/HTTP integration, JWT access tokens, refresh sessions,
-secure credential storage, backend `/auth/*` integration, persistent login,
-live sensor sync, persisted alerts and monitoring incidents, sensor history,
-backend species and assignment APIs, real actuator commands/device
-connectivity, command reconciliation, push notifications, and production
-equipment safety controls are not yet implemented in the Flutter client.
+Home data and the UI/UX refinements remain local/demo behavior. Operational
+repository integration for live fleet/tank data, persisted alerts and monitoring
+incidents, sensor history, species and assignment APIs, equipment state, real
+actuator commands/device connectivity, command reconciliation, push
+notifications, and production equipment safety controls are not yet implemented
+in the Flutter client.
 
 ## Active follow-up work
 
@@ -324,15 +335,15 @@ equipment safety controls are not yet implemented in the Flutter client.
   commands arrive, and provision a new identity if hardware is reused.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
-- Reconcile the Flutter app with the backend API contract before implementing
-  authentication or live data.
+- Integrate read-only mobile repositories with the current backend API contract,
+  beginning with Home and then Tanks/Detail, Alerts/Monitoring, and Account data.
 - Finalize deployment environment variables and production smoke tests.
 
 ## Planned
 
 - External monitoring notifications, delivery workers, and escalation remain
   deferred.
-- Backend client integration for the Flutter app.
+- M2+ read-only backend repositories for Flutter operational data.
 - Additional sensor hardware and production-grade actuator safety controls;
   pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
 - Raspberry Pi deployment and hardware safety controls.
@@ -368,6 +379,17 @@ equipment safety controls are not yet implemented in the Flutter client.
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-09-25
+
+- Mobile M1: `flutter pub get`, changed-file `dart format` check,
+  `flutter analyze` (no issues), and `flutter test` (70 passed) succeeded.
+  `flutter build apk --release` succeeded; the APK is 60,959,907 bytes
+  (58.1 MiB). Inspection of the packaged manifest confirmed the INTERNET
+  permission and `android:usesCleartextTraffic="false"` for release.
+- Authentication tests use fake HTTP and in-memory secure storage; no
+  production login credentials or live auth requests were used. A human
+  credential smoke test remains available in the M1 handoff instructions.
 
 ## Validation checkpoint — 2026-09-23
 

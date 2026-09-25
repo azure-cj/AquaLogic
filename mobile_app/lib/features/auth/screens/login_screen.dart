@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -57,6 +58,12 @@ class _LoginScreenState extends State<LoginScreen> {
         _isSubmitting = false;
         _authError = 'Email or password is incorrect.';
       });
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _authError = _signInError(failure);
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -64,6 +71,23 @@ class _LoginScreenState extends State<LoginScreen> {
         _authError = "Can't reach AquaLogic. Try again.";
       });
     }
+  }
+
+  String _signInError(ApiFailure failure) => switch (failure.kind) {
+    ApiFailureKind.unauthenticated => 'Email or password is incorrect.',
+    ApiFailureKind.rateLimited => _rateLimitMessage(failure.retryAfter),
+    ApiFailureKind.validation => 'Enter a valid email and password.',
+    ApiFailureKind.forbidden => 'This account cannot sign in right now.',
+    ApiFailureKind.unknown => failure.message,
+    _ => "Can't reach AquaLogic. Try again.",
+  };
+
+  String _rateLimitMessage(Duration? retryAfter) {
+    if (retryAfter == null || retryAfter == Duration.zero) {
+      return 'Sign-in is temporarily limited. Try again shortly.';
+    }
+    final minutes = (retryAfter.inSeconds / 60).ceil();
+    return 'Too many sign-in attempts. Try again in $minutes ${minutes == 1 ? 'minute' : 'minutes'}.';
   }
 
   void _openDemoAccess() {

@@ -9,7 +9,7 @@ class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key, required this.user, required this.onSignOut});
 
   final AuthUser user;
-  final VoidCallback onSignOut;
+  final Future<void> Function() onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +20,7 @@ class AccountScreen extends StatelessWidget {
         child: AppPage(
           header: MoreHeader(
             title: 'Account',
-            subtitle: 'Your local prototype identity',
+            subtitle: 'Your authenticated AquaLogic identity',
             titleKey: const ValueKey('account-page-title'),
             onBack: () => Navigator.of(context).pop(),
           ),

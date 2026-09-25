@@ -3,7 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 
-enum AuthStatus { checking, unauthenticated, authenticated }
+enum AuthStatus {
+  checking,
+  unauthenticated,
+  authenticated,
+  mustChangePassword,
+  connectionUnavailable,
+}
 
 /// The small auth boundary used by the app shell.
 ///
@@ -13,9 +19,19 @@ abstract class AuthService extends ChangeNotifier {
   AuthStatus get status;
   AuthUser? get currentUser;
 
+  /// Called once by app composition. Local/test services can keep the default.
+  Future<void> initialize() async {}
+
   Future<AuthUser?> signIn({required String email, required String password});
 
-  void signOut();
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    throw UnsupportedError('Password changes are not available.');
+  }
+
+  Future<void> signOut();
 }
 
 /// Local-only prototype authentication data.
@@ -98,7 +114,7 @@ class MockAuthService extends AuthService {
   }
 
   @override
-  void signOut() {
+  Future<void> signOut() async {
     if (_currentUser == null && _status == AuthStatus.unauthenticated) {
       return;
     }

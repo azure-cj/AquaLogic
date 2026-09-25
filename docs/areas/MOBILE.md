@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
-Status: Flutter prototype
-Last reviewed: 2026-09-23
+Status: M1 backend authentication integrated; operational data remains mock-backed
+Last reviewed: 2026-09-25
 
 ## Read first
 
@@ -12,26 +12,43 @@ Last reviewed: 2026-09-23
 
 ## Current boundary
 
-The Flutter app is an Android-first dashboard prototype. Home, tank, alert,
-fish, equipment, and account surfaces use deterministic local demo data behind
-replaceable repository interfaces. The app has a local-only mock
-authentication boundary and role-aware authenticated shell, but it has no HTTP
-client, backend authentication, secure persistence, or live sensor/device
-connection.
+The Flutter app is an Android-first client. Authentication talks directly to
+the Railway FastAPI service through one shared HTTP client. Home, tank, alert,
+fish, equipment, and operational account data still use deterministic local
+demo data behind the existing repository seams. No sensor or device connection
+is made by the mobile app.
 
-## Mock authentication milestone
+## M1 authentication integration
 
 Implemented:
 
 - AquaLogic-branded Flutter sign-in screen with validation, password visibility,
-  loading, keyboard submission, and generic invalid-credential feedback.
+  loading, keyboard submission, safe API error messages, and Retry-After display
+  for sign-in throttling.
+- `ApiAuthService` is the default app composition; tests can still inject
+  `MockAuthService` through `AquaLogicApp(authService: ...)`.
+- `ApiClient` centralizes URL selection, JSON, bounded request timeouts,
+  normalized failures, bearer headers, and one single-flight refresh retry for
+  protected requests.
+- Release builds default to the Railway root API URL. Debug builds default to
+  Android emulator alias `10.0.2.2:8000`; physical-device development can
+  override `AQUALOGIC_API_BASE_URL` with the developer machine's LAN URL.
+- Access JWTs and expiry are memory-only. The opaque refresh-cookie value is
+  stored through Android secure storage, sent only to `/auth/refresh`, and
+  replaced when the backend rotates it.
+- Cold start refreshes the session and loads `/auth/me`; invalid refresh
+  sessions return to Login, while network failures preserve the credential and
+  show a retry state.
+- A forced password-change status gates the shell until `/auth/change-password`
+  succeeds. Logout revokes the server session when reachable and always clears
+  local auth state.
 - Local development Owner/admin and Staff accounts in
   [`MockAuthService`](../../mobile_app/lib/features/auth/data/mock_auth_service.dart).
 - An authenticated user model that preserves the backend-compatible `admin` and
   `staff` role values while presenting `Owner` and `Staff` labels in the mobile
   UI.
 - An app-level auth state, `AuthGate`, shared authenticated shell, role-aware
-  identity treatment, and local sign-out from More/Account.
+  identity treatment, and sign-out from More/Account.
 
 Development accounts:
 
@@ -42,12 +59,13 @@ Development accounts:
 
 These are local prototype credentials only and are not production security.
 
-Not yet implemented:
+Still mock-backed / not implemented:
 
-- Backend authentication or `/auth/*` integration.
-- JWT access tokens, refresh sessions, or secure credential storage.
-- Persistent login across application restarts.
-- Production account management or backend synchronization.
+- Home, Tanks, Alerts, Monitoring, species, equipment, and operational account
+  repositories are not connected to Railway.
+- Profile editing and server-side data synchronization are not implemented.
+- Physical actuator commands, push notifications, and background refresh are
+  not implemented.
 
 ## Role-Aware Home V1
 
@@ -125,17 +143,15 @@ Implemented in the Flutter prototype:
   logo/scene handoff to opacity transitions. Controllers and the minimum timer
   are disposed with the splash state.
 
-This remains a local prototype startup sequence: `MockAuthService` resolves
-immediately to unauthenticated and no backend work or real startup stages are
-claimed. The focused behavior tests live in
+Production auth resolves through session restore, Login, or a retryable
+connection state; the splash does not claim backend progress. Tests can inject
+`MockAuthService` and retain deterministic startup. Focused behavior tests live in
 [`splash_screen_test.dart`](../../mobile_app/test/splash_screen_test.dart).
 
 ## Deferred integration work
 
 The following remain outside this milestone:
 
-- FastAPI/HTTP integration, JWT/session handling, secure credential storage,
-  and persistent local authentication.
 - Live sensor sync, persisted alert and monitoring-incident queries, sensor
   history, backend freshness calculations, and offline cache/sync conflict
   handling.
@@ -144,16 +160,16 @@ The following remain outside this milestone:
   production equipment safety controls.
 - Push notifications, background workers, and external monitoring delivery.
 
-When integration begins, update this guide, the API contract, and the
-development status together. Do not document the local mock data as a live
-backend client.
+When feature repositories move to live data, update this guide, the API
+contract, and the development status together. Keep mock data clearly labeled
+as mock-backed until each repository is replaced.
 
 ## Important locations
 
 - `mobile_app/lib/app/`: app composition, theme, navigation, and startup.
 - `mobile_app/lib/app/auth/`: auth scope and the startup authentication gate.
-- `mobile_app/lib/features/auth/`: mock auth data/service, user and role models,
-  and the login screen.
+- `mobile_app/lib/features/auth/`: API and mock auth services, secure refresh
+  storage, user and role models, forced password-change gate, and login screen.
 - `mobile_app/lib/features/home/`: role-aware Home compositions, local Home
   presentation models/data, and shared Home widgets.
 - `mobile_app/lib/features/tanks/`: tank directory, detail, readings, issues,
@@ -167,6 +183,8 @@ backend client.
 - `mobile_app/lib/features/more/`: account, local-data, and about surfaces.
 - `mobile_app/lib/shared/`: shared status models, badges, freshness labels,
   empty states, and layout primitives.
+- `mobile_app/lib/shared/network/`: API configuration, shared HTTP client, and
+  normalized API failures.
 - `mobile_app/test/`: widget and repository/semantics tests.
 - `mobile_app/pubspec.yaml`: Flutter dependencies and assets.
 

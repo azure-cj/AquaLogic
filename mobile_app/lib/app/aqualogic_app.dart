@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/startup/splash_screen.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/features/auth/data/api_auth_service.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:flutter/material.dart';
 
@@ -23,7 +26,8 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
   void initState() {
     super.initState();
     _ownsAuthService = widget.authService == null;
-    _authService = widget.authService ?? MockAuthService();
+    _authService = widget.authService ?? ApiAuthService();
+    unawaited(_authService.initialize());
   }
 
   @override

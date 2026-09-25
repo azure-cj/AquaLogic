@@ -31,7 +31,7 @@ class _TestAuthService extends AuthService {
   }) async => null;
 
   @override
-  void signOut() => resolve(AuthStatus.unauthenticated);
+  Future<void> signOut() async => resolve(AuthStatus.unauthenticated);
 }
 
 Widget _app(

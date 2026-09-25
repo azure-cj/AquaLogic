@@ -13,7 +13,7 @@ class AccountCard extends StatelessWidget {
   });
 
   final AuthUser user;
-  final VoidCallback onSignOut;
+  final Future<void> Function() onSignOut;
   final VoidCallback? onTap;
   final Key? signOutKey;
 
@@ -113,7 +113,7 @@ class AccountCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       const Text(
-                        'Local prototype account',
+                        'Authenticated AquaLogic account',
                         style: TextStyle(
                           color: AppColors.muted,
                           fontSize: 10.5,
@@ -131,19 +131,9 @@ class AccountCard extends StatelessWidget {
                     button: true,
                     label: 'Sign out',
                     excludeSemantics: true,
-                    child: TextButton(
-                      key: signOutKey ?? const ValueKey('sign-out-button'),
-                      onPressed: onSignOut,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.tealDark,
-                        minimumSize: const Size(44, 44),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        tapTargetSize: MaterialTapTargetSize.padded,
-                      ),
-                      child: const Text(
-                        'Sign out',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
+                    child: _SignOutButton(
+                      signOutKey: signOutKey,
+                      onSignOut: onSignOut,
                     ),
                   ),
                 ),
@@ -155,6 +145,56 @@ class AccountCard extends StatelessWidget {
     );
 
     return panel;
+  }
+}
+
+class _SignOutButton extends StatefulWidget {
+  const _SignOutButton({required this.onSignOut, this.signOutKey});
+
+  final Future<void> Function() onSignOut;
+  final Key? signOutKey;
+
+  @override
+  State<_SignOutButton> createState() => _SignOutButtonState();
+}
+
+class _SignOutButtonState extends State<_SignOutButton> {
+  var _isSigningOut = false;
+
+  Future<void> _signOut() async {
+    setState(() => _isSigningOut = true);
+    try {
+      await widget.onSignOut();
+    } finally {
+      if (mounted) setState(() => _isSigningOut = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      key: widget.signOutKey ?? const ValueKey('sign-out-button'),
+      onPressed: _isSigningOut ? null : _signOut,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.tealDark,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        tapTargetSize: MaterialTapTargetSize.padded,
+      ),
+      child: _isSigningOut
+          ? const SizedBox(
+              width: 17,
+              height: 17,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.tealDark,
+              ),
+            )
+          : const Text(
+              'Sign out',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+    );
   }
 }
 
