@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M6.2 authenticated device registration implemented locally; Railway deployment verification, Firebase Admin delivery, event triggers, and notification navigation remain pending
+Status: M6.2 authenticated device registration deployed to Railway; physical-device verification, Firebase Admin delivery, event triggers, and notification navigation remain pending
 Last reviewed: 2026-09-26
 
 ## Read first
@@ -414,9 +414,11 @@ Migration `0015_authenticated_push_devices` adds session-bound registrations.
 The backend eligibility query excludes inactive devices/accounts, unsupported
 roles, and expired or revoked sessions even when deactivation did not reach the
 server. Automated tests use fake HTTP, token, and registration boundaries. The
-API and migration are implemented locally; Railway deployment and a
-real-token-to-Railway registration check remain part of the M6.2 live gate. No
-server-side Firebase sender or notification event trigger is included yet.
+Railway API deployment is live: `/health` is healthy, both routes appear in
+OpenAPI, and the response schema omits the FCM token. Registration from a real
+authenticated Android installation and direct confirmation of its `PushDevice`
+row remain part of the M6.2 gate. No server-side Firebase sender or notification
+event trigger is included yet.
 
 ## Remaining work after M6.2 registration
 

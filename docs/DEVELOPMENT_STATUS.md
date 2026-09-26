@@ -409,7 +409,7 @@ Last reviewed: 2026-09-26
   and tap-launch states remains a manual verification step. No test message was
   sent during implementation.
 
-### M6.2 Authenticated Android device registration — local implementation
+### M6.2 Authenticated Android device registration — Railway deployed; device verification pending
 
 - Added `PushDevice` and migration `0015_authenticated_push_devices`, with
   unique installation/token constraints and user/session foreign keys.
@@ -424,21 +424,23 @@ Last reviewed: 2026-09-26
 - Backend recipient eligibility excludes inactive devices/accounts, unsupported
   roles, and revoked or expired sessions. No Firebase sender or notification
   trigger is added in this milestone.
-- Local M6.2 gates passed on 2026-09-26: backend full suite (160 passed),
+- Local M6.2 gates passed on 2026-09-26: backend full suite (161 passed),
   clean SQLite upgrade to Alembic head `0015`, Flutter full suite (180 passed),
   `flutter analyze` (no issues), release APK build, and `git diff --check`.
   A local PostgreSQL integration migration check was not available in this
   environment.
-- The M6.2 live gate remains pending: migration deployment to Railway and a
-  real-token registration check from the physical phone. M6.2 is not marked
-  complete until those are confirmed.
+- Railway now serves commit `f5288a3`: `/health` is healthy, OpenAPI exposes
+  both registration routes, and the response schema omits `fcm_token`. The
+  authenticated physical-device registration and direct PushDevice row
+  confirmation remain pending; M6.2 is not complete until that gate passes
+  without exposing the token.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
 real actuator commands/device connectivity, command reconciliation, Firebase
 Admin sending, and production equipment safety controls are not integrated in
-the Flutter client. M6.2 registration is implemented locally but not yet
-deployed to Railway.
+the Flutter client. M6.2 registration is deployed to Railway; the physical
+device registration and row verification remain pending.
 
 ## Active follow-up work
 
