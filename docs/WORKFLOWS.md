@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-26
 
 ## First-time setup
 
@@ -45,6 +45,62 @@ The command creates only the first administrator account (`admin` role), uses
 the standard AquaLogic password hash, and makes no changes if the email or an
 administrator already exists. It never prints the password. **Do not run the
 demo seed script (`python -m seed.seed_data`) in production.**
+
+### Firebase Admin push setup
+
+M6.3 uses the Firebase Admin Python SDK on the Railway backend only. It requires
+a Firebase service-account JSON key with permission to send FCM messages; the
+Android `google-services.json` file is client configuration and cannot be used
+as this server credential. Push remains disabled unless
+`PUSH_NOTIFICATIONS_ENABLED=true` is explicitly set.
+
+1. In the Firebase project, open **Project settings → Service accounts** and
+   generate a private key for the Firebase Admin SDK service account, or use an
+   existing least-privilege service account authorized to send Firebase Cloud
+   Messaging messages. Enable the Firebase Cloud Messaging API (HTTP v1) and
+   grant the service account the **Firebase Cloud Messaging API Admin** role or
+   an equivalent least-privilege role containing
+   `cloudmessaging.messages.create` ([Firebase send setup](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk)).
+2. Save the downloaded JSON outside the repository in a protected local
+   location. Do not place it in Flutter, Vercel, source control, a ticket, or
+   chat.
+3. In PowerShell, encode the file in memory and copy the one-line result to the
+   clipboard without printing it in the terminal:
+
+   ```powershell
+   $firebaseKeyPath = 'C:\secure\firebase-service-account.json'
+   $firebaseKeyB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($firebaseKeyPath))
+   Set-Clipboard -Value $firebaseKeyB64
+   Remove-Variable firebaseKeyB64
+   ```
+
+   Base64 is only a transport encoding, not encryption. Paste the clipboard
+   value directly into the Railway backend service variable
+   `FIREBASE_SERVICE_ACCOUNT_JSON_B64`, marked as a secret. Optionally set
+   `FIREBASE_PROJECT_ID` to the non-secret Firebase project ID for a consistency
+   check. Then clear the clipboard with `Set-Clipboard -Value $null`; if
+   Windows clipboard history is enabled, clear that entry through **Win+V** as
+   well. Remove the downloaded key file according to your organization's
+   key-handling policy.
+4. Deploy the backend and verify Railway's normal pre-deploy migration path
+   applies the outbox and FID migrations. The backend decodes the secret in
+   memory only; it does not write the service-account JSON to disk. Keep
+   `PUSH_NOTIFICATIONS_ENABLED` false during this verification when it is
+   currently false. Check deployment health and
+   `https://aqualogic-production.up.railway.app/health`. Then install the
+   updated Android app and confirm an authenticated row has a FID without
+   selecting or printing either Firebase identifier. Only a human should enable
+   outbound push after these checks; do not start M6.4 until the deployed sender
+   is healthy and a real Android installation has registered its FID.
+
+Never use an FCM legacy server key or the Firebase client configuration file as
+the backend credential. The Flutter client obtains FIDs through the official
+`firebase_app_installations` plugin and observes `onIdChange`; it continues to
+send the distinct FCM token for compatibility. The backend targets
+`messaging.Message(fid=...)` whenever the row has an FID. The deprecated
+`Message.token` target remains a compatibility fallback for pre-FID rows only
+([Firebase Admin send documentation](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk),
+[Firebase Installations guidance](https://firebase.google.com/docs/projects/manage-installations)).
 
 ### Web
 

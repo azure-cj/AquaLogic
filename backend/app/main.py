@@ -20,6 +20,7 @@ from .routes import alerts, auth, dashboard, devices, fish, management, monitori
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
 from .services.monitoring_incidents import start_periodic_maintenance
+from .services.push_notifications import start_push_dispatcher
 
 # Ensure all SQLAlchemy models are registered before metadata is used.
 from . import models  # noqa: F401
@@ -39,9 +40,12 @@ async def lifespan(_: FastAPI):
             db.close()
     start_demo_generator()
     maintenance = start_periodic_maintenance()
+    push_dispatcher = start_push_dispatcher()
     try:
         yield
     finally:
+        if push_dispatcher is not None:
+            push_dispatcher.stop()
         maintenance.stop()
 
 

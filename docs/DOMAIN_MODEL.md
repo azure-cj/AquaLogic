@@ -9,7 +9,9 @@ Last reviewed: 2026-09-26
 | --- | --- | --- |
 | User | Staff identity, role, active state, and password-change state | Resolves alerts; admin role controls staff and threshold writes |
 | AuthSession | Revocable authenticated session | Belongs to a user; access JWT `sid` identifies the session |
-| PushDevice | Android FCM registration for one app installation | Unique installation ID and token; bound to the registering user and `AuthSession` |
+| PushDevice | Android Firebase messaging registration for one app installation | Unique AquaLogic installation ID, optional Firebase Installation ID (FID), and separate FCM token; bound to the registering user and `AuthSession` |
+| PushNotificationEvent | One logical operational notification in the backend outbox | Unique deterministic `event_key`; optional tank reference; versioned string-only FCM data |
+| PushNotificationDelivery | Delivery state for one event and registered device | Unique `(event_id, push_device_id)`; tracks retries, lease, sanitized error code, and result |
 | Customer | Customer or account associated with managed tanks | Owns zero or more tanks |
 | Tank | Managed aquarium and public display metadata | May belong to a customer; has fish, readings, alerts, and optional monitoring-threshold overrides |
 | FishSpecies | Grouped species-level identity, diet, care, compatibility, and customer-facing profile information | Assigned to tanks through `TankFish` |
@@ -148,9 +150,17 @@ no manual resolution action or external notification.
   token belongs to one registration. Only active devices for active `admin` or
   `staff` users with an unrevoked, unexpired bound session are eligible for
   delivery. Client payloads cannot choose the user or session.
-- Installation IDs are random per app install and are not hardware identifiers.
-  FCM tokens are stored for transport but omitted from ordinary API responses
-  and logs; FCM never grants AquaLogic access or becomes domain-state authority.
+- AquaLogic installation IDs are random per app install and are not hardware
+  identifiers. Firebase Installation IDs and FCM tokens are distinct transport
+  identifiers; both are omitted from ordinary API responses and application
+  logs. FCM never grants AquaLogic access or becomes domain-state authority.
+- A push event and eligible delivery rows are written by the caller's source
+  transaction; Firebase network calls happen after that transaction. Delivery
+  claims use leases and are rechecked against current active device, active
+  admin/staff user, and unrevoked/unexpired bound session state. Transient
+  retries are bounded; an unregistered Firebase recipient deactivates only the
+  matching current FID or fallback FCM token. This is duplicate-resistant
+  at-least-once delivery, not exact-once FCM transport.
 - Only administrators can create/update staff accounts or write global defaults
   and tank threshold overrides; staff can read effective threshold settings.
 - Only administrators can queue or read actuator commands and state; staff

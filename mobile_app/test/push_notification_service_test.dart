@@ -43,12 +43,18 @@ void main() {
       expect(platform.localInitializationCount, 1);
       expect(platform.permissionRequestCount, 1);
       expect(platform.tokenRequestCount, 1);
+      expect(platform.fidRequestCount, 1);
       expect(service.isAvailable, isTrue);
       expect(service.permissionStatus, PushPermissionStatus.authorized);
       expect(service.currentToken, token);
+      expect(
+        service.currentFirebaseInstallationId,
+        'firebase-installation-id-from-fake',
+      );
       expect(await firstToken, token);
       expect(logs.join('\n'), isNot(contains(token)));
-      expect(logs.join('\n'), contains('abcdef…wxyz'));
+      expect(logs.join('\n'), isNot(contains('abcdef')));
+      expect(logs.join('\n'), isNot(contains('firebase-installation-id')));
     },
   );
 
@@ -99,6 +105,29 @@ void main() {
     expect(tokens, <String>['abcdef0123456789uvwxyz', 'refreshed-fcm-token']);
     await subscription.cancel();
   });
+
+  test(
+    'Firebase Installation ID changes update state and emit separately',
+    () async {
+      final fids = <String>[];
+      final subscription = service.firebaseInstallationIdChanges.listen(
+        fids.add,
+      );
+      await service.initialize();
+      platform.installationIdChanges.add('rotated-firebase-installation-id');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        service.currentFirebaseInstallationId,
+        'rotated-firebase-installation-id',
+      );
+      expect(fids, <String>[
+        'firebase-installation-id-from-fake',
+        'rotated-firebase-installation-id',
+      ]);
+      await subscription.cancel();
+    },
+  );
 
   test('foreground messages map title, body, and payload once', () async {
     await service.initialize();
@@ -270,6 +299,8 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
   final StreamController<String> refreshes = StreamController<String>.broadcast(
     sync: true,
   );
+  final StreamController<String> installationIdChanges =
+      StreamController<String>.broadcast(sync: true);
   final StreamController<PushNotificationMessage> foreground =
       StreamController<PushNotificationMessage>.broadcast(sync: true);
   final StreamController<PushNotificationOpenEvent> opens =
@@ -284,11 +315,13 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
   var localInitializationCount = 0;
   var permissionRequestCount = 0;
   var tokenRequestCount = 0;
+  var fidRequestCount = 0;
   var failFirebaseInitialization = false;
   var failLocalInitialization = false;
   Completer<void>? localInitializationGate;
   var permission = PushPermissionStatus.authorized;
   String? token = 'abcdef0123456789uvwxyz';
+  String firebaseInstallationId = 'firebase-installation-id-from-fake';
   PushNotificationOpenEvent? initialFirebaseOpen;
   PushNotificationOpenEvent? initialLocalOpen;
 
@@ -326,7 +359,17 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
   }
 
   @override
+  Future<String> getFirebaseInstallationId() async {
+    fidRequestCount++;
+    return firebaseInstallationId;
+  }
+
+  @override
   Stream<String> get tokenRefreshes => refreshes.stream;
+
+  @override
+  Stream<String> get firebaseInstallationIdRefreshes =>
+      installationIdChanges.stream;
 
   @override
   Stream<PushNotificationMessage> get foregroundMessages => foreground.stream;
@@ -355,6 +398,7 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
 
   Future<void> dispose() async {
     await refreshes.close();
+    await installationIdChanges.close();
     await foreground.close();
     await opens.close();
     await localOpens.close();
@@ -363,6 +407,9 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
 
 class _FakePushNotificationService implements PushNotificationService {
   final StreamController<String> tokens = StreamController<String>.broadcast(
+    sync: true,
+  );
+  final StreamController<String> fids = StreamController<String>.broadcast(
     sync: true,
   );
   final StreamController<PushNotificationOpenEvent> opens =
@@ -380,7 +427,13 @@ class _FakePushNotificationService implements PushNotificationService {
   String? get currentToken => 'injected-token-must-not-appear';
 
   @override
+  String? get currentFirebaseInstallationId => 'injected-fid-must-not-appear';
+
+  @override
   Stream<String> get tokenChanges => tokens.stream;
+
+  @override
+  Stream<String> get firebaseInstallationIdChanges => fids.stream;
 
   @override
   Stream<PushNotificationOpenEvent> get notificationOpens => opens.stream;
@@ -393,6 +446,7 @@ class _FakePushNotificationService implements PushNotificationService {
   @override
   Future<void> dispose() async {
     await tokens.close();
+    await fids.close();
     await opens.close();
   }
 }

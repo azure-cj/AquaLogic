@@ -11,6 +11,7 @@ import 'package:aqualogic/shared/network/api_client.dart';
 abstract interface class PushDeviceRegistrationRepository {
   Future<void> register({
     required String installationId,
+    required String? firebaseInstallationId,
     required String fcmToken,
     required String platform,
   });
@@ -28,6 +29,7 @@ class ApiPushDeviceRegistrationRepository
   @override
   Future<void> register({
     required String installationId,
+    required String? firebaseInstallationId,
     required String fcmToken,
     required String platform,
   }) async {
@@ -36,6 +38,7 @@ class ApiPushDeviceRegistrationRepository
       authenticated: true,
       body: <String, Object?>{
         'installation_id': installationId,
+        'firebase_installation_id': firebaseInstallationId,
         'fcm_token': fcmToken,
         'platform': platform,
       },
@@ -112,6 +115,7 @@ class SecurePushInstallationIdStore implements PushInstallationIdStore {
 typedef _RegistrationKey = ({
   String userId,
   int sessionGeneration,
+  String? firebaseInstallationId,
   String token,
 });
 
@@ -134,6 +138,7 @@ class PushDeviceRegistrationCoordinator {
   final Set<_RegistrationKey> _inFlight = <_RegistrationKey>{};
 
   StreamSubscription<String>? _tokenSubscription;
+  StreamSubscription<String>? _fidSubscription;
   Future<void> _operationTail = Future<void>.value();
   Timer? _retryTimer;
   _RegistrationKey? _retryKey;
@@ -149,6 +154,12 @@ class PushDeviceRegistrationCoordinator {
       (_) => _attemptRegistration(),
       onError: (Object error) => _logFailure('FCM token updates', error),
     );
+    _fidSubscription = pushNotificationService.firebaseInstallationIdChanges
+        .listen(
+          (_) => _attemptRegistration(),
+          onError: (Object error) =>
+              _logFailure('Firebase Installation ID updates', error),
+        );
     _attemptRegistration();
   }
 
@@ -181,6 +192,8 @@ class PushDeviceRegistrationCoordinator {
     authService.removeListener(_onAuthChanged);
     await _tokenSubscription?.cancel();
     _tokenSubscription = null;
+    await _fidSubscription?.cancel();
+    _fidSubscription = null;
   }
 
   void _onAuthChanged() => _attemptRegistration();
@@ -215,6 +228,7 @@ class PushDeviceRegistrationCoordinator {
         if (!_started || _currentKey() != key) return;
         await repository.register(
           installationId: installationId,
+          firebaseInstallationId: key.firebaseInstallationId,
           fcmToken: key.token,
           platform: 'android',
         );
@@ -263,6 +277,8 @@ class PushDeviceRegistrationCoordinator {
     return (
       userId: user.id,
       sessionGeneration: authService.sessionGeneration,
+      firebaseInstallationId:
+          pushNotificationService.currentFirebaseInstallationId,
       token: token,
     );
   }

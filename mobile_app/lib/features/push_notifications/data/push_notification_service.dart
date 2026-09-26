@@ -8,7 +8,9 @@ abstract interface class PushNotificationService {
   bool get isAvailable;
   PushPermissionStatus get permissionStatus;
   String? get currentToken;
+  String? get currentFirebaseInstallationId;
   Stream<String> get tokenChanges;
+  Stream<String> get firebaseInstallationIdChanges;
   Stream<PushNotificationOpenEvent> get notificationOpens;
 
   Future<void> initialize();
@@ -21,8 +23,10 @@ abstract interface class PushNotificationPlatform {
   Future<void> initializeLocalNotifications();
   Future<PushPermissionStatus> requestPermission();
   Future<String?> getToken();
+  Future<String> getFirebaseInstallationId();
 
   Stream<String> get tokenRefreshes;
+  Stream<String> get firebaseInstallationIdRefreshes;
   Stream<PushNotificationMessage> get foregroundMessages;
   Stream<PushNotificationOpenEvent> get notificationOpens;
   Stream<PushNotificationOpenEvent> get localNotificationOpens;
@@ -43,6 +47,8 @@ class FirebasePushNotificationService implements PushNotificationService {
   final PushNotificationPlatform platform;
   final StreamController<String> _tokenChangesController =
       StreamController<String>.broadcast();
+  final StreamController<String> _firebaseInstallationIdChangesController =
+      StreamController<String>.broadcast();
   final StreamController<PushNotificationOpenEvent> _opensController =
       StreamController<PushNotificationOpenEvent>.broadcast();
   final List<StreamSubscription<dynamic>> _subscriptions =
@@ -53,6 +59,7 @@ class FirebasePushNotificationService implements PushNotificationService {
 
   Future<void>? _initialization;
   String? _currentToken;
+  String? _currentFirebaseInstallationId;
   var _isAvailable = false;
   var _localNotificationsAvailable = false;
   var _permissionStatus = PushPermissionStatus.unknown;
@@ -67,7 +74,14 @@ class FirebasePushNotificationService implements PushNotificationService {
   String? get currentToken => _currentToken;
 
   @override
+  String? get currentFirebaseInstallationId => _currentFirebaseInstallationId;
+
+  @override
   Stream<String> get tokenChanges => _tokenChangesController.stream;
+
+  @override
+  Stream<String> get firebaseInstallationIdChanges =>
+      _firebaseInstallationIdChangesController.stream;
 
   @override
   Stream<PushNotificationOpenEvent> get notificationOpens =>
@@ -82,6 +96,7 @@ class FirebasePushNotificationService implements PushNotificationService {
       await subscription.cancel();
     }
     await _tokenChangesController.close();
+    await _firebaseInstallationIdChangesController.close();
     await _opensController.close();
   }
 
@@ -97,6 +112,14 @@ class FirebasePushNotificationService implements PushNotificationService {
     }
 
     _listenForMessages();
+    try {
+      final installationId = await platform.getFirebaseInstallationId();
+      if (_currentFirebaseInstallationId == null) {
+        _setFirebaseInstallationId(installationId);
+      }
+    } catch (error) {
+      _debugFailure('Firebase Installation ID request', error);
+    }
 
     try {
       await platform.initializeLocalNotifications();
@@ -140,6 +163,13 @@ class FirebasePushNotificationService implements PushNotificationService {
   }
 
   void _listenForMessages() {
+    _subscriptions.add(
+      platform.firebaseInstallationIdRefreshes.listen(
+        _setFirebaseInstallationId,
+        onError: (Object error) =>
+            _debugFailure('Firebase Installation ID updates', error),
+      ),
+    );
     _subscriptions.add(
       platform.tokenRefreshes.listen(
         _setToken,
@@ -222,18 +252,17 @@ class FirebasePushNotificationService implements PushNotificationService {
 
   void _setToken(String? token) {
     if (token == null || token.isEmpty || token == _currentToken) return;
-    final isRefresh = _currentToken != null;
     _currentToken = token;
     _tokenChangesController.add(token);
-    if (kDebugMode) {
-      final label = isRefresh ? 'refreshed' : 'obtained';
-      debugPrint('FCM token $label (${token.length} chars; ${_mask(token)}).');
-    }
   }
 
-  String _mask(String token) {
-    if (token.length <= 10) return '***';
-    return '${token.substring(0, 6)}…${token.substring(token.length - 4)}';
+  void _setFirebaseInstallationId(String installationId) {
+    if (installationId.isEmpty ||
+        installationId == _currentFirebaseInstallationId) {
+      return;
+    }
+    _currentFirebaseInstallationId = installationId;
+    _firebaseInstallationIdChangesController.add(installationId);
   }
 
   void _debugFailure(String operation, Object error) {

@@ -106,8 +106,8 @@ Last reviewed: 2026-09-26
   escalation/downgrade/resolution, operator/system resolution metadata, and
   audited threshold-disable resolution. Global defaults now support optional
   complete per-tank overrides with audited reset-to-global history and shared
-  effective-threshold evaluation. External notification delivery remains
-  deferred.
+  effective-threshold evaluation. Push event triggers remain deferred to M6.5;
+  Firebase delivery is secondary to source operational persistence.
 
 ### Web
 
@@ -218,7 +218,7 @@ Last reviewed: 2026-09-26
 - Goal 5 persistent unattended monitoring incidents are documented across the
   API, architecture, domain, workflow, Phase 02/04 guidance, and packet 09.
   The in-app history is distinct from water-quality alerts and analytics gap
-  reconstruction; external notification delivery remains deferred.
+  reconstruction; event-triggered push remains deferred to M6.5.
 
 ### Mobile
 
@@ -397,9 +397,10 @@ Last reviewed: 2026-09-26
   stable `aqualogic_alerts` channel uses the monochrome AquaLogic notification
   icon. Foreground FCM messages use local notifications; Android handles
   notification delivery in background/terminated states.
-- The service keeps the registration token in memory, emits refresh changes,
-  masks token logs, and captures FCM/local notification-open payloads without
-  adding navigation or backend registration.
+- The service keeps the FCM token and Firebase Installation ID in memory,
+  emits each identifier's refresh changes separately, and does not log either
+  value. It captures FCM/local notification-open payloads without adding
+  navigation or backend registration in M6.1.
 - Flutter analysis and all 172 tests pass; the release APK builds at
   `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (63,434,355 bytes).
   A physical Android 12 device reported authorized notification access and
@@ -409,38 +410,71 @@ Last reviewed: 2026-09-26
   and tap-launch states remains a manual verification step. No test message was
   sent during implementation.
 
-### M6.2 Authenticated Android device registration — Railway deployed; device verification pending
+### M6.2 Authenticated Android device registration — verified
 
 - Added `PushDevice` and migration `0015_authenticated_push_devices`, with
   unique installation/token constraints and user/session foreign keys.
 - `PUT /push/devices/current` derives the user and session from the validated
-  JWT `sid`, accepts only Android, upserts refreshed tokens, and safely rebinds
-  one installation when the signed-in account changes. Its response omits the
-  full FCM token. Authenticated deactivation is session-scoped.
-- Flutter stores a random installation UUID in Android secure storage and
-  coordinates registration after auth restore/login, token availability, and
-  token refresh. It performs best-effort deactivation before logout; registration
-  and deactivation failures do not block authentication.
+  JWT `sid`, accepts only Android, upserts the separate FID and FCM token, and
+  safely rebinds one installation when the signed-in account changes. Its
+  response omits both Firebase identifiers. Authenticated deactivation is
+  session-scoped.
+- Flutter stores a random installation UUID in Android secure storage, obtains
+  the distinct Firebase Installation ID through FlutterFire, and coordinates
+  registration after auth restore/login and FID/FCM availability or refresh.
+  It performs best-effort deactivation before logout; registration and
+  deactivation failures do not block authentication.
 - Backend recipient eligibility excludes inactive devices/accounts, unsupported
   roles, and revoked or expired sessions. No Firebase sender or notification
-  trigger is added in this milestone.
+  trigger was added in this milestone.
 - Local M6.2 gates passed on 2026-09-26: backend full suite (161 passed),
   clean SQLite upgrade to Alembic head `0015`, Flutter full suite (180 passed),
   `flutter analyze` (no issues), release APK build, and `git diff --check`.
   A local PostgreSQL integration migration check was not available in this
   environment.
-- Railway now serves commit `f5288a3`: `/health` is healthy, OpenAPI exposes
-  both registration routes, and the response schema omits `fcm_token`. The
-  authenticated physical-device registration and direct PushDevice row
-  confirmation remain pending; M6.2 is not complete until that gate passes
-  without exposing the token.
+- Railway `/health` is healthy, OpenAPI exposes both registration routes, and
+  the response schema omits both Firebase identifiers. A human-confirmed Railway PostgreSQL
+  query on 2026-09-26 showed one recent, active Android row with a non-null auth
+  session. The query did not select the FCM token; M6.2's physical registration
+  gate is complete.
+
+### M6.3 FID-compatible Firebase Admin sender and notification outbox — release verification pending
+
+- Added the official Firebase Admin Python SDK behind a lazy sender boundary.
+  It targets `messaging.Message(fid=...)` when a row has a Firebase Installation
+  ID and falls back to the retained FCM token only for legacy rows. Push defaults
+  off; credentials are decoded only in memory from
+  `FIREBASE_SERVICE_ACCOUNT_JSON_B64`, and sanitized errors never include SDK
+  exception text, service-account material, FIDs, or FCM tokens.
+- Migration `0016_push_notification_outbox` adds unique logical event keys and
+  one-per-event/device delivery rows. Migration
+  `0017_push_device_firebase_installation_id` adds a nullable unique FID column;
+  deployed migration `0015` and its existing production row are preserved.
+  Enqueueing stays inside the caller's transaction; a separate dispatcher uses
+  database leases, immediate recipient/session rechecks, bounded retry, and
+  matching-recipient deactivation.
+- Automated tests use a fake sender and SDK stubs; no live Firebase request is
+  made. Alert and monitoring event triggers remain gated to M6.5.
+- Automated sender tests verify FID targeting, token fallback, separate FID
+  registration/change, idempotent upsert, and response/log redaction. They use
+  fake senders; no live Firebase message is sent.
+- Local M6.3 gates passed: backend full suite (189 passed), Flutter full suite
+  (182 passed), `flutter analyze` (no issues), clean SQLite upgrade to Alembic
+  head `0017`, PostgreSQL offline SQL compilation through `0017`, focused
+  sender/registration tests, secret-redaction checks, and `git diff --check`.
+- The Firebase credential was provisioned directly through Railway and is not
+  in the repository. After publication, verify Railway health, migration head,
+  and OpenAPI/startup; keep outbound push off unless a human enables it. Do not
+  start M6.4 until the sender is deployed and healthy and a real authenticated
+  Android installation has re-registered its FID.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
-real actuator commands/device connectivity, command reconciliation, Firebase
-Admin sending, and production equipment safety controls are not integrated in
-the Flutter client. M6.2 registration is deployed to Railway; the physical
-device registration and row verification remain pending.
+real actuator commands/device connectivity, command reconciliation, and
+production equipment safety controls are not integrated in the Flutter client.
+M6.2 authenticated device registration is verified on Railway and a physical
+Android installation. M6.3 FID-compatible publication and live production FID
+re-registration are the current gates before M6.4.
 
 ## Active follow-up work
 

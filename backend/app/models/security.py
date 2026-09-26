@@ -31,6 +31,10 @@ class PushDevice(Base):
     __table_args__ = (
         UniqueConstraint("installation_id", name="uq_push_devices_installation_id"),
         UniqueConstraint("fcm_token", name="uq_push_devices_fcm_token"),
+        UniqueConstraint(
+            "firebase_installation_id",
+            name="uq_push_devices_firebase_installation_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -41,6 +45,8 @@ class PushDevice(Base):
     installation_id: Mapped[str] = mapped_column(String(36), nullable=False)
     # Stored only for Firebase delivery. API responses and ordinary logs omit it.
     fcm_token: Mapped[str] = mapped_column(String(4096), nullable=False)
+    # Firebase Installation ID (FID), a separate identifier from the FCM token.
+    firebase_installation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     platform: Mapped[str] = mapped_column(String(16), nullable=False, default="android")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(

@@ -43,18 +43,27 @@ class _MemoryInstallationIdStore implements PushInstallationIdStore {
 }
 
 class _FakePushService implements PushNotificationService {
-  _FakePushService({this.token});
+  _FakePushService({this.token, this.firebaseInstallationId});
 
   final StreamController<String> tokens = StreamController<String>.broadcast(
+    sync: true,
+  );
+  final StreamController<String> fids = StreamController<String>.broadcast(
     sync: true,
   );
   final StreamController<PushNotificationOpenEvent> opens =
       StreamController<PushNotificationOpenEvent>.broadcast(sync: true);
   String? token;
+  String? firebaseInstallationId;
 
   void updateToken(String value) {
     token = value;
     tokens.add(value);
+  }
+
+  void updateFid(String value) {
+    firebaseInstallationId = value;
+    fids.add(value);
   }
 
   @override
@@ -67,7 +76,13 @@ class _FakePushService implements PushNotificationService {
   String? get currentToken => token;
 
   @override
+  String? get currentFirebaseInstallationId => firebaseInstallationId;
+
+  @override
   Stream<String> get tokenChanges => tokens.stream;
+
+  @override
+  Stream<String> get firebaseInstallationIdChanges => fids.stream;
 
   @override
   Stream<PushNotificationOpenEvent> get notificationOpens => opens.stream;
@@ -78,14 +93,21 @@ class _FakePushService implements PushNotificationService {
   @override
   Future<void> dispose() async {
     await tokens.close();
+    await fids.close();
     await opens.close();
   }
 }
 
 class _Registration {
-  const _Registration(this.installationId, this.fcmToken, this.platform);
+  const _Registration(
+    this.installationId,
+    this.firebaseInstallationId,
+    this.fcmToken,
+    this.platform,
+  );
 
   final String installationId;
+  final String? firebaseInstallationId;
   final String fcmToken;
   final String platform;
 }
@@ -101,11 +123,14 @@ class _FakeRegistrationRepository implements PushDeviceRegistrationRepository {
   @override
   Future<void> register({
     required String installationId,
+    required String? firebaseInstallationId,
     required String fcmToken,
     required String platform,
   }) async {
     operations.add('register');
-    registrations.add(_Registration(installationId, fcmToken, platform));
+    registrations.add(
+      _Registration(installationId, firebaseInstallationId, fcmToken, platform),
+    );
     if (failuresRemaining > 0) {
       failuresRemaining--;
       throw StateError('Temporary registration failure');
@@ -225,8 +250,11 @@ void main() {
     return value;
   }
 
-  _FakePushService push({String? token}) {
-    final value = _FakePushService(token: token);
+  _FakePushService push({String? token, String? firebaseInstallationId}) {
+    final value = _FakePushService(
+      token: token,
+      firebaseInstallationId: firebaseInstallationId,
+    );
     pushServices.add(value);
     return value;
   }
@@ -322,6 +350,42 @@ void main() {
     );
     expect(repository.registrations[1].fcmToken, 'fcm-token-after-refresh');
   });
+
+  test(
+    'Firebase Installation ID changes re-register the same FCM token',
+    () async {
+      final value = harness((request) async {
+        if (request.url.path == ApiAuthService.loginPath) {
+          return _tokenResponse();
+        }
+        return _response(404, <String, Object?>{'detail': 'not found'});
+      });
+      final fakePush = push(
+        token: 'stable-fcm-registration-token',
+        firebaseInstallationId: 'old-firebase-installation-id',
+      );
+      final repository = _FakeRegistrationRepository();
+      coordinator(auth: value.auth, push: fakePush, repository: repository);
+
+      await value.auth.signIn(email: 'aqua@example.test', password: 'password');
+      await _settle();
+      fakePush.updateFid('new-firebase-installation-id');
+      await _settle();
+
+      expect(repository.registrations, hasLength(2));
+      expect(
+        repository.registrations.map((row) => row.firebaseInstallationId),
+        <String?>[
+          'old-firebase-installation-id',
+          'new-firebase-installation-id',
+        ],
+      );
+      expect(repository.registrations.map((row) => row.fcmToken), <String>[
+        'stable-fcm-registration-token',
+        'stable-fcm-registration-token',
+      ]);
+    },
+  );
 
   test(
     'registration retries transient failures without changing auth state',
@@ -440,6 +504,7 @@ void main() {
 
       await repository.register(
         installationId: '11111111-1111-4111-8111-111111111111',
+        firebaseInstallationId: 'distinct-firebase-installation-id',
         fcmToken: 'private-fcm-token',
         platform: 'android',
       );
@@ -449,6 +514,7 @@ void main() {
       expect(requests[0].headers['authorization'], 'Bearer access-value');
       expect(jsonDecode(requests[0].body), <String, Object?>{
         'installation_id': '11111111-1111-4111-8111-111111111111',
+        'firebase_installation_id': 'distinct-firebase-installation-id',
         'fcm_token': 'private-fcm-token',
         'platform': 'android',
       });
@@ -472,7 +538,8 @@ void main() {
         return _response(404, <String, Object?>{'detail': 'not found'});
       });
       const token = 'full-secret-fcm-token-for-log-check';
-      final fakePush = push(token: token);
+      const fid = 'full-secret-firebase-installation-id-for-log-check';
+      final fakePush = push(token: token, firebaseInstallationId: fid);
       final repository = _FakeRegistrationRepository()..failuresRemaining = 1;
       final messages = <String>[];
       final previousDebugPrint = debugPrint;
@@ -489,6 +556,7 @@ void main() {
       await _settle();
 
       expect(messages.join('\n'), isNot(contains(token)));
+      expect(messages.join('\n'), isNot(contains(fid)));
     },
   );
 }

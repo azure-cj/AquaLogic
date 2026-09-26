@@ -49,11 +49,25 @@ Last reviewed: 2026-09-26
   bearer token; the response never includes the FCM token.
 - `backend/app/services/push_devices.py`: recipient eligibility filtered by
   active device, active admin/staff account, and unrevoked, unexpired session.
-  Firebase sending and notification events are not implemented in M6.2.
+- `backend/app/services/push_notifications.py`: transaction-owned idempotent
+  event enqueueing, per-device delivery rows, PostgreSQL skip-locked claims,
+  lease recovery, SQLite compare-and-set test behavior, eligibility rechecks,
+  and bounded retry handling. Alert/monitoring event triggers remain gated to
+  M6.5.
+- `backend/app/services/push_sender.py`: lazy Firebase Admin SDK sender with
+  in-memory-only service-account decoding, sanitized exception classes, and
+  FID-first targeting and unregistered-recipient handling. Push is disabled by
+  default; see the
+  [Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup).
 - `backend/app/models/security.py`: revocable auth sessions and the
   session-bound `PushDevice` registration model.
+- `backend/app/models/push_notification.py`: logical notification events and
+  unique per-device delivery state.
 - `backend/alembic/versions/0015_authenticated_push_devices.py`: unique
   installation/token constraints and session/user foreign keys.
+- `backend/alembic/versions/0016_push_notification_outbox.py` and
+  `0017_push_device_firebase_installation_id.py`: event/delivery schema and a
+  nullable unique FID column kept separate from each retained FCM token.
 - `backend/app/routes/fish.py`: fish species directory and admin-only species
   photo upload storage under the configured media root.
 - `backend/app/models/device.py`: registered devices, actuator command ledger,
@@ -105,8 +119,9 @@ Last reviewed: 2026-09-26
   behavior.
 - Alert freshness is based on server `received_at` with a 90-second window.
   Missing values are unavailable; a fresh reading uses the worst present,
-  enabled severity and becomes offline when no usable value exists. External
-  notification delivery is deferred; in-app alerts are the current surface.
+  enabled severity and becomes offline when no usable value exists. Push event
+  triggers are still deferred to M6.5; until then in-app alerts remain the only
+  production alert surface.
 - Runtime packages belong in `requirements.txt`; pytest, HTTP clients, and
   audit tooling belong in `requirements-dev.txt`.
 

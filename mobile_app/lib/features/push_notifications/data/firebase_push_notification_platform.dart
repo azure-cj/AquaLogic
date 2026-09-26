@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_app_installations/firebase_app_installations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -100,8 +101,16 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
   Future<String?> getToken() => FirebaseMessaging.instance.getToken();
 
   @override
+  Future<String> getFirebaseInstallationId() =>
+      FirebaseInstallations.instance.getId();
+
+  @override
   Stream<String> get tokenRefreshes =>
       FirebaseMessaging.instance.onTokenRefresh;
+
+  @override
+  Stream<String> get firebaseInstallationIdRefreshes =>
+      FirebaseInstallations.instance.onIdChange;
 
   @override
   Stream<PushNotificationMessage> get foregroundMessages =>

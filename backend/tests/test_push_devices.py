@@ -8,12 +8,20 @@ from app.services.push_devices import eligible_push_devices
 from sqlalchemy import select
 
 
-def _body(installation_id="11111111-1111-4111-8111-111111111111", token="fcm-token-one"):
-    return {
+def _body(
+    installation_id="11111111-1111-4111-8111-111111111111",
+    token="fcm-token-one",
+    *,
+    fid=None,
+):
+    body = {
         "installation_id": installation_id,
         "fcm_token": token,
         "platform": "android",
     }
+    if fid is not None:
+        body["firebase_installation_id"] = fid
+    return body
 
 
 def _register(client, headers, body=None):
@@ -72,6 +80,26 @@ def test_staff_and_admin_can_register_without_exposing_the_token(client, test_us
         assert token not in caplog.text
 
 
+def test_fid_is_stored_separately_and_never_returned_or_logged(
+    client, auth_headers, db_session, caplog
+):
+    caplog.set_level(logging.DEBUG)
+    fid = "firebase-installation-id-private"
+    token = "separate-fcm-registration-token"
+    response = _register(client, auth_headers, _body(token=token, fid=fid))
+
+    assert response.status_code == 200
+    result = response.json()
+    device = db_session.scalar(select(PushDevice))
+    assert device.firebase_installation_id == fid
+    assert device.fcm_token == token
+    assert set(result) == {"id", "platform", "is_active", "last_registered_at"}
+    assert fid not in json.dumps(result)
+    assert token not in json.dumps(result)
+    assert fid not in caplog.text
+    assert token not in caplog.text
+
+
 def test_registration_cannot_select_an_arbitrary_user_or_session(client, auth_headers):
     assert _register(
         client,
@@ -97,6 +125,37 @@ def test_token_refresh_updates_the_existing_installation(client, auth_headers, d
     assert first.json()["id"] == refreshed.json()["id"]
     device = db_session.scalar(select(PushDevice))
     assert device.fcm_token == "new-token"
+    assert db_session.query(PushDevice).count() == 1
+
+
+def test_fid_change_updates_the_same_device_without_renaming_the_fcm_token(
+    client, auth_headers, db_session
+):
+    original = _register(
+        client,
+        auth_headers,
+        _body(token="still-an-fcm-token", fid="old-firebase-installation-id"),
+    )
+    changed = _register(
+        client,
+        auth_headers,
+        _body(token="still-an-fcm-token", fid="new-firebase-installation-id"),
+    )
+
+    device = db_session.scalar(select(PushDevice))
+    assert original.json()["id"] == changed.json()["id"] == device.id
+    assert device.firebase_installation_id == "new-firebase-installation-id"
+    assert device.fcm_token == "still-an-fcm-token"
+    assert db_session.query(PushDevice).count() == 1
+
+
+def test_fid_registration_is_idempotent(client, auth_headers, db_session):
+    request = _body(token="separate-fcm-token", fid="stable-firebase-installation-id")
+    first = _register(client, auth_headers, request)
+    second = _register(client, auth_headers, request)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
     assert db_session.query(PushDevice).count() == 1
 
 
@@ -143,6 +202,29 @@ def test_duplicate_fcm_token_moves_from_stale_installation_transactionally(
     assert devices[0].fcm_token == "same-token"
 
 
+def test_duplicate_fid_moves_from_stale_installation_transactionally(
+    client, auth_headers, db_session
+):
+    fid = "same-firebase-installation-id"
+    _register(client, auth_headers, _body(fid=fid))
+
+    response = _register(
+        client,
+        auth_headers,
+        _body(
+            installation_id="22222222-2222-4222-8222-222222222222",
+            token="new-fcm-token",
+            fid=fid,
+        ),
+    )
+
+    assert response.status_code == 200
+    devices = db_session.scalars(select(PushDevice)).all()
+    assert len(devices) == 1
+    assert devices[0].firebase_installation_id == fid
+    assert devices[0].fcm_token == "new-fcm-token"
+
+
 def test_unsupported_platform_and_extra_identity_fields_are_rejected(client, auth_headers):
     assert _register(
         client,
@@ -157,6 +239,14 @@ def test_invalid_registration_never_echoes_the_submitted_fcm_token(client, auth_
 
     assert response.status_code == 422
     assert token not in response.text
+    fid = "private-fid-value"
+    invalid_fid = _register(
+        client,
+        auth_headers,
+        _body(fid=f" {fid}"),
+    )
+    assert invalid_fid.status_code == 422
+    assert fid not in invalid_fid.text
     assert _register(
         client,
         auth_headers,

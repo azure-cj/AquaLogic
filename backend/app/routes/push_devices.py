@@ -28,17 +28,34 @@ def _upsert_registration(
         .where(PushDevice.installation_id == installation_id)
         .with_for_update()
     )
+    fid_device = None
+    if payload.firebase_installation_id is not None:
+        fid_device = db.scalar(
+            select(PushDevice)
+            .where(PushDevice.firebase_installation_id == payload.firebase_installation_id)
+            .with_for_update()
+        )
     token_device = db.scalar(
         select(PushDevice)
         .where(PushDevice.fcm_token == payload.fcm_token)
         .with_for_update()
     )
 
-    # FCM tokens identify one app installation. If a reinstall or stale local
-    # installation ID presents the same token, discard the old registration
-    # in this transaction before assigning the token to the current identity.
-    if token_device is not None and (device is None or token_device.id != device.id):
-        db.delete(token_device)
+    # Keep the stable AquaLogic installation row when it exists. If secure
+    # storage was recreated, a matching FID can recover the existing row. A
+    # token or FID presented by another row is moved transactionally so every
+    # identifier remains unique.
+    if device is None and fid_device is not None:
+        device = fid_device
+    duplicate_ids = {
+        candidate.id
+        for candidate in (fid_device, token_device)
+        if candidate is not None and (device is None or candidate.id != device.id)
+    }
+    if duplicate_ids:
+        db.execute(
+            PushDevice.__table__.delete().where(PushDevice.id.in_(duplicate_ids))
+        )
         db.flush()
 
     now = utc_now()
@@ -46,6 +63,7 @@ def _upsert_registration(
         device = PushDevice(
             installation_id=installation_id,
             fcm_token=payload.fcm_token,
+            firebase_installation_id=payload.firebase_installation_id,
             platform=payload.platform,
             user_id=current_user.id,
             auth_session_id=current_session.id,
@@ -55,7 +73,12 @@ def _upsert_registration(
         )
         db.add(device)
     else:
+        device.installation_id = installation_id
         device.fcm_token = payload.fcm_token
+        # Older app versions can refresh their distinct FCM token without
+        # clearing an FID already registered by a newer client.
+        if payload.firebase_installation_id is not None:
+            device.firebase_installation_id = payload.firebase_installation_id
         device.platform = payload.platform
         device.user_id = current_user.id
         device.auth_session_id = current_session.id

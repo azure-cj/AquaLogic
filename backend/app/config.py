@@ -13,6 +13,7 @@ MAX_ACCESS_TOKEN_MINUTES = 15
 MAX_REFRESH_SESSION_DAYS = 7
 DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS = 900
 DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
+DEFAULT_PUSH_DISPATCH_INTERVAL_SECONDS = 15
 
 
 def normalize_database_url(database_url: str) -> str:
@@ -68,6 +69,8 @@ class Settings:
     monitoring_incidents_enabled: bool
     monitoring_outage_grace_seconds: int
     monitoring_incident_check_interval_seconds: int
+    push_notifications_enabled: bool
+    push_dispatch_interval_seconds: int
 
     @property
     def is_production(self) -> bool:
@@ -118,6 +121,11 @@ def _validate_monitoring(settings: Settings) -> None:
         raise ValueError("MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS must be at least 1 second")
 
 
+def _validate_push(settings: Settings) -> None:
+    if settings.push_dispatch_interval_seconds < 5:
+        raise ValueError("PUSH_DISPATCH_INTERVAL_SECONDS must be at least 5 seconds")
+
+
 @lru_cache
 def get_settings() -> Settings:
     environment = os.getenv("ENVIRONMENT", "development").strip().lower()
@@ -158,8 +166,16 @@ def get_settings() -> Settings:
                 str(DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS),
             )
         ),
+        push_notifications_enabled=_parse_bool(os.getenv("PUSH_NOTIFICATIONS_ENABLED")),
+        push_dispatch_interval_seconds=int(
+            os.getenv(
+                "PUSH_DISPATCH_INTERVAL_SECONDS",
+                str(DEFAULT_PUSH_DISPATCH_INTERVAL_SECONDS),
+            )
+        ),
     )
     _validate_monitoring(settings)
+    _validate_push(settings)
     if settings.is_production:
         _validate_production(settings)
     return settings

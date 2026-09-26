@@ -27,12 +27,13 @@ milestones.
 ## 2026-09-26 — Bind Android push registrations to AquaLogic auth sessions
 
 **Decision:** Store one `PushDevice` per stable Android app-installation ID,
-with the full FCM token, backend user, and the `AuthSession` derived from the
-validated access token's `sid`. Keep installation IDs random and local to the
-app install. Registration is idempotent; token refresh updates the row and
-account switching rebinds it. Both registration and deactivation require the
-current staff/admin session, and recipient eligibility rechecks device, user,
-role, and session state.
+with the distinct Firebase Installation ID (FID), FCM token, backend user, and
+the `AuthSession` derived from the validated access token's `sid`. Keep AquaLogic
+installation IDs random and local to the app install. Registration is
+idempotent; identifier refresh updates the row and account switching rebinds
+it. Both registration and deactivation require the current staff/admin
+session, and recipient eligibility rechecks device, user, role, and session
+state.
 
 **Reason:** A failed mobile unregister request must not leave a revoked or
 expired session eligible for future delivery. The server remains authoritative
@@ -40,9 +41,40 @@ for identity and access, and Firebase remains a transport provider.
 
 **Consequences:** Migration `0015_authenticated_push_devices` and the
 `/push/devices/current` API establish the M6.2 registration boundary. Responses
-and logs omit the full FCM token. This milestone does not send messages; Firebase
-Admin, the outbox, alert/monitoring triggers, and notification navigation remain
-gated follow-up work.
+and application logs omit both Firebase identifiers. This milestone does not
+send messages; Firebase Admin, the outbox, alert/monitoring triggers, and
+notification navigation remain gated follow-up work.
+
+## 2026-09-26 — Keep push delivery behind a transactional outbox
+
+**Decision:** Add one uniquely keyed `PushNotificationEvent` and at most one
+`PushNotificationDelivery` per event/device. The source transaction creates
+the event and eligible delivery rows; a separate dispatcher rechecks the active
+device, admin/staff user, and bound live `AuthSession` immediately before send.
+The dispatcher records a lease before calling Firebase, performs network I/O
+outside the transaction, bounds transient retries, and deactivates only a
+matching current FID or legacy token after Firebase reports the recipient
+unregistered. Keep the Admin SDK lazy, target FIDs whenever they are registered,
+decode the Railway secret in memory only, and default push off. Alert and
+monitoring triggers remain M6.5.
+
+**Reason:** Operational state must not depend on FCM availability. Deterministic
+event keys and delivery uniqueness prevent ordinary duplicate work, while
+leases coordinate multiple workers without holding database transactions open
+during provider calls. Firebase credentials and tokens must stay outside logs,
+responses, and source files.
+
+**Consequences:** Migration `0016_push_notification_outbox` stores event and
+delivery state. PostgreSQL workers use `FOR UPDATE SKIP LOCKED`; SQLite tests
+use conditional updates. A timeout after FCM accepts a message is ambiguous, so
+the contract is idempotent event generation and duplicate-resistant delivery
+with at-least-once transport characteristics, not exact-once delivery. The
+updated Android client and M6.3 backend extend M6.2 registration with a distinct
+FID column while retaining FCM tokens for compatibility with older rows.
+Migration
+`0017_push_device_firebase_installation_id` preserves the deployed `0015`
+history and existing rows. M6.4 remains gated on a real production Android FID
+registration and healthy sender deployment.
 
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 
