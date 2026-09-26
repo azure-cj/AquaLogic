@@ -438,7 +438,7 @@ Last reviewed: 2026-09-26
   session. The query did not select the FCM token; M6.2's physical registration
   gate is complete.
 
-### M6.3 FID-compatible Firebase Admin sender and notification outbox — release verification pending
+### M6.3 FID-compatible Firebase Admin sender and notification outbox — deployed and healthy; M6.4 test push active
 
 - Added the official Firebase Admin Python SDK behind a lazy sender boundary.
   It targets `messaging.Message(fid=...)` when a row has a Firebase Installation
@@ -462,19 +462,29 @@ Last reviewed: 2026-09-26
   (182 passed), `flutter analyze` (no issues), clean SQLite upgrade to Alembic
   head `0017`, PostgreSQL offline SQL compilation through `0017`, focused
   sender/registration tests, secret-redaction checks, and `git diff --check`.
+- Production M6.3 checks passed on 2026-09-26 for commit `0496c348`: Railway
+  deployment succeeded, `/health` returned 200, Alembic reported head `0017`,
+  and OpenAPI exposed both registration routes with the FID only in the request
+  schema. The response schema omits both Firebase identifiers. With the human-
+  enabled push flag true, runtime startup logs contained no Firebase
+  configuration pause; a sanitized log scan found no credential markers or
+  long token-like values. Two active admin Android rows had a current bound
+  session and FID; the query selected only registration booleans and timestamps.
 - The Firebase credential was provisioned directly through Railway and is not
-  in the repository. After publication, verify Railway health, migration head,
-  and OpenAPI/startup; keep outbound push off unless a human enables it. Do not
-  start M6.4 until the sender is deployed and healthy and a real authenticated
-  Android installation has re-registered its FID.
+  in the repository. M6.4 is now active: a guarded CLI test command selects one
+  latest eligible admin FID installation, creates one idempotently keyed test
+  event/delivery, and sends through the normal sender. Automated CLI tests use
+  a fake sender. The production test push must be recorded as sent and its
+  receipt confirmed by a human before M6.4 passes.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
 real actuator commands/device connectivity, command reconciliation, and
 production equipment safety controls are not integrated in the Flutter client.
-M6.2 authenticated device registration is verified on Railway and a physical
-Android installation. M6.3 FID-compatible publication and live production FID
-re-registration are the current gates before M6.4.
+M6.2 authenticated device registration and M6.3 FID registration are verified
+on Railway and a physical Android installation. M6.4 is the active gate: one
+controlled test must be recorded as sent and the human must confirm receipt on
+the phone before M6.5 begins.
 
 ## Active follow-up work
 

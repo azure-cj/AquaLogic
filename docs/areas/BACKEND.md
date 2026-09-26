@@ -59,6 +59,9 @@ Last reviewed: 2026-09-26
   FID-first targeting and unregistered-recipient handling. Push is disabled by
   default; see the
   [Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup).
+- `backend/app/cli/send_test_push.py`: one-confirmation M6.4 operator command
+  that selects the latest eligible admin Android installation with an FID,
+  reserves one outbox delivery, and never accepts or prints Firebase identifiers.
 - `backend/app/models/security.py`: revocable auth sessions and the
   session-bound `PushDevice` registration model.
 - `backend/app/models/push_notification.py`: logical notification events and

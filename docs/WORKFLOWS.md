@@ -102,6 +102,26 @@ send the distinct FCM token for compatibility. The backend targets
 ([Firebase Admin send documentation](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk),
 [Firebase Installations guidance](https://firebase.google.com/docs/projects/manage-installations)).
 
+### M6.4 controlled production test push
+
+After a healthy Railway deployment, `PUSH_NOTIFICATIONS_ENABLED=true`, and a
+real admin Android installation is active, session-bound, and FID-registered,
+send one controlled test from `backend/`:
+
+```powershell
+python -m app.cli.send_test_push --request-id 32d3594c-7149-46ec-9f74-d33f214355c7 --confirm
+```
+
+Use a fresh UUID for the one planned test. If the command result is uncertain,
+reuse that same UUID; the command refuses to send again when its outbox event
+already exists. It selects only the most recently registered eligible admin
+Android installation with an FID, reserves one delivery, and uses the existing
+Firebase sender. It accepts no user ID, FID, or FCM token argument and prints
+only event/delivery/device IDs plus delivery status. The operator must confirm
+phone reception before M6.4 passes. Do not rerun with a new UUID to compensate
+for a failed or uncertain send; inspect the delivery record and diagnose the
+failed layer first.
+
 ### Web
 
 ```powershell
