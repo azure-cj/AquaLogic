@@ -438,11 +438,12 @@ Last reviewed: 2026-09-26
   session. The query did not select the FCM token; M6.2's physical registration
   gate is complete.
 
-### M6.3 FID-compatible Firebase Admin sender and notification outbox — deployed and healthy; M6.4 test push active
+### M6.3 FID-compatible Firebase Admin sender and notification outbox — deployed; FID-registration correction in progress
 
 - Added the official Firebase Admin Python SDK behind a lazy sender boundary.
-  It targets `messaging.Message(fid=...)` when a row has a Firebase Installation
-  ID and falls back to the retained FCM token only for legacy rows. Push defaults
+  It targets `messaging.Message(fid=...)` only after the Android client confirms
+  FCM registration for that FID; otherwise it uses a retained FCM token for
+  compatibility. Push defaults
   off; credentials are decoded only in memory from
   `FIREBASE_SERVICE_ACCOUNT_JSON_B64`, and sanitized errors never include SDK
   exception text, service-account material, FIDs, or FCM tokens.
@@ -455,14 +456,26 @@ Last reviewed: 2026-09-26
   matching-recipient deactivation.
 - Automated tests use a fake sender and SDK stubs; no live Firebase request is
   made. Alert and monitoring event triggers remain gated to M6.5.
-- Automated sender tests verify FID targeting, token fallback, separate FID
-  registration/change, idempotent upsert, and response/log redaction. They use
-  fake senders; no live Firebase message is sent.
-- Local M6.3 gates passed: backend full suite (189 passed), Flutter full suite
-  (182 passed), `flutter analyze` (no issues), clean SQLite upgrade to Alembic
-  head `0017`, PostgreSQL offline SQL compilation through `0017`, focused
-  sender/registration tests, secret-redaction checks, and `git diff --check`.
-- Production M6.3 checks passed on 2026-09-26 for commit `0496c348`: Railway
+- A first controlled production test on commit `61138e7` was definitively
+  rejected as an unregistered recipient. The matching device was deactivated
+  under the existing invalid-recipient policy. Safe status checks confirmed
+  one failed delivery, an active/unrevoked session at send time, and no stored
+  Firebase message ID; no FID or FCM token was queried. This showed that the
+  earlier client had fetched an FID without completing FCM's FID registration.
+- The correction adds migration `0018_push_device_fid_registration`, which
+  marks pre-existing rows as not FID-registered and allows an FCM token to be
+  absent for FID-only clients. Android now enables Firebase's FID mode and
+  awaits `FirebaseMessaging.register()` through a small native bridge before
+  FlutterFire reads or publishes the FID. `FirebaseInstallations.onIdChange`
+  repeats that registration flow. The sender uses FID targeting only when the
+  explicit registration marker is true; older clients retain token fallback.
+  Migration `0015` is unchanged.
+- Automated sender tests verify FID targeting only for registered FIDs, legacy
+  token fallback, registration and FID changes, idempotent upsert, and
+  response/log redaction. They use fake senders; no live Firebase message is
+  sent.
+- Production M6.3 checks passed on 2026-09-26 for commit
+  `61138e703b02ff656469546b970e88502601edfc`: Railway
   deployment succeeded, `/health` returned 200, Alembic reported head `0017`,
   and OpenAPI exposed both registration routes with the FID only in the request
   schema. The response schema omits both Firebase identifiers. With the human-
@@ -470,21 +483,29 @@ Last reviewed: 2026-09-26
   configuration pause; a sanitized log scan found no credential markers or
   long token-like values. Two active admin Android rows had a current bound
   session and FID; the query selected only registration booleans and timestamps.
+- The FID-registration correction's local gates passed: backend full suite
+  (199 passed), Flutter full suite (184 passed), `flutter analyze` (no issues),
+  isolated SQLite upgrade to Alembic head `0018`, and release APK build
+  (`mobile_app/build/app/outputs/flutter-apk/app-release.apk`). The only backend
+  warning is the expected deprecation warning on the retained token fallback.
 - The Firebase credential was provisioned directly through Railway and is not
-  in the repository. M6.4 is now active: a guarded CLI test command selects one
-  latest eligible admin FID installation, creates one idempotently keyed test
-  event/delivery, and sends through the normal sender. Automated CLI tests use
-  a fake sender. The production test push must be recorded as sent and its
-  receipt confirmed by a human before M6.4 passes.
+  in the repository. The FID-registration correction and migration `0018` are
+  being verified for release. M6.4 remains gated on deploying that correction,
+  rebuilding/installing the Android app, confirming an active session-bound
+  row whose FID-registration marker is true, and sending one new controlled
+  test that is recorded as sent. A human must confirm phone receipt before
+  M6.4 passes; M6.5 has not started.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
 real actuator commands/device connectivity, command reconciliation, and
 production equipment safety controls are not integrated in the Flutter client.
-M6.2 authenticated device registration and M6.3 FID registration are verified
-on Railway and a physical Android installation. M6.4 is the active gate: one
-controlled test must be recorded as sent and the human must confirm receipt on
-the phone before M6.5 begins.
+M6.2 authenticated device registration is verified on Railway and a physical
+Android installation. M6.3 sender startup is healthy, but the first controlled
+send exposed that the previous app had fetched an FID without registering it
+with FCM. The corrected FID registration has not yet been re-verified on a
+physical installation. M6.4 remains pending a successful controlled delivery
+and human phone-receipt confirmation; M6.5 has not started.
 
 ## Active follow-up work
 

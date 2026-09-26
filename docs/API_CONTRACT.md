@@ -45,7 +45,7 @@ route. These reads do not provide recent activity.
 | POST | `/auth/change-password` | Authenticated | Complete or change password |
 | POST | `/auth/setup-password` | Setup link | Atomically activate or reset an account from a one-time token |
 | GET/DELETE | `/auth/sessions` and `/auth/sessions/{session_id}` | Authenticated | List/revoke the caller's sessions |
-| PUT | `/push/devices/current` | Authenticated admin/staff | Register or refresh the Android installation, Firebase Installation ID, and FCM token; response omits both Firebase identifiers |
+| PUT | `/push/devices/current` | Authenticated admin/staff | Register or refresh an Android installation with an FID confirmed registered for FCM or a legacy FCM token; response omits both Firebase identifiers |
 | DELETE | `/push/devices/current/{installation_id}` | Authenticated admin/staff | Deactivate the current session's installation |
 
 User creation and reset responses return one-time `setup_url` values rather
@@ -55,19 +55,24 @@ minutes. Password changes and resets revoke existing sessions.
 ## Authenticated Android push-device registration
 
 `PUT /push/devices/current` requires a completed, authenticated `admin` or
-`staff` session. Its body contains `installation_id`, `fcm_token`, optional
-`firebase_installation_id`, and `platform: "android"`. The two Firebase values
-are distinct: the Firebase Installation ID (FID) identifies the Firebase app
-installation, while the FCM token is the separate messaging registration
-token. The backend derives `user_id` and `auth_session_id` from the validated
-bearer token's `sid`; caller-supplied identity/session fields are rejected. The
-response contains the registration ID, platform, active state, and registration
-time, and never returns either Firebase identifier.
+`staff` session. Its body contains `installation_id`, optional
+`firebase_installation_id`, `firebase_installation_id_registered` (default
+false), optional `fcm_token`, and `platform: "android"`. It must contain either
+a non-empty FCM token or an FID explicitly marked as registered with FCM. The
+two Firebase values are distinct: the Firebase Installation ID (FID) identifies
+the Firebase app installation, while the FCM token is a separate legacy
+messaging recipient. The backend derives `user_id` and `auth_session_id` from
+the validated bearer token's `sid`; caller-supplied identity/session fields are
+rejected. The response contains the registration ID, platform, active state,
+and registration time, and never returns either Firebase identifier.
 
 Registration upserts by stable app-installation UUID, then by FID if local
 secure storage has been recreated. A refreshed FID or FCM token updates the
 same row; signing in to another account rebinds the installation to the new
-user/session. Conflicting stale rows are moved transactionally so each
+user/session. A FID value alone is not proof of FCM registration: senders target
+it only when `firebase_installation_id_registered` is true. A client that
+cannot make that assertion must retain/send its distinct FCM token for
+compatibility. Conflicting stale rows are moved transactionally so each
 identifier remains unique. `DELETE /push/devices/current/{installation_id}`
 deactivates only a row owned by the
 current user and session and is safe to repeat. Session revocation, expiration,

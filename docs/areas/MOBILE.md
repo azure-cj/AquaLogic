@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M6.2 authenticated device registration verified on Railway and a physical Android installation; M6.3 FID-compatible sender publication and a real production FID re-registration gate are active; M6.4 test push, M6.5 event triggers, and M6.6 navigation remain pending
+Status: M6.2 authenticated device registration verified on Railway and a physical Android installation; M6.3 FID sender is deployed, with an Android FCM-registration correction in progress after the first production test was rejected; M6.4 remains gated on physical re-registration and one successful test push; M6.5 event triggers and M6.6 navigation have not started
 Last reviewed: 2026-09-26
 
 ## Read first
@@ -66,9 +66,10 @@ Still mock-backed / not implemented:
 - Recent activity and historical sensor readings/charts are not available from
   the mobile API slice. Tank Detail omits mock-only activity for live data.
 - Physical actuator commands and background refresh are not implemented.
-  M6.1 added the Flutter FCM client foundation, M6.2 authenticated token
-  registration is verified, and M6.3 backend sending waits for its credential
-  and production-deployment gate. Production alert/monitoring triggers remain
+  M6.1 added the Flutter FCM client foundation, M6.2 authenticated device
+  registration is verified, and M6.3 backend sending has deployed. The Android
+  FID-registration correction and M6.4 physical send gate remain active.
+  Production alert/monitoring triggers remain
   deferred to M6.5. Species and read-only equipment use Railway repositories
   under M5, described below.
 
@@ -396,34 +397,37 @@ Console lifecycle test remains for the developer to run manually.
 
 Production composition starts one registration coordinator alongside the M6.1
 FCM service and API auth service. It registers only after auth restore/login has
-established a completed `admin` or `staff` session and an FCM token is
-available. Later FID/token refreshes and a newly established session use the
-same idempotent registration path. Registration errors are contained and
-retried with bounded backoff; they do not change authentication state or block
-app startup.
+established a completed `admin` or `staff` session and either an FID or a legacy
+FCM token is available. Registration errors are contained and retried with
+bounded backoff; they do not change authentication state or block app startup.
 
 The client creates one random UUID per app installation, stores it in Android
-secure storage, and never reads hardware identifiers. It obtains the separate
-Firebase Installation ID with `FirebaseInstallations.instance.getId()` and
-listens to `onIdChange` for rotations. It sends the local UUID, Firebase
-Installation ID, FCM registration token, and Android platform through the
-shared authenticated `ApiClient` to `PUT /push/devices/current`. The backend
-derives both user and `AuthSession` from the validated access JWT. FID or token
-refresh updates the existing installation; signing into another account
-rebinds it. Responses and application logs contain neither Firebase identifier.
-Normal logout attempts `DELETE /push/devices/current/{installation_id}` before
-revoking the backend session; logout proceeds if this request fails.
+secure storage, and never reads hardware identifiers. Android enables Firebase
+Messaging's FID registration mode and awaits native
+`FirebaseMessaging.register()` before FlutterFire reads the FID through
+`FirebaseInstallations.instance.getId()`. It listens to the supported
+`onIdChange` stream and repeats registration before publishing a changed FID.
+The authenticated request sends the local UUID, separate FID, Android platform,
+and `firebase_installation_id_registered: true`; Android does not call the
+legacy FCM token getter in FID mode. The request still supports an optional
+distinct FCM token for older clients. The backend derives both user and
+`AuthSession` from the validated access JWT. FID or token refresh updates the
+existing installation; signing into another account rebinds it. Responses and
+application logs contain neither Firebase identifier. Normal logout attempts
+`DELETE /push/devices/current/{installation_id}` before revoking the backend
+session; logout proceeds if this request fails.
 
 Migration `0015_authenticated_push_devices` adds session-bound registrations.
 Migration `0017_push_device_firebase_installation_id` adds a nullable unique
-FID column without editing `0015` or removing the existing production row. The
-backend eligibility query excludes inactive devices/accounts, unsupported
+FID column without editing `0015` or removing the existing production row.
+Migration `0018_push_device_fid_registration` distinguishes an FID fetched by
+the app from one registered with FCM and permits FID-only requests. Pre-existing
+rows stay on the retained-token compatibility path until the current app
+confirms FID registration. The sender targets `messaging.Message(fid=...)` only
+when that marker is true; otherwise it uses the retained FCM token. The backend
+eligibility query continues to exclude inactive devices/accounts, unsupported
 roles, and expired or revoked sessions even when deactivation did not reach the
-server. Automated tests use fake HTTP, token, and registration boundaries. The
-Railway M6.2 API deployment is live: `/health` is healthy, both registration
-routes appear in OpenAPI, and the response schema omits both Firebase
-identifiers. On 2026-09-26, a human confirmed one active Android row with a
-non-null bound session; the query did not select either Firebase identifier.
+server. API responses omit both Firebase identifiers.
 
 ## M6.3 Firebase Admin sender and outbox
 
@@ -432,9 +436,10 @@ payloads, a transactional notification-event enqueue helper, and per-device
 delivery records. The dispatcher runs independently from sensor and actuator
 maintenance, claims work with a database lease, rechecks user/session/device
 eligibility immediately before sending, and retries transient failures with a
-bounded backoff. The sender uses `messaging.Message(fid=...)` for rows with an
-FID and falls back to the retained FCM token only for older rows. An
-unregistered recipient deactivates only the matching current identifier.
+bounded backoff. The sender uses `messaging.Message(fid=...)` only for rows
+whose explicit FCM-registration marker is true and falls back to the retained
+FCM token for compatibility. An unregistered recipient deactivates only the
+matching current identifier.
 Global credential errors keep deliveries retryable and never deactivate
 devices. No alert or monitoring source code enqueues these events yet; those
 triggers remain M6.5. A missing or invalid global credential is logged without
@@ -444,10 +449,12 @@ dispatcher until Railway restarts with corrected configuration.
 `PUSH_NOTIFICATIONS_ENABLED` defaults to false. Firebase credentials belong in
 Railway's `FIREBASE_SERVICE_ACCOUNT_JSON_B64` secret, never in the repository,
 Flutter, or `google-services.json`. Credential provisioning was handled
-directly in Railway and is not represented in source control. M6.4 remains
-gated on a healthy M6.3 deployment and one real production Android installation
-registering its FID. Outbound push remains off until a human enables it after
-the deployment checks. See the
+directly in Railway and is not represented in source control. The first
+controlled production test was rejected as an unregistered recipient, which
+showed that storing an FID alone did not prove FCM had registered it. The
+corrected Android registration and migration `0018` are in progress. M6.4
+remains gated on an updated physical Android installation registering its FID,
+one successful controlled test, and human receipt confirmation. See the
 [Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup).
 
 ## Remaining work after M6.2 registration
@@ -460,9 +467,9 @@ The following remain outside the completed M5 integration:
 - A backend recent-activity source and historical sensor readings/charts.
 - Real actuator commands and production equipment safety controls remain
   disabled in Flutter.
-- The M6.3 live sender deployment and authenticated FID re-registration gates
-  must pass before M6.4; physical test push, event triggers, and notification
-  tap navigation are the later M6.4–M6.6 gates. M6.1 provides the client-side
+- The M6.3 FID-registration correction and authenticated physical re-registration
+  gates must pass before M6.4; physical test push, event triggers, and
+  notification tap navigation are the later M6.4–M6.6 gates. M6.1 provides the client-side
   Firebase initialization, permission, token lifecycle, foreground display,
   background handler registration, and open-event capture; M6.2 provides
   authenticated device registration, extended with FIDs in M6.3.

@@ -357,7 +357,10 @@ def _dispatch_claim(
         data = dict(event.payload)
         device = eligible_push_device(db, device_id, now=now)
         firebase_installation_id = (
-            device.firebase_installation_id if device is not None else None
+            device.firebase_installation_id
+            if device is not None
+            and device.firebase_installation_id_registered
+            else None
         )
         fcm_token = (
             device.fcm_token
@@ -389,11 +392,17 @@ def _dispatch_claim(
                 else PushDevice.fcm_token
             )
             recipient = firebase_installation_id or fcm_token
+            recipient_filter = (
+                PushDevice.firebase_installation_id_registered.is_(True)
+                if firebase_installation_id is not None
+                else PushDevice.firebase_installation_id_registered.is_(False)
+            )
             db.execute(
                 update(PushDevice)
                 .where(
                     PushDevice.id == device_id,
                     recipient_column == recipient,
+                    recipient_filter,
                     PushDevice.is_active.is_(True),
                 )
                 .values(is_active=False, disabled_at=now, updated_at=now)

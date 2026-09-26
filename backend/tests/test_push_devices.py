@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import timedelta
 
+import pytest
+
 from app.models import AuthSession, PushDevice, User
 from app.security import get_password_hash, utc_now
 from app.services.push_devices import eligible_push_devices
@@ -13,6 +15,7 @@ def _body(
     token="fcm-token-one",
     *,
     fid=None,
+    fid_registered=False,
 ):
     body = {
         "installation_id": installation_id,
@@ -21,6 +24,8 @@ def _body(
     }
     if fid is not None:
         body["firebase_installation_id"] = fid
+    if fid_registered:
+        body["firebase_installation_id_registered"] = True
     return body
 
 
@@ -93,6 +98,7 @@ def test_fid_is_stored_separately_and_never_returned_or_logged(
     device = db_session.scalar(select(PushDevice))
     assert device.firebase_installation_id == fid
     assert device.fcm_token == token
+    assert device.firebase_installation_id_registered is False
     assert set(result) == {"id", "platform", "is_active", "last_registered_at"}
     assert fid not in json.dumps(result)
     assert token not in json.dumps(result)
@@ -134,29 +140,86 @@ def test_fid_change_updates_the_same_device_without_renaming_the_fcm_token(
     original = _register(
         client,
         auth_headers,
-        _body(token="still-an-fcm-token", fid="old-firebase-installation-id"),
+        _body(
+            token="still-an-fcm-token",
+            fid="old-firebase-installation-id",
+            fid_registered=True,
+        ),
     )
     changed = _register(
         client,
         auth_headers,
-        _body(token="still-an-fcm-token", fid="new-firebase-installation-id"),
+        _body(
+            token="still-an-fcm-token",
+            fid="new-firebase-installation-id",
+            fid_registered=True,
+        ),
     )
 
     device = db_session.scalar(select(PushDevice))
     assert original.json()["id"] == changed.json()["id"] == device.id
     assert device.firebase_installation_id == "new-firebase-installation-id"
     assert device.fcm_token == "still-an-fcm-token"
+    assert device.firebase_installation_id_registered is True
     assert db_session.query(PushDevice).count() == 1
 
 
 def test_fid_registration_is_idempotent(client, auth_headers, db_session):
-    request = _body(token="separate-fcm-token", fid="stable-firebase-installation-id")
+    request = _body(
+        token=None,
+        fid="stable-firebase-installation-id",
+        fid_registered=True,
+    )
     first = _register(client, auth_headers, request)
     second = _register(client, auth_headers, request)
 
     assert first.status_code == second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
     assert db_session.query(PushDevice).count() == 1
+    device = db_session.scalar(select(PushDevice))
+    assert device.fcm_token is None
+    assert device.firebase_installation_id_registered is True
+
+
+def test_old_client_refresh_falls_back_to_token_without_erasing_fid(
+    client, auth_headers, db_session
+):
+    _register(
+        client,
+        auth_headers,
+        _body(token=None, fid="registered-fid", fid_registered=True),
+    )
+
+    refreshed = _register(client, auth_headers, _body(token="legacy-refresh-token"))
+
+    device = db_session.scalar(select(PushDevice))
+    assert refreshed.status_code == 200
+    assert device.fcm_token == "legacy-refresh-token"
+    assert device.firebase_installation_id == "registered-fid"
+    assert device.firebase_installation_id_registered is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"fcm_token": None},
+        {
+            "fcm_token": None,
+            "firebase_installation_id": "unregistered-fid",
+        },
+        {
+            "fcm_token": "legacy-token",
+            "firebase_installation_id_registered": True,
+        },
+    ],
+)
+def test_registration_requires_a_deliverable_recipient(client, auth_headers, payload):
+    response = _register(
+        client,
+        auth_headers,
+        {**_body(), **payload},
+    )
+    assert response.status_code == 422
 
 
 def test_installation_switches_safely_to_another_authenticated_account(

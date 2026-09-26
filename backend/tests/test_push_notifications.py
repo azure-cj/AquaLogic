@@ -63,7 +63,13 @@ def _factory(db_session):
 
 
 def _registered_device(
-    client, auth_headers, db_session, *, token="test-fcm-token", fid=None
+    client,
+    auth_headers,
+    db_session,
+    *,
+    token="test-fcm-token",
+    fid=None,
+    fid_registered=False,
 ):
     payload = {
         "installation_id": "11111111-1111-4111-8111-111111111111",
@@ -72,6 +78,8 @@ def _registered_device(
     }
     if fid is not None:
         payload["firebase_installation_id"] = fid
+    if fid_registered:
+        payload["firebase_installation_id_registered"] = True
     response = client.put(
         "/push/devices/current",
         headers=auth_headers,
@@ -207,6 +215,7 @@ def test_dispatch_prefers_fid_when_both_distinct_identifiers_are_registered(
         db_session,
         token="separate-fcm-registration-token",
         fid="preferred-firebase-installation-id",
+        fid_registered=True,
     )
     tank = _tank(db_session)
     _enqueue(db_session, tank)
@@ -225,6 +234,33 @@ def test_dispatch_prefers_fid_when_both_distinct_identifiers_are_registered(
     assert sender.calls[0][1] is None
 
 
+def test_unregistered_fid_uses_retained_token_during_migration(
+    client, auth_headers, db_session
+):
+    device = _registered_device(
+        client,
+        auth_headers,
+        db_session,
+        token="retained-compatible-token",
+        fid="fetched-but-not-fcm-registered-fid",
+    )
+    tank = _tank(db_session)
+    _enqueue(db_session, tank)
+    db_session.commit()
+    sender = FakePushSender()
+    dispatcher = PushDispatcher(
+        enabled=True,
+        interval_seconds=15,
+        session_factory=_factory(db_session),
+        sender=sender,
+    )
+
+    dispatcher.run_once(now=utc_now() + timedelta(seconds=1))
+
+    assert sender.calls[0][0] is None
+    assert sender.calls[0][1] == device.fcm_token
+
+
 def test_unregistered_fid_deactivates_only_the_matching_current_fid(
     client, auth_headers, db_session
 ):
@@ -233,6 +269,7 @@ def test_unregistered_fid_deactivates_only_the_matching_current_fid(
         auth_headers,
         db_session,
         fid="targeted-firebase-installation-id",
+        fid_registered=True,
     )
     tank = _tank(db_session)
     _enqueue(db_session, tank)

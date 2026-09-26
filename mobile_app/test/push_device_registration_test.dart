@@ -102,13 +102,15 @@ class _Registration {
   const _Registration(
     this.installationId,
     this.firebaseInstallationId,
+    this.firebaseInstallationIdRegistered,
     this.fcmToken,
     this.platform,
   );
 
   final String installationId;
   final String? firebaseInstallationId;
-  final String fcmToken;
+  final bool firebaseInstallationIdRegistered;
+  final String? fcmToken;
   final String platform;
 }
 
@@ -124,12 +126,19 @@ class _FakeRegistrationRepository implements PushDeviceRegistrationRepository {
   Future<void> register({
     required String installationId,
     required String? firebaseInstallationId,
-    required String fcmToken,
+    required bool firebaseInstallationIdRegistered,
+    required String? fcmToken,
     required String platform,
   }) async {
     operations.add('register');
     registrations.add(
-      _Registration(installationId, firebaseInstallationId, fcmToken, platform),
+      _Registration(
+        installationId,
+        firebaseInstallationId,
+        firebaseInstallationIdRegistered,
+        fcmToken,
+        platform,
+      ),
     );
     if (failuresRemaining > 0) {
       failuresRemaining--;
@@ -329,6 +338,24 @@ void main() {
     expect(repository.registrations.single.fcmToken, 'late-fcm-token');
   });
 
+  test('a FID-registered installation can register without an FCM token', () async {
+    final value = harness((request) async {
+      if (request.url.path == ApiAuthService.loginPath) return _tokenResponse();
+      return _response(404, <String, Object?>{'detail': 'not found'});
+    });
+    final fakePush = push(firebaseInstallationId: 'registered-fid');
+    final repository = _FakeRegistrationRepository();
+    coordinator(auth: value.auth, push: fakePush, repository: repository);
+
+    await value.auth.signIn(email: 'aqua@example.test', password: 'password');
+    await _settle();
+
+    expect(repository.registrations, hasLength(1));
+    expect(repository.registrations.single.firebaseInstallationId, 'registered-fid');
+    expect(repository.registrations.single.firebaseInstallationIdRegistered, isTrue);
+    expect(repository.registrations.single.fcmToken, isNull);
+  });
+
   test('FCM token refresh uses the same installation registration', () async {
     final value = harness((request) async {
       if (request.url.path == ApiAuthService.loginPath) return _tokenResponse();
@@ -384,6 +411,12 @@ void main() {
         'stable-fcm-registration-token',
         'stable-fcm-registration-token',
       ]);
+      expect(
+        repository.registrations.map(
+          (row) => row.firebaseInstallationIdRegistered,
+        ),
+        <bool>[true, true],
+      );
     },
   );
 
@@ -505,6 +538,7 @@ void main() {
       await repository.register(
         installationId: '11111111-1111-4111-8111-111111111111',
         firebaseInstallationId: 'distinct-firebase-installation-id',
+        firebaseInstallationIdRegistered: true,
         fcmToken: 'private-fcm-token',
         platform: 'android',
       );
@@ -515,6 +549,7 @@ void main() {
       expect(jsonDecode(requests[0].body), <String, Object?>{
         'installation_id': '11111111-1111-4111-8111-111111111111',
         'firebase_installation_id': 'distinct-firebase-installation-id',
+        'firebase_installation_id_registered': true,
         'fcm_token': 'private-fcm-token',
         'platform': 'android',
       });

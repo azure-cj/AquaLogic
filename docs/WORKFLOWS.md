@@ -91,21 +91,28 @@ as this server credential. Push remains disabled unless
    updated Android app and confirm an authenticated row has a FID without
    selecting or printing either Firebase identifier. Only a human should enable
    outbound push after these checks; do not start M6.4 until the deployed sender
-   is healthy and a real Android installation has registered its FID.
+   is healthy and a real Android installation has completed FCM registration for
+   its FID. A non-null FID alone is insufficient; verify only the boolean
+   `firebase_installation_id_registered` together with active/session-bound
+   status, without selecting either Firebase identifier.
 
 Never use an FCM legacy server key or the Firebase client configuration file as
 the backend credential. The Flutter client obtains FIDs through the official
-`firebase_app_installations` plugin and observes `onIdChange`; it continues to
-send the distinct FCM token for compatibility. The backend targets
-`messaging.Message(fid=...)` whenever the row has an FID. The deprecated
-`Message.token` target remains a compatibility fallback for pre-FID rows only
+`firebase_app_installations` plugin and observes `onIdChange`; Android awaits
+Firebase Messaging registration before publishing the FID. It can also send a
+distinct FCM token for older-client compatibility. The backend targets
+`messaging.Message(fid=...)` only when the row's explicit FCM-registration
+marker is true; otherwise a retained FCM token is the compatibility fallback.
+The deprecated `Message.token` target remains a compatibility fallback for
+token-backed rows only
 ([Firebase Admin send documentation](https://firebase.google.com/docs/cloud-messaging/send/admin-sdk),
 [Firebase Installations guidance](https://firebase.google.com/docs/projects/manage-installations)).
 
 ### M6.4 controlled production test push
 
 After a healthy Railway deployment, `PUSH_NOTIFICATIONS_ENABLED=true`, and a
-real admin Android installation is active, session-bound, and FID-registered,
+real admin Android installation is active, session-bound, and has completed
+FCM registration for its FID,
 send one controlled test from `backend/`:
 
 ```powershell
@@ -115,12 +122,13 @@ python -m app.cli.send_test_push --request-id 32d3594c-7149-46ec-9f74-d33f214355
 Use a fresh UUID for the one planned test. If the command result is uncertain,
 reuse that same UUID; the command refuses to send again when its outbox event
 already exists. It selects only the most recently registered eligible admin
-Android installation with an FID, reserves one delivery, and uses the existing
-Firebase sender. It accepts no user ID, FID, or FCM token argument and prints
-only event/delivery/device IDs plus delivery status. The operator must confirm
-phone reception before M6.4 passes. Do not rerun with a new UUID to compensate
-for a failed or uncertain send; inspect the delivery record and diagnose the
-failed layer first.
+Android installation whose FID-registration marker is true, reserves one
+delivery, and uses the existing Firebase sender. It accepts no user ID, FID, or
+FCM token argument and prints only event/delivery/device IDs plus delivery
+status. The operator must confirm phone reception before M6.4 passes. If a
+delivery definitively fails, inspect its safe status and fix the cause before
+using a fresh UUID for a new controlled attempt; do not use a new UUID to
+compensate for an uncertain send.
 
 ### Web
 

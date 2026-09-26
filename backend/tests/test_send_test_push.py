@@ -48,6 +48,7 @@ def _register_device(client, auth_headers, db_session, *, fid, token):
         json={
             "installation_id": "11111111-1111-4111-8111-111111111111",
             "firebase_installation_id": fid,
+            "firebase_installation_id_registered": fid is not None,
             "fcm_token": token,
             "platform": "android",
         },

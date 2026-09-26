@@ -5,6 +5,7 @@ import 'package:firebase_app_installations/firebase_app_installations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -16,6 +17,7 @@ const aqualogicAlertsChannelName = 'AquaLogic Alerts';
 const aqualogicAlertsChannelDescription =
     'Water-quality and aquarium monitoring alerts.';
 const aqualogicNotificationIcon = 'ic_stat_aqualogic';
+const _fidRegistrationChannel = MethodChannel('com.aqualogic.mobile/fcm_fid');
 
 @pragma('vm:entry-point')
 Future<void> aquaLogicFirebaseMessagingBackgroundHandler(
@@ -98,7 +100,20 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
   }
 
   @override
-  Future<String?> getToken() => FirebaseMessaging.instance.getToken();
+  Future<String?> getToken() {
+    // Android is configured for FID-based FCM registration. The Android SDK's
+    // legacy getToken() API is unavailable in this mode.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return Future<String?>.value();
+    }
+    return FirebaseMessaging.instance.getToken();
+  }
+
+  @override
+  Future<void> registerFidForMessaging() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    await _fidRegistrationChannel.invokeMethod<void>('register');
+  }
 
   @override
   Future<String> getFirebaseInstallationId() =>

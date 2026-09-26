@@ -22,6 +22,7 @@ abstract interface class PushNotificationPlatform {
   void registerBackgroundHandler();
   Future<void> initializeLocalNotifications();
   Future<PushPermissionStatus> requestPermission();
+  Future<void> registerFidForMessaging();
   Future<String?> getToken();
   Future<String> getFirebaseInstallationId();
 
@@ -60,6 +61,7 @@ class FirebasePushNotificationService implements PushNotificationService {
   Future<void>? _initialization;
   String? _currentToken;
   String? _currentFirebaseInstallationId;
+  Future<void>? _firebaseInstallationRegistration;
   var _isAvailable = false;
   var _localNotificationsAvailable = false;
   var _permissionStatus = PushPermissionStatus.unknown;
@@ -113,15 +115,6 @@ class FirebasePushNotificationService implements PushNotificationService {
 
     _listenForMessages();
     try {
-      final installationId = await platform.getFirebaseInstallationId();
-      if (_currentFirebaseInstallationId == null) {
-        _setFirebaseInstallationId(installationId);
-      }
-    } catch (error) {
-      _debugFailure('Firebase Installation ID request', error);
-    }
-
-    try {
       await platform.initializeLocalNotifications();
       _localNotificationsAvailable = true;
       final pendingMessages = List<PushNotificationMessage>.of(
@@ -155,6 +148,8 @@ class FirebasePushNotificationService implements PushNotificationService {
       _debugFailure('Notification permission request', error);
     }
 
+    await _registerAndPublishFirebaseInstallationId();
+
     try {
       _setToken(await platform.getToken());
     } catch (error) {
@@ -165,7 +160,7 @@ class FirebasePushNotificationService implements PushNotificationService {
   void _listenForMessages() {
     _subscriptions.add(
       platform.firebaseInstallationIdRefreshes.listen(
-        _setFirebaseInstallationId,
+        (_) => unawaited(_registerAndPublishFirebaseInstallationId()),
         onError: (Object error) =>
             _debugFailure('Firebase Installation ID updates', error),
       ),
@@ -197,6 +192,30 @@ class FirebasePushNotificationService implements PushNotificationService {
             _debugFailure('Local notification open event', error),
       ),
     );
+  }
+
+  Future<void> _registerAndPublishFirebaseInstallationId() {
+    final current = _firebaseInstallationRegistration;
+    if (current != null) return current;
+
+    final registration = _completeFirebaseInstallationRegistration();
+    _firebaseInstallationRegistration = registration;
+    return registration.whenComplete(() {
+      if (identical(_firebaseInstallationRegistration, registration)) {
+        _firebaseInstallationRegistration = null;
+      }
+    });
+  }
+
+  Future<void> _completeFirebaseInstallationRegistration() async {
+    try {
+      await platform.registerFidForMessaging();
+      final installationId = await platform.getFirebaseInstallationId();
+      _setFirebaseInstallationId(installationId);
+    } catch (error) {
+      _currentFirebaseInstallationId = null;
+      _debugFailure('Firebase Installation ID registration', error);
+    }
   }
 
   Future<void> _captureInitialOpen(

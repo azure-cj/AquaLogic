@@ -43,10 +43,15 @@ class PushDevice(Base):
         ForeignKey("auth_sessions.id", ondelete="CASCADE"), index=True, nullable=False
     )
     installation_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    # Stored only for Firebase delivery. API responses and ordinary logs omit it.
-    fcm_token: Mapped[str] = mapped_column(String(4096), nullable=False)
+    # Stored only for legacy Firebase delivery. API responses and ordinary logs omit it.
+    fcm_token: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     # Firebase Installation ID (FID), a separate identifier from the FCM token.
     firebase_installation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # True only after the client completed FCM's FID registration flow. Older
+    # clients uploaded a FID without registering that FID as an FCM recipient.
+    firebase_installation_id_registered: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     platform: Mapped[str] = mapped_column(String(16), nullable=False, default="android")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(

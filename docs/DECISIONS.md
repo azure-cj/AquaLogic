@@ -76,6 +76,28 @@ Migration
 history and existing rows. M6.4 remains gated on a real production Android FID
 registration and healthy sender deployment.
 
+## 2026-09-26 — Require FCM registration before targeting an Android FID
+
+**Decision:** Enable Android Firebase Messaging's FID registration mode and
+await the native `FirebaseMessaging.register()` call before FlutterFire reads
+or publishes the Firebase Installation ID. Continue to obtain FIDs and observe
+rotations through `firebase_app_installations`. Store an explicit
+`firebase_installation_id_registered` marker and allow the legacy FCM token to
+be absent for FID-only clients. Target `Message(fid=...)` only for rows with
+that marker; use a retained FCM token as a compatibility fallback. Preserve
+deployed migration `0015` and add a forward migration.
+
+**Reason:** A stored FID does not prove that Firebase Cloud Messaging has
+registered it as a message recipient. The first controlled production send was
+rejected as an unregistered recipient, so the backend must distinguish a FID
+that was merely fetched from one registered with FCM.
+
+**Consequences:** Migration `0018_push_device_fid_registration` keeps existing
+rows on the token fallback until a corrected Android client registers again.
+Registration/session eligibility, logout deactivation, and response/log
+redaction remain in force. The physical M6.4 gate must be repeated with the
+updated APK before event triggers in M6.5 begin.
+
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 
 **Decision:** M5 reuses the shared authenticated `ApiClient` for `/fish`,

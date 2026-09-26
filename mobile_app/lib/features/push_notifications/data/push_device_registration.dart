@@ -12,7 +12,8 @@ abstract interface class PushDeviceRegistrationRepository {
   Future<void> register({
     required String installationId,
     required String? firebaseInstallationId,
-    required String fcmToken,
+    required bool firebaseInstallationIdRegistered,
+    required String? fcmToken,
     required String platform,
   });
 
@@ -30,7 +31,8 @@ class ApiPushDeviceRegistrationRepository
   Future<void> register({
     required String installationId,
     required String? firebaseInstallationId,
-    required String fcmToken,
+    required bool firebaseInstallationIdRegistered,
+    required String? fcmToken,
     required String platform,
   }) async {
     await apiClient.put(
@@ -39,6 +41,8 @@ class ApiPushDeviceRegistrationRepository
       body: <String, Object?>{
         'installation_id': installationId,
         'firebase_installation_id': firebaseInstallationId,
+        'firebase_installation_id_registered':
+            firebaseInstallationIdRegistered,
         'fcm_token': fcmToken,
         'platform': platform,
       },
@@ -116,7 +120,7 @@ typedef _RegistrationKey = ({
   String userId,
   int sessionGeneration,
   String? firebaseInstallationId,
-  String token,
+  String? token,
 });
 
 /// Synchronizes an available FCM token with the currently authenticated
@@ -229,6 +233,8 @@ class PushDeviceRegistrationCoordinator {
         await repository.register(
           installationId: installationId,
           firebaseInstallationId: key.firebaseInstallationId,
+          firebaseInstallationIdRegistered:
+              key.firebaseInstallationId != null,
           fcmToken: key.token,
           platform: 'android',
         );
@@ -268,17 +274,20 @@ class PushDeviceRegistrationCoordinator {
   _RegistrationKey? _currentKey() {
     final user = authService.currentUser;
     final token = pushNotificationService.currentToken;
+    final firebaseInstallationId =
+        pushNotificationService.currentFirebaseInstallationId;
+    final hasToken = token != null && token.isNotEmpty;
+    final hasRegisteredFid =
+        firebaseInstallationId != null && firebaseInstallationId.isNotEmpty;
     if (authService.status != AuthStatus.authenticated ||
         user == null ||
-        token == null ||
-        token.isEmpty) {
+        (!hasToken && !hasRegisteredFid)) {
       return null;
     }
     return (
       userId: user.id,
       sessionGeneration: authService.sessionGeneration,
-      firebaseInstallationId:
-          pushNotificationService.currentFirebaseInstallationId,
+      firebaseInstallationId: firebaseInstallationId,
       token: token,
     );
   }

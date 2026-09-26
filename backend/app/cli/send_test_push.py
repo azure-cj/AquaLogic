@@ -57,6 +57,7 @@ def _latest_eligible_admin_device_id(db: Session, *, now: datetime) -> int | Non
             PushDevice.is_active.is_(True),
             PushDevice.platform == "android",
             PushDevice.firebase_installation_id.is_not(None),
+            PushDevice.firebase_installation_id_registered.is_(True),
             User.is_active.is_(True),
             User.role == "admin",
             AuthSession.user_id == PushDevice.user_id,

@@ -35,10 +35,14 @@ def _upsert_registration(
             .where(PushDevice.firebase_installation_id == payload.firebase_installation_id)
             .with_for_update()
         )
-    token_device = db.scalar(
-        select(PushDevice)
-        .where(PushDevice.fcm_token == payload.fcm_token)
-        .with_for_update()
+    token_device = (
+        db.scalar(
+            select(PushDevice)
+            .where(PushDevice.fcm_token == payload.fcm_token)
+            .with_for_update()
+        )
+        if payload.fcm_token is not None
+        else None
     )
 
     # Keep the stable AquaLogic installation row when it exists. If secure
@@ -64,6 +68,9 @@ def _upsert_registration(
             installation_id=installation_id,
             fcm_token=payload.fcm_token,
             firebase_installation_id=payload.firebase_installation_id,
+            firebase_installation_id_registered=(
+                payload.firebase_installation_id_registered
+            ),
             platform=payload.platform,
             user_id=current_user.id,
             auth_session_id=current_session.id,
@@ -75,10 +82,24 @@ def _upsert_registration(
     else:
         device.installation_id = installation_id
         device.fcm_token = payload.fcm_token
-        # Older app versions can refresh their distinct FCM token without
-        # clearing an FID already registered by a newer client.
+        # An older client can refresh its distinct FCM token while the
+        # previously stored FID remains available for audit/next registration.
+        # It cannot prove that the FID is still registered with FCM, so use the
+        # token path until a current client completes FID registration again.
         if payload.firebase_installation_id is not None:
+            fid_is_unchanged = (
+                device.firebase_installation_id == payload.firebase_installation_id
+            )
             device.firebase_installation_id = payload.firebase_installation_id
+            device.firebase_installation_id_registered = (
+                payload.firebase_installation_id_registered
+                or (
+                    fid_is_unchanged
+                    and device.firebase_installation_id_registered
+                )
+            )
+        else:
+            device.firebase_installation_id_registered = False
         device.platform = payload.platform
         device.user_id = current_user.id
         device.auth_session_id = current_session.id

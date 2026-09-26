@@ -9,7 +9,7 @@ Last reviewed: 2026-09-26
 | --- | --- | --- |
 | User | Staff identity, role, active state, and password-change state | Resolves alerts; admin role controls staff and threshold writes |
 | AuthSession | Revocable authenticated session | Belongs to a user; access JWT `sid` identifies the session |
-| PushDevice | Android Firebase messaging registration for one app installation | Unique AquaLogic installation ID, optional Firebase Installation ID (FID), and separate FCM token; bound to the registering user and `AuthSession` |
+| PushDevice | Android Firebase messaging registration for one app installation | Unique AquaLogic installation ID, optional FID with an explicit FCM-registration marker, and optional separate legacy FCM token; bound to the registering user and `AuthSession` |
 | PushNotificationEvent | One logical operational notification in the backend outbox | Unique deterministic `event_key`; optional tank reference; versioned string-only FCM data |
 | PushNotificationDelivery | Delivery state for one event and registered device | Unique `(event_id, push_device_id)`; tracks retries, lease, sanitized error code, and result |
 | Customer | Customer or account associated with managed tanks | Owns zero or more tanks |
@@ -146,8 +146,9 @@ no manual resolution action or external notification.
 - Only active users can authenticate.
 - Users with temporary passwords must complete password change before accessing
   the main staff dashboard.
-- A `PushDevice` installation belongs to one current user/session and its FCM
-  token belongs to one registration. Only active devices for active `admin` or
+- A `PushDevice` installation belongs to one current user/session. Its FID and
+  optional legacy FCM token are separate identifiers; the FID is a send target
+  only after the client confirms FCM registration. Only active devices for active `admin` or
   `staff` users with an unrevoked, unexpired bound session are eligible for
   delivery. Client payloads cannot choose the user or session.
 - AquaLogic installation IDs are random per app install and are not hardware

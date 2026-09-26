@@ -42,6 +42,7 @@ void main() {
       expect(platform.backgroundHandlerRegistrationCount, 1);
       expect(platform.localInitializationCount, 1);
       expect(platform.permissionRequestCount, 1);
+      expect(platform.fidRegistrationCount, 1);
       expect(platform.tokenRequestCount, 1);
       expect(platform.fidRequestCount, 1);
       expect(service.isAvailable, isTrue);
@@ -70,6 +71,7 @@ void main() {
       expect(service.currentToken, isNull);
       expect(platform.backgroundHandlerRegistrationCount, 0);
       expect(platform.permissionRequestCount, 0);
+      expect(platform.fidRegistrationCount, 0);
       expect(platform.tokenRequestCount, 0);
     },
   );
@@ -114,6 +116,7 @@ void main() {
         fids.add,
       );
       await service.initialize();
+      platform.firebaseInstallationId = 'rotated-firebase-installation-id';
       platform.installationIdChanges.add('rotated-firebase-installation-id');
       await Future<void>.delayed(Duration.zero);
 
@@ -125,9 +128,19 @@ void main() {
         'firebase-installation-id-from-fake',
         'rotated-firebase-installation-id',
       ]);
+      expect(platform.fidRegistrationCount, 2);
       await subscription.cancel();
     },
   );
+
+  test('does not publish an FID when FCM FID registration fails', () async {
+    platform.failFidRegistration = true;
+
+    await service.initialize();
+
+    expect(service.currentFirebaseInstallationId, isNull);
+    expect(platform.fidRegistrationCount, 1);
+  });
 
   test('foreground messages map title, body, and payload once', () async {
     await service.initialize();
@@ -314,9 +327,11 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
   var backgroundHandlerRegistrationCount = 0;
   var localInitializationCount = 0;
   var permissionRequestCount = 0;
+  var fidRegistrationCount = 0;
   var tokenRequestCount = 0;
   var fidRequestCount = 0;
   var failFirebaseInitialization = false;
+  var failFidRegistration = false;
   var failLocalInitialization = false;
   Completer<void>? localInitializationGate;
   var permission = PushPermissionStatus.authorized;
@@ -350,6 +365,12 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
   Future<PushPermissionStatus> requestPermission() async {
     permissionRequestCount++;
     return permission;
+  }
+
+  @override
+  Future<void> registerFidForMessaging() async {
+    fidRegistrationCount++;
+    if (failFidRegistration) throw StateError('FCM registration unavailable');
   }
 
   @override
