@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "650844164340",
+    "project_id": "aqualogic-c0d57",
+    "storage_bucket": "aqualogic-c0d57.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650844164340:android:159c6012d25220f8af8ea1",
+        "android_client_info": {
+          "package_name": "com.aqualogic.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMrjjVSl94nertgvlvfAPoJE85q3k7Tcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-09-25
+Last reviewed: 2026-09-26
 
 ## Completed and working locally
 
@@ -234,10 +234,10 @@ Last reviewed: 2026-09-25
 - Protected requests refresh once on expiry/401 with shared in-flight refresh;
   Login handles safe validation/throttle/network messages, and forced password
   change gates the authenticated shell.
-- `MockAuthService` remains injectable for widget tests. The M3 Tanks directory
-  and detail and M4 Alerts/Monitoring now use read-only Railway repositories;
-  fish directory/detail, equipment state, activity, and profile editing remain
-  mock-backed or unavailable.
+- `MockAuthService` and feature mocks remain injectable for tests. M3 Tanks,
+  M4 Alerts/Monitoring, and M5 Species/read-only Equipment now use Railway API
+  repositories. The More/Account card displays `/auth/me` identity and active
+  status; profile editing and account-organization data have no current API.
 - Local mock readings and demo equipment interactions.
 - Flutter sign-in screen with isolated mock-only development accounts for the
   Owner/admin and Staff roles.
@@ -261,8 +261,9 @@ Last reviewed: 2026-09-25
   and stale-on-refresh states. It refreshes on pull and on resume when the last
   successful load is at least one minute old; it does not poll in the
   background. Live Home links do not open mock detail screens with API IDs.
-- M2 Home, M3 Tanks, and M4 Alerts/Monitoring remain read-only. Species detail,
-  equipment state, activity, and profile editing are pending.
+- M2 Home, M3 Tanks, M4 Alerts/Monitoring, and M5 Species/Equipment are
+  read-only apart from the existing safe Mark handled alert action. Account
+  editing, activity, and historical sensor charts remain unsupported.
 
 #### M3 — Read-only Tanks directory and detail — 2026-09-25
 
@@ -313,6 +314,34 @@ Last reviewed: 2026-09-25
   Failed deep-link loads remain retryable. No equipment or actuator command is
   exposed.
 
+#### M5 — Account identity, Species, and read-only Equipment — 2026-09-25
+
+- The existing authenticated user from `/auth/me` supplies Account name, email,
+  backend role, and active status. The mobile `admin`/Owner presentation and
+  `staff`/Staff presentation remain display mappings; no role or backend
+  permission semantics changed. Profile editing and organization/customer
+  account data remain unsupported because no such current-user contract exists.
+- `ApiFishRepository` reads `/fish` and `/fish/{id}` through the shared
+  authenticated client. DTOs map numeric IDs, snake_case fields, nullable
+  ranges/text, category, diet, and guidance into the current species model.
+  Category is not guessed to mean freshwater/saltwater, so live mode hides the
+  mock-only water-type filters. Tank Detail opens the corresponding live
+  species record while preserving its tank suitability context.
+- `ApiEquipmentRepository` uses only GET requests: `/devices`, explicit-device
+  actuator status, and page 1 of actuator history (10 records). It shows five
+  known equipment types, state/schedule/connection/timestamps, and recent
+  lifecycle history. Multiple registered devices require user selection.
+  Backend `admin` alone can read device/actuator endpoints; Staff gets a local
+  restriction explanation with zero requests. No command submission exists in
+  the repository and no physical control is available in live UI.
+- `succeeded` is presented as command lifecycle status and is not described as
+  physical verification; `outcome_unknown` remains uncertain. Backend status
+  GETs can reconcile overdue records. Older history pages, activity, and
+  profile editing require separate product/API work.
+- Species and equipment use mock repositories in tests and expose initial
+  loading, retry/error, empty, partial/stale refresh, pull-to-refresh, and
+  bounded resume refresh states without background polling.
+
 ### Mobile UI/UX refinement — 2026-09-15
 
 - Reworked the authenticated shell to four destinations: Home, Tanks, Alerts,
@@ -360,11 +389,31 @@ Last reviewed: 2026-09-25
   uses opacity-only branding and handoff. Added focused splash readiness,
   timing, reduced-motion, and disposal tests.
 
+### M6.1 Flutter FCM client foundation — 2026-09-26
+
+- Firebase Messaging is initialized through an injectable app-level service;
+  failures are contained so they do not block auth or the startup flow.
+- Android notification permission is requested once per service lifecycle. The
+  stable `aqualogic_alerts` channel uses the monochrome AquaLogic notification
+  icon. Foreground FCM messages use local notifications; Android handles
+  notification delivery in background/terminated states.
+- The service keeps the registration token in memory, emits refresh changes,
+  masks token logs, and captures FCM/local notification-open payloads without
+  adding navigation or backend registration.
+- Flutter analysis and all 172 tests pass; the release APK builds at
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (63,434,355 bytes).
+  A physical Android 12 device reported authorized notification access and
+  obtained a 142-character FCM token; only a masked form appeared in debug
+  output.
+- A Firebase Console test message across foreground, background, terminated,
+  and tap-launch states remains a manual verification step. No test message was
+  sent during implementation.
+
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
-read-only API data. Separate sensor-history charts, species directory/detail,
-equipment state, activity, profile editing, real actuator commands/device
-connectivity, command reconciliation, push notifications, and production
-equipment safety controls are not yet integrated in the Flutter client.
+read-only API data. Separate sensor-history charts, activity, profile editing,
+real actuator commands/device connectivity, command reconciliation, Railway
+FCM-token registration, Firebase Admin sending, and production equipment safety
+controls are not integrated in the Flutter client.
 
 ## Active follow-up work
 
@@ -394,15 +443,17 @@ equipment safety controls are not yet integrated in the Flutter client.
   commands arrive, and provision a new identity if hardware is reused.
 - Add CI for backend tests, migrations, web typecheck/tests/build, and browser
   smoke coverage.
-- Integrate remaining read-only mobile repositories for species and equipment,
-  then assess whether an operational profile or activity endpoint is needed.
+- Assess whether users need older actuator-history pages, and define a
+  supported backend contract before adding account editing, organization
+  profile, or recent-activity features.
 - Finalize deployment environment variables and production smoke tests.
 
 ## Planned
 
 - External monitoring notifications, delivery workers, and escalation remain
   deferred.
-- Remaining read-only Flutter repositories for species and equipment data.
+- Account editing, organization/customer profile data, recent activity, and
+  older equipment-history pages are not currently in the mobile API slice.
 - Additional sensor hardware and production-grade actuator safety controls;
   pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
 - Raspberry Pi deployment and hardware safety controls.
@@ -425,8 +476,9 @@ equipment safety controls are not yet integrated in the Flutter client.
 - The current public API exposes the latest configured sensor values; this needs
   a final privacy and threat review before production.
 - Flutter is directly connected to Railway for authentication, Home, Tanks,
-  Alerts, and Monitoring. Species, equipment, activity, profile editing, and
-  sensor history remain outside the live API slice.
+  Alerts, Monitoring, Species, and read-only Equipment. Activity, account
+  editing, organization profile, and sensor history remain outside the live API
+  slice.
 - Actuator state is last-known state from the bridge; a stale/offline bridge does
   not imply the physical actuator is off.
 - `outcome_unknown` is intentionally conservative: it records that a claimed
@@ -451,6 +503,18 @@ equipment safety controls are not yet integrated in the Flutter client.
 - API repository tests use fake HTTP responses. The only production request was
   the non-mutating `GET /health` check (HTTP 200); no authenticated production
   request, alert mutation, actuator command, or device install was run.
+
+## Validation checkpoint — 2026-09-25 (M5 Species/Equipment)
+
+- `flutter pub get` succeeded. `dart format --set-exit-if-changed` passed for 23
+  changed/new Dart files with no formatting changes; `flutter analyze --no-pub`
+  found no issues; `flutter test --no-pub --reporter expanded` passed all 159
+  tests.
+- `flutter build apk --release` succeeded in 172.3 seconds. The APK is
+  62,338,099 bytes (59.5 MiB) at
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk`.
+- `git diff --check` passed. API tests use fake HTTP responses; no production
+  Railway request, actuator command, or device install was run.
 
 ## Validation checkpoint — 2026-09-25 (M3 Tanks)
 

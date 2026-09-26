@@ -1,10 +1,51 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-09-25
+Last reviewed: 2026-09-26
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-09-26 — Keep M6.1 push handling behind a client-only service
+
+**Decision:** Initialize Firebase and notification infrastructure through one
+injectable Flutter service. Keep the FCM token in memory, expose refresh and
+notification-open events, and never let push initialization gate authentication
+or app startup. Use local notifications only for foreground FCM presentation;
+let Android handle notification messages in background and terminated states.
+Do not register tokens with Railway or add deep-link navigation in M6.1.
+
+**Reason:** Push is optional client infrastructure. Authentication and the
+existing operational screens must remain usable during Firebase outages, while
+token registration and event routing depend on later backend/payload contracts.
+
+**Consequences:** Flutter tests inject a fake boundary without Firebase or
+Railway. Logs expose only masked token information. Backend registration,
+Firebase Admin sending, alert triggers, and deep links remain separate M6
+milestones.
+
+## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
+
+**Decision:** M5 reuses the shared authenticated `ApiClient` for `/fish`,
+`/fish/{id}`, `/devices`, explicit-device actuator status, and the first page of
+actuator history. Keep `MockFishRepository` and `MockEquipmentRepository`
+injectable. Preserve backend `admin`/`staff` roles: Species is available to
+both; read-only equipment state/history remains Owner/admin-only, with Staff
+shown a local restriction message and no request. Use `/auth/me` as the source
+for Account identity and active status. Expose no mobile actuator command.
+
+**Reason:** The existing routes provide the requested read data and define the
+permission boundary. Category does not encode freshwater/saltwater, and device
+status/history require explicit selection when a tank has multiple devices.
+The backend's command lifecycle does not prove physical success, and its status
+GET can reconcile overdue command records.
+
+**Consequences:** No backend, Railway, Vercel, or UI redesign is required.
+Production species screens show backend category/care data without demo-only
+water-type filters. Live equipment displays the latest ten command records and
+server-reported state while keeping all physical controls disabled. Profile
+editing, organization data, older history pages, activity, and FCM remain
+separate work. Tests use fake HTTP responses; production is not called.
 
 ## 2026-09-25 — Connect Flutter Tanks through read-only existing endpoints
 

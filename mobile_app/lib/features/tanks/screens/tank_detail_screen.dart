@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:aqualogic/app/theme/app_colors.dart';
+import 'package:aqualogic/app/control/equipment_repository_scope.dart';
+import 'package:aqualogic/app/fish/fish_repository_scope.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/control/screens/equipment_screen.dart';
@@ -302,8 +304,11 @@ class TankDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isRetired = tank.isRetired;
-    final canManageEquipment =
-        !isRetired && (user == null || user!.role == UserRole.admin);
+    final fishRepository = FishRepositoryScope.maybeOf(context);
+    final equipmentRepository = EquipmentRepositoryScope.maybeOf(context);
+    final canOpenEquipment = tank.isLiveData
+        ? !isRetired && equipmentRepository != null
+        : !isRetired && (user == null || user!.role == UserRole.admin);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -351,7 +356,7 @@ class TankDetailScreen extends StatelessWidget {
             ),
             _SpeciesSnapshot(
               tank: tank,
-              onSpeciesTap: tank.isLiveData
+              onSpeciesTap: tank.isLiveData && fishRepository == null
                   ? null
                   : (speciesId) {
                       final assignment = tank.species.firstWhere(
@@ -361,6 +366,7 @@ class TankDetailScreen extends StatelessWidget {
                         MaterialPageRoute<void>(
                           builder: (context) => SpeciesDetailScreen(
                             speciesId: speciesId,
+                            repository: fishRepository,
                             assignedTankName: tank.name,
                             suitability: assignment.suitability,
                           ),
@@ -373,18 +379,21 @@ class TankDetailScreen extends StatelessWidget {
               subtitle: 'Reporting state, not water quality',
             ),
             _MonitoringRow(tank: tank),
-            if (canManageEquipment && !tank.isLiveData) ...[
+            if (canOpenEquipment) ...[
               const SectionHeader(
                 title: 'Equipment',
-                subtitle: 'Tank-specific devices and controls',
+                subtitle: 'Tank-specific device state',
               ),
               _EquipmentEntry(
                 tank: tank,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) =>
-                          EquipmentScreen(tank: tank, user: user),
+                      builder: (context) => EquipmentScreen(
+                        tank: tank,
+                        user: user,
+                        repository: equipmentRepository,
+                      ),
                     ),
                   );
                 },

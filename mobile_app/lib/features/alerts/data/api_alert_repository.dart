@@ -23,6 +23,9 @@ class ApiAlertRepository implements AlertRepository {
   Future<Map<int, String>>? _tankNamesInFlightOrCached;
 
   @override
+  bool get isLiveData => true;
+
+  @override
   Future<List<AlertInfo>> loadWaterQualityAlerts({
     required SensorSnapshot snapshot,
     required bool history,

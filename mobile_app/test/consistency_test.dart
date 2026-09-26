@@ -19,11 +19,11 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-        home: AppPage(
-          header: SizedBox(height: 80),
-          bottomClearance: AppSpacing.bottomDockClearance,
-          children: [Text('Content')],
-        ),
+          home: AppPage(
+            header: SizedBox(height: 80),
+            bottomClearance: AppSpacing.bottomDockClearance,
+            children: [Text('Content')],
+          ),
         ),
       );
 

@@ -6,6 +6,7 @@ class AuthUser {
     required this.name,
     required this.email,
     required this.role,
+    this.isActive = true,
     this.mustChangePassword = false,
   });
 
@@ -13,6 +14,7 @@ class AuthUser {
   final String name;
   final String email;
   final UserRole role;
+  final bool isActive;
   final bool mustChangePassword;
 
   String get roleLabel => role.displayLabel;

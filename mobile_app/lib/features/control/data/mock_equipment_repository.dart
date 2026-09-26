@@ -1,8 +1,19 @@
 import 'package:aqualogic/features/control/models/equipment_models.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 
 abstract class EquipmentRepository {
-  EquipmentOverview load({required String tankId});
+  bool get isLiveData;
+
+  bool get supportsCommandSimulation;
+
+  Future<List<RegisteredEquipmentDevice>> listDevices({required String tankId});
+
+  Future<EquipmentOverview> load({
+    required String tankId,
+    required RegisteredEquipmentDevice device,
+    int historyPage = 1,
+  });
 }
 
 /// Deterministic equipment fixtures for the Owner UI. Commands are simulated
@@ -11,8 +22,31 @@ class MockEquipmentRepository implements EquipmentRepository {
   const MockEquipmentRepository();
 
   @override
-  EquipmentOverview load({required String tankId}) {
-    return const EquipmentOverview(
+  bool get isLiveData => false;
+
+  @override
+  bool get supportsCommandSimulation => true;
+
+  @override
+  Future<List<RegisteredEquipmentDevice>> listDevices({
+    required String tankId,
+  }) async => [
+    RegisteredEquipmentDevice(
+      id: 'mock-device-$tankId',
+      tankId: int.tryParse(tankId) ?? 0,
+      tankName: 'Demo tank',
+      connection: DeviceConnectionStatus.online,
+      lastSeenAt: null,
+    ),
+  ];
+
+  @override
+  Future<EquipmentOverview> load({
+    required String tankId,
+    required RegisteredEquipmentDevice device,
+    int historyPage = 1,
+  }) async {
+    final full = const EquipmentOverview(
       devices: [
         EquipmentDevice(
           id: 'uv-sterilizer',
@@ -117,5 +151,36 @@ class MockEquipmentRepository implements EquipmentRepository {
         ),
       ],
     );
+    if (historyPage <= 1) return full;
+    return const EquipmentOverview(devices: [], commandHistory: []);
   }
+}
+
+/// Fail-closed fallback for a live tank route mounted without app composition.
+/// It prevents a missing API repository from silently showing demo equipment.
+class UnavailableEquipmentRepository implements EquipmentRepository {
+  const UnavailableEquipmentRepository();
+
+  @override
+  bool get isLiveData => true;
+
+  @override
+  bool get supportsCommandSimulation => false;
+
+  @override
+  Future<List<RegisteredEquipmentDevice>> listDevices({
+    required String tankId,
+  }) => Future.error(_notConfigured());
+
+  @override
+  Future<EquipmentOverview> load({
+    required String tankId,
+    required RegisteredEquipmentDevice device,
+    int historyPage = 1,
+  }) => Future.error(_notConfigured());
+
+  ApiFailure _notConfigured() => const ApiFailure(
+    kind: ApiFailureKind.unknown,
+    message: 'Live equipment data is not configured in this app session.',
+  );
 }

@@ -205,6 +205,9 @@ class _FakeAlertRepository implements AlertRepository {
   var findCalls = 0;
 
   @override
+  bool get isLiveData => false;
+
+  @override
   Future<List<AlertInfo>> loadWaterQualityAlerts({
     required SensorSnapshot snapshot,
     required bool history,

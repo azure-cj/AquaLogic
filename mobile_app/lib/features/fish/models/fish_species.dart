@@ -9,6 +9,7 @@ class FishSpecies {
     required this.phRange,
     required this.careNote,
     this.id,
+    this.category = '',
     this.tdsRange = 'Not specified',
     this.diet = 'Not specified',
     this.description = '',
@@ -19,7 +20,12 @@ class FishSpecies {
   final String? id;
   final String name;
   final String scientificName;
+
+  /// Present only for local demo fixtures. The backend has no water-type field.
   final String type;
+
+  /// Backend directory category; it must not be interpreted as water type.
+  final String category;
   final String temperatureRange;
   final String phRange;
   final String tdsRange;

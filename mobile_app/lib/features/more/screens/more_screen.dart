@@ -1,4 +1,9 @@
 import 'package:aqualogic/app/auth/auth_scope.dart';
+import 'package:aqualogic/app/alerts/alert_repository_scope.dart';
+import 'package:aqualogic/app/control/equipment_repository_scope.dart';
+import 'package:aqualogic/app/fish/fish_repository_scope.dart';
+import 'package:aqualogic/app/home/home_repository_scope.dart';
+import 'package:aqualogic/app/tanks/tank_repository_scope.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/app/theme/app_tokens.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
@@ -22,6 +27,9 @@ class MoreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLiveData = _usesLiveRepositories(context);
+    final fishRepository = FishRepositoryScope.maybeOf(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AppPage(
@@ -62,7 +70,7 @@ class MoreScreen extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (context) => const FishLibraryScreen(),
+                  builder: (_) => FishLibraryScreen(repository: fishRepository),
                 ),
               );
             },
@@ -73,14 +81,18 @@ class MoreScreen extends StatelessWidget {
             children: [
               MoreTile(
                 icon: LucideIcons.refreshCw,
-                title: 'Sync / local data',
-                subtitle: 'Local data and connection status',
+                title: isLiveData ? 'Data status' : 'Sync / local data',
+                subtitle: isLiveData
+                    ? 'Railway API data and integration details'
+                    : 'Local data and connection status',
                 grouped: true,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) =>
-                          DataStatusScreen(snapshot: snapshot),
+                      builder: (_) => DataStatusScreen(
+                        snapshot: snapshot,
+                        isLiveData: isLiveData,
+                      ),
                     ),
                   );
                 },
@@ -88,12 +100,14 @@ class MoreScreen extends StatelessWidget {
               MoreTile(
                 icon: LucideIcons.info,
                 title: 'About AquaLogic',
-                subtitle: 'Product information and prototype scope',
+                subtitle: isLiveData
+                    ? 'Product information and current integration status'
+                    : 'Product information and prototype scope',
                 grouped: true,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (context) => const AboutScreen(),
+                      builder: (_) => AboutScreen(isLiveData: isLiveData),
                     ),
                   );
                 },
@@ -105,3 +119,10 @@ class MoreScreen extends StatelessWidget {
     );
   }
 }
+
+bool _usesLiveRepositories(BuildContext context) =>
+    HomeRepositoryScope.maybeOf(context)?.isLiveData == true &&
+    TankRepositoryScope.maybeOf(context)?.isLiveData == true &&
+    AlertRepositoryScope.maybeOf(context)?.isLiveData == true &&
+    FishRepositoryScope.maybeOf(context)?.isLiveData == true &&
+    EquipmentRepositoryScope.maybeOf(context)?.isLiveData == true;

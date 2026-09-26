@@ -1,8 +1,27 @@
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 
-enum EquipmentKind { uv, led, feeder, pumpA, pumpB }
+enum EquipmentKind { uv, led, feeder, pumpA, pumpB, unknown }
 
 enum EquipmentPowerState { on, off, idle, ready, unknown }
+
+class RegisteredEquipmentDevice {
+  const RegisteredEquipmentDevice({
+    required this.id,
+    required this.tankId,
+    required this.tankName,
+    required this.connection,
+    required this.lastSeenAt,
+  });
+
+  final String id;
+  final int tankId;
+  final String tankName;
+  final DeviceConnectionStatus connection;
+  final DateTime? lastSeenAt;
+
+  String get selectionLabel => '$id · ${connection.label}';
+}
 
 class EquipmentDevice {
   const EquipmentDevice({
@@ -14,6 +33,8 @@ class EquipmentDevice {
     required this.connection,
     required this.scheduleLabel,
     required this.lastActionLabel,
+    this.reportedStateLabel,
+    this.stateRefreshedAt,
   });
 
   final String id;
@@ -24,16 +45,20 @@ class EquipmentDevice {
   final DeviceConnectionStatus connection;
   final String scheduleLabel;
   final String lastActionLabel;
+  final String? reportedStateLabel;
+  final DateTime? stateRefreshedAt;
 
   bool get isPump => kind == EquipmentKind.pumpA || kind == EquipmentKind.pumpB;
 
-  String get stateLabel => switch (powerState) {
-    EquipmentPowerState.on => 'On',
-    EquipmentPowerState.off => 'Off',
-    EquipmentPowerState.idle => 'Idle',
-    EquipmentPowerState.ready => 'Ready',
-    EquipmentPowerState.unknown => 'State unknown',
-  };
+  String get stateLabel =>
+      reportedStateLabel ??
+      switch (powerState) {
+        EquipmentPowerState.on => 'On',
+        EquipmentPowerState.off => 'Off',
+        EquipmentPowerState.idle => 'Idle',
+        EquipmentPowerState.ready => 'Ready',
+        EquipmentPowerState.unknown => 'State unknown',
+      };
 
   EquipmentDevice copyWith({
     EquipmentPowerState? powerState,
@@ -50,6 +75,8 @@ class EquipmentDevice {
       connection: connection ?? this.connection,
       scheduleLabel: scheduleLabel ?? this.scheduleLabel,
       lastActionLabel: lastActionLabel ?? this.lastActionLabel,
+      reportedStateLabel: reportedStateLabel,
+      stateRefreshedAt: stateRefreshedAt,
     );
   }
 }
@@ -90,8 +117,14 @@ class EquipmentOverview {
   const EquipmentOverview({
     required this.devices,
     required this.commandHistory,
+    this.historyHasNextPage = false,
+    this.statusFailure,
+    this.historyFailure,
   });
 
   final List<EquipmentDevice> devices;
   final List<CommandRecord> commandHistory;
+  final bool historyHasNextPage;
+  final ApiFailure? statusFailure;
+  final ApiFailure? historyFailure;
 }

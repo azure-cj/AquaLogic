@@ -121,6 +121,16 @@ class AccountCard extends StatelessWidget {
                           height: 1.2,
                         ),
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Account status: ${user.isActive ? 'Active' : 'Inactive'}',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w400,
+                          height: 1.2,
+                        ),
+                      ),
                     ],
                   ),
                 ),

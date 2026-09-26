@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
-Status: M4 authentication, Home, Tanks, and read-only Alerts/Monitoring integrated; species, equipment, and profile editing remain outside the live API slice
-Last reviewed: 2026-09-25
+Status: M5 live data integration complete; M6.1 Flutter FCM client foundation implemented; profile editing and activity remain outside the live API slice
+Last reviewed: 2026-09-26
 
 ## Read first
 
@@ -13,9 +13,9 @@ Last reviewed: 2026-09-25
 ## Current boundary
 
 The Flutter app is an Android-first client. Authentication, Home, Tanks, Alerts,
-and Monitoring talk directly to the Railway FastAPI service through the shared
-authenticated `ApiClient`. The species directory, equipment state, activity,
-and profile editing remain outside the live API slice. The mobile app does not
+Monitoring, species, and read-only equipment talk directly to the Railway
+FastAPI service through the shared authenticated `ApiClient`. Account identity
+comes from `/auth/me`; no profile-edit API is connected. The app does not
 connect directly to a sensor or device.
 
 ## M1 authentication integration
@@ -61,12 +61,14 @@ These are local prototype credentials only and are not production security.
 
 Still mock-backed / not implemented:
 
-- Species directory/detail and equipment-state repositories are not connected
-  to Railway. Tank detail hides mock-only live equipment/activity content.
-- Profile editing and server-side account data synchronization are not
-  implemented; authentication identity/role comes from `/auth/me`.
-- Physical actuator commands, push notifications, and background refresh are
-  not implemented.
+- Profile editing and organization/customer profile synchronization are not
+  implemented; account identity and role come from `/auth/me`.
+- Recent activity and historical sensor readings/charts are not available from
+  the mobile API slice. Tank Detail omits mock-only activity for live data.
+- Physical actuator commands and background refresh are not implemented.
+  M6.1 adds the Flutter FCM client foundation only; token registration with
+  Railway and production notification sending remain deferred. Species and
+  read-only equipment use Railway repositories under M5, described below.
 
 ## Role-Aware Home V1
 
@@ -226,6 +228,58 @@ system-resolved alert is labeled as automatic and monitoring recovery remains
 in Monitoring history. No physical equipment command is enabled by this
 milestone.
 
+## M5 Account identity, Species, and read-only Equipment
+
+The More/Account card uses the authenticated user already restored through
+`/auth/me`: backend name, email, role, and active status. `admin` is presented
+as Owner and `staff` as Staff, without changing the backend role. The backend
+does not expose a separate profile-edit route or an organization/customer
+display field on `/auth/me`, so mobile does not submit profile changes or claim
+that an organization label came from the server.
+
+`ApiFishRepository` uses authenticated `GET /fish` and `GET /fish/{id}`. It
+maps the backend's numeric IDs, snake_case care fields, category, nullable
+preferred water ranges, diet, description, care tips, and compatibility notes
+into the existing species model. Missing ranges and notes stay explicitly
+unspecified. Backend category is not freshwater/saltwater: the live directory
+suppresses those mock-only filters and shows category instead. Tank Detail
+opens the live species record using its backend ID and retains the existing
+tank assignment/suitability context. The current model does not display
+`photo_url`, `tank_count`, or the full `assigned_tanks` list.
+
+`ApiEquipmentRepository` is read-only. Owner/admin requests use `GET /devices`
+to find registered devices for the selected tank, then call
+`GET /tanks/{id}/actuators/status?device_id=...` and
+`GET /tanks/{id}/actuators/history?device_id=...&page=1&page_size=10`. Explicit
+device selection handles tanks with multiple registered devices. The screen
+shows the five known actuator states, schedules where supplied, device
+connectivity, last-reported timestamps, and the newest ten command lifecycle
+records. Additional history pages are not yet exposed. Backend `succeeded`
+means the lifecycle reported success, not physical verification; `outcome_unknown`
+stays explicitly uncertain. These GET routes can reconcile overdue command
+lifecycle records server-side, but the mobile client issues no physical command
+and exposes no equipment mutation.
+
+The backend restricts equipment state/history to `admin`. A live Staff screen
+explains that restriction and makes no request; the app does not equate its
+Staff read-only presentation with permission to call an admin-only endpoint.
+Species remains staff/admin readable. Mock repositories remain injectable for
+tests and local prototype flows. Species/equipment screens provide loading,
+empty, retry, stale-data, pull-to-refresh, and one-minute resume refresh states;
+they do not poll in the background.
+
+### M5 device smoke check
+
+Install the release APK and sign in with an existing Railway admin account.
+Open More/Account and verify name, email, Owner role, and account status against
+the signed-in backend identity. Open Fish species and compare names/categories
+and available care fields with the web directory; open a species from Tank
+Detail and confirm the assigned-tank/suitability context remains intact. Open
+Equipment from a live tank and verify device state and recent command history.
+Confirm that the screen says it is read-only and offers no physical controls.
+If testing Staff, confirm the restriction explanation appears without issuing
+device-state requests. Do not use actuator commands during this milestone.
+
 ## Mobile UI/UX refinement milestone
 
 Implemented locally in the Flutter prototype:
@@ -287,20 +341,74 @@ connection state; the splash does not claim backend progress. Tests can inject
 `MockAuthService` and retain deterministic startup. Focused behavior tests live in
 [`splash_screen_test.dart`](../../mobile_app/test/splash_screen_test.dart).
 
-## Remaining live integration work after M4
+## M6.1 FCM client foundation
 
-The following remain outside the completed M4 integration:
+`FirebasePushNotificationService` is the single Flutter boundary for FCM.
+Production composition initializes Firebase asynchronously so an unavailable
+Firebase/FCM service cannot delay or crash the authentication flow. Tests inject
+a fake service/platform and do not invoke Firebase plugins or Railway.
 
-- Historical sensor readings and charts.
-- Backend species-directory and assignment APIs.
-- Read-only equipment state and command-history API integration.
-- Real actuator commands, device connectivity, command reconciliation, and
-  production equipment safety controls.
-- Push notifications, background workers, and external monitoring delivery.
+The service requests notification permission once during its initialization,
+records authorized/denied/provisional/unavailable state, obtains the FCM token
+into memory, and emits token refreshes. Debug output reports only a masked token
+and its length. Foreground notification messages are displayed once through
+`flutter_local_notifications`; Android handles notification messages normally
+while backgrounded or terminated. Firebase and local-notification taps are
+exposed as raw open events; M6.1 does not navigate from them.
+
+Android uses the idempotent `aqualogic_alerts` / “AquaLogic Alerts” high-
+importance channel and monochrome notification icon. Android 13+ requests
+`POST_NOTIFICATIONS` at runtime; older Android releases do not need that runtime
+permission. Denial does not gate login or app use.
+
+### M6.1 manual device test
+
+1. Install and launch the release APK on the Android phone. On Android 13+,
+   allow notifications when prompted. Android 12 and older will not show that
+   runtime prompt.
+2. For token confirmation during development, run the debug app and verify the
+   terminal reports an authorized/denied permission state and “FCM token
+   obtained” with a masked value. Never share the complete token in chat or
+   screenshots.
+3. If Firebase Console requires the full token for a test send, pause the local
+   Flutter debugger in `FirebasePushNotificationService._setToken` and copy the
+   `token` variable directly from the debugger into the Console. Do not print it
+   or save it in the repository.
+4. In Firebase Console, open **DevOps & Engagement > Messaging**, create a
+   Firebase Notification campaign, enter a title/body, and choose **Send test
+   message** from the right pane. Enter the token in **Add an FCM registration
+   token** and select **Test**. Verify: foreground shows one local notification;
+   background and terminated states show Android's FCM notification; tapping a
+   notification launches/resumes AquaLogic and is captured internally without
+   navigation. For the terminated-state check, swipe the app away from Recents;
+   Android suppresses FCM delivery after a Force stop until the app is opened
+   manually. See the [official Android test-message steps](https://firebase.google.com/docs/cloud-messaging/android/get-started) and [Flutter receive-message guidance](https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages).
+5. Do not send production alert content; M6.1 does not register tokens with
+   Railway or trigger alert/monitoring sends.
+
+The physical Android 12 check on 2026-09-26 reported authorized notification
+access and obtained a 142-character token in masked debug output. The Firebase
+Console lifecycle test remains for the developer to run manually.
+
+## Remaining live integration work after M5
+
+The following remain outside the completed M5 integration:
+
+- Profile editing and organization/customer profile display, which need a
+  defined backend contract before mobile can expose them.
+- Older equipment command-history pages, if an operational need is confirmed.
+- A backend recent-activity source and historical sensor readings/charts.
+- Real actuator commands and production equipment safety controls remain
+  disabled in Flutter.
+- Railway FCM-token registration, Firebase Admin sending, background delivery
+  workers, and external monitoring delivery remain deferred. M6.1 implements
+  the client-side Firebase initialization, permission, token lifecycle,
+  foreground display, background handler registration, and open-event capture.
 
 Mock repositories remain available for deterministic tests and features without
 live API support. Production composition uses API repositories for
-Authentication, Home, Tanks, Alerts, and Monitoring.
+Authentication, Home, Tanks, Alerts, Monitoring, Species, and read-only
+Equipment.
 
 ## Important locations
 
@@ -317,10 +425,14 @@ Authentication, Home, Tanks, Alerts, and Monitoring.
   DTO/API and mock repositories, list/detail views, and safe handling
   reconciliation.
 - `mobile_app/lib/features/fish/`: species directory, detail, suitability, and
-  mock fish repository.
+  mock and API fish repositories, DTO mapping, and suitability context.
 - `mobile_app/lib/features/control/`: contextual Equipment models, mock
-  repository, command lifecycle, and Owner/Staff equipment view.
+  and read-only API repositories, command lifecycle, and Owner/Staff equipment
+  view.
 - `mobile_app/lib/features/more/`: account, local-data, and about surfaces.
+- `mobile_app/lib/features/push_notifications/`: FCM service boundary, Android
+  Firebase/local-notification adapter, payload events, token lifecycle, and
+  focused fake-platform tests.
 - `mobile_app/lib/shared/`: shared status models, badges, freshness labels,
   empty states, and layout primitives.
 - `mobile_app/lib/shared/network/`: API configuration, shared HTTP client, and

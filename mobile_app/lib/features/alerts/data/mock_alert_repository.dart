@@ -5,6 +5,8 @@ import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 abstract class AlertRepository {
+  bool get isLiveData => false;
+
   Future<List<AlertInfo>> loadWaterQualityAlerts({
     required SensorSnapshot snapshot,
     required bool history,
@@ -38,6 +40,9 @@ class MockAlertRepository implements AlertRepository {
   const MockAlertRepository({this.monitoringOutageTankIds = const <String>{}});
 
   final Set<String> monitoringOutageTankIds;
+
+  @override
+  bool get isLiveData => false;
 
   @override
   Future<List<AlertInfo>> loadWaterQualityAlerts({

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/fish/data/mock_fish_repository.dart';
 import 'package:aqualogic/features/fish/models/fish_species.dart';
+import 'package:aqualogic/shared/network/api_failure.dart';
 import 'package:aqualogic/shared/models/aqualogic_status.dart';
 import 'package:aqualogic/shared/widgets/app_page.dart';
 import 'package:aqualogic/features/more/widgets/more_header.dart';
@@ -27,11 +30,92 @@ class FishLibraryScreen extends StatefulWidget {
   State<FishLibraryScreen> createState() => _FishLibraryScreenState();
 }
 
-class _FishLibraryScreenState extends State<FishLibraryScreen> {
+class _FishLibraryScreenState extends State<FishLibraryScreen>
+    with WidgetsBindingObserver {
+  static const _foregroundRefreshInterval = Duration(minutes: 1);
+
   late final FishRepository _repository =
       widget.repository ?? const MockFishRepository();
+  List<FishSpecies>? _species;
+  ApiFailure? _initialFailure;
+  ApiFailure? _refreshFailure;
+  bool _loading = true;
+  DateTime? _lastSuccessfulLoadAt;
+  Future<void>? _loadInFlight;
   var _query = '';
   var _filter = FishFilter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_load());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final lastSuccess = _lastSuccessfulLoadAt;
+    if (_species == null ||
+        lastSuccess == null ||
+        DateTime.now().toUtc().difference(lastSuccess) >=
+            _foregroundRefreshInterval) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load() {
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+    final request = _loadSpecies();
+    _loadInFlight = request;
+    return request.whenComplete(() {
+      if (identical(_loadInFlight, request)) _loadInFlight = null;
+    });
+  }
+
+  Future<void> _loadSpecies() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _initialFailure = null;
+      });
+    }
+    try {
+      final result = await _repository.list();
+      if (!mounted) return;
+      setState(() {
+        _species = result;
+        _lastSuccessfulLoadAt = DateTime.now().toUtc();
+        _initialFailure = null;
+        _refreshFailure = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final failure = error is ApiFailure
+          ? error
+          : const ApiFailure(
+              kind: ApiFailureKind.unknown,
+              message: 'Species could not be loaded. Try again.',
+              retryable: true,
+            );
+      setState(() {
+        if (_species == null) {
+          _initialFailure = failure;
+        } else {
+          _refreshFailure = failure;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +125,7 @@ class _FishLibraryScreenState extends State<FishLibraryScreen> {
       body: SafeArea(
         top: false,
         child: AppPage(
+          onRefresh: _load,
           header: MoreHeader(
             title: 'Fish species',
             subtitle: 'Practical care references for your tanks',
@@ -84,57 +169,81 @@ class _FishLibraryScreenState extends State<FishLibraryScreen> {
             ),
           ),
           children: [
-            if (widget.assignedTankName != null)
-              _AssignedContext(tankName: widget.assignedTankName!),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                const Text(
-                  'Species directory',
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+            if (_species == null)
+              _loading
+                  ? const _SpeciesLoadingState()
+                  : _SpeciesErrorState(
+                      message:
+                          _initialFailure?.message ??
+                          'Check your connection and retry.',
+                      retrying: _loading,
+                      onRetry: () => unawaited(_load()),
+                    )
+            else ...[
+              if (_refreshFailure != null)
+                _SpeciesStaleState(
+                  message: _refreshFailure!.message,
+                  onRetry: () => unawaited(_load()),
                 ),
-                Text(
-                  '${species.length} species',
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+              if (widget.assignedTankName != null)
+                _AssignedContext(tankName: widget.assignedTankName!),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  const Text(
+                    'Species directory',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
+                  Text(
+                    '${species.length} ${species.length == 1 ? 'species' : 'species'}',
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              if (_repository.supportsWaterTypeFilter)
+                _FishFilters(
+                  selected: _filter,
+                  onSelected: (filter) => setState(() => _filter = filter),
                 ),
-              ],
-            ),
-            _FishFilters(
-              selected: _filter,
-              onSelected: (filter) => setState(() => _filter = filter),
-            ),
-            if (species.isEmpty)
-              const EmptyState(
-                title: 'No species match your search',
-                message: 'Try a common name, scientific name, or category.',
-                icon: LucideIcons.searchX,
-              )
-            else
-              ...species.map(
-                (item) => FishSpeciesCard(
-                  species: item,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (context) => SpeciesDetailScreen(
-                        speciesId: item.speciesId,
-                        repository: _repository,
-                        assignedTankName: widget.assignedTankName,
+              if (_species!.isEmpty)
+                const EmptyState(
+                  title: 'No species in the directory',
+                  message: 'AquaLogic has no species records to show yet.',
+                  icon: LucideIcons.fish,
+                )
+              else if (species.isEmpty)
+                const EmptyState(
+                  title: 'No species match your search',
+                  message: 'Try a common name, scientific name, or category.',
+                  icon: LucideIcons.searchX,
+                )
+              else
+                ...species.map(
+                  (item) => FishSpeciesCard(
+                    species: item,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => SpeciesDetailScreen(
+                          speciesId: item.speciesId,
+                          repository: _repository,
+                          assignedTankName: widget.assignedTankName,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+            ],
           ],
         ),
       ),
@@ -143,15 +252,15 @@ class _FishLibraryScreenState extends State<FishLibraryScreen> {
 
   List<FishSpecies> _filteredSpecies() {
     final normalized = _query.trim().toLowerCase();
-    return _repository
-        .list()
+    return (_species ?? const <FishSpecies>[])
         .where((species) {
           final matchesQuery =
               normalized.isEmpty ||
               species.name.toLowerCase().contains(normalized) ||
               species.scientificName.toLowerCase().contains(normalized) ||
               species.type.toLowerCase().contains(normalized) ||
-              species.careGroup.toLowerCase().contains(normalized);
+              species.careGroup.toLowerCase().contains(normalized) ||
+              species.category.toLowerCase().contains(normalized);
           final matchesFilter = switch (_filter) {
             FishFilter.all => true,
             FishFilter.freshwater => species.type.toUpperCase() == 'FRESHWATER',
@@ -209,7 +318,14 @@ class FishSpeciesCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _TypeLabel(type: species.type),
+                    if (species.type.isNotEmpty || species.category.isNotEmpty)
+                      Flexible(
+                        child: _TypeLabel(
+                          type: species.type.isNotEmpty
+                              ? species.type
+                              : species.category,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -225,7 +341,7 @@ class FishSpeciesCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 9),
                 Text(
-                  species.careNote,
+                  _speciesSummary(species),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -291,7 +407,7 @@ class FishSpeciesCard extends StatelessWidget {
   }
 }
 
-class SpeciesDetailScreen extends StatelessWidget {
+class SpeciesDetailScreen extends StatefulWidget {
   const SpeciesDetailScreen({
     super.key,
     required this.speciesId,
@@ -306,9 +422,111 @@ class SpeciesDetailScreen extends StatelessWidget {
   final SpeciesSuitability? suitability;
 
   @override
+  State<SpeciesDetailScreen> createState() => _SpeciesDetailScreenState();
+}
+
+class _SpeciesDetailScreenState extends State<SpeciesDetailScreen>
+    with WidgetsBindingObserver {
+  static const _foregroundRefreshInterval = Duration(minutes: 1);
+
+  late FishRepository _repository;
+  FishSpecies? _species;
+  ApiFailure? _initialFailure;
+  ApiFailure? _refreshFailure;
+  bool _loading = true;
+  DateTime? _lastSuccessfulLoadAt;
+  Future<void>? _loadInFlight;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = widget.repository ?? const MockFishRepository();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(covariant SpeciesDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.speciesId != widget.speciesId ||
+        !identical(oldWidget.repository, widget.repository)) {
+      _repository = widget.repository ?? const MockFishRepository();
+      _species = null;
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final lastSuccess = _lastSuccessfulLoadAt;
+    if (_species == null ||
+        lastSuccess == null ||
+        DateTime.now().toUtc().difference(lastSuccess) >=
+            _foregroundRefreshInterval) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load() {
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+    final request = _loadDetail();
+    _loadInFlight = request;
+    return request.whenComplete(() {
+      if (identical(_loadInFlight, request)) _loadInFlight = null;
+    });
+  }
+
+  Future<void> _loadDetail() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _initialFailure = null;
+      });
+    }
+    try {
+      final species = await _repository.findById(widget.speciesId);
+      if (!mounted) return;
+      if (species == null) {
+        throw ApiFailure.fromStatus(404);
+      }
+      setState(() {
+        _species = species;
+        _lastSuccessfulLoadAt = DateTime.now().toUtc();
+        _initialFailure = null;
+        _refreshFailure = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final failure = error is ApiFailure
+          ? error
+          : const ApiFailure(
+              kind: ApiFailureKind.unknown,
+              message: 'Species details could not be loaded. Try again.',
+              retryable: true,
+            );
+      setState(() {
+        if (_species == null) {
+          _initialFailure = failure;
+        } else {
+          _refreshFailure = failure;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final fishRepository = repository ?? const MockFishRepository();
-    final species = fishRepository.findById(speciesId);
+    final species = _species;
     if (species == null) {
       return Scaffold(
         backgroundColor: AppColors.background,
@@ -317,15 +535,20 @@ class SpeciesDetailScreen extends StatelessWidget {
           child: AppPage(
             header: MoreHeader(
               title: 'Species detail',
-              subtitle: 'This species record is unavailable',
+              subtitle: 'Care reference from AquaLogic',
               onBack: () => Navigator.of(context).pop(),
             ),
-            children: const [
-              EmptyState(
-                title: 'Species unavailable',
-                message: 'This local species record is not available.',
-                icon: LucideIcons.circleHelp,
-              ),
+            children: [
+              if (_loading)
+                const _SpeciesLoadingState(detail: true)
+              else
+                _SpeciesErrorState(
+                  message:
+                      _initialFailure?.message ??
+                      'Species details are unavailable.',
+                  retrying: _loading,
+                  onRetry: () => unawaited(_load()),
+                ),
             ],
           ),
         ),
@@ -337,14 +560,20 @@ class SpeciesDetailScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: AppPage(
+          onRefresh: _load,
           header: MoreHeader(
             title: 'Species detail',
             subtitle: species.name,
             onBack: () => Navigator.of(context).pop(),
           ),
           children: [
-            _SpeciesHeading(species: species, suitability: suitability),
-            if (assignedTankName != null)
+            if (_refreshFailure != null)
+              _SpeciesStaleState(
+                message: _refreshFailure!.message,
+                onRetry: () => unawaited(_load()),
+              ),
+            _SpeciesHeading(species: species, suitability: widget.suitability),
+            if (widget.assignedTankName != null)
               SoftCard(
                 child: Row(
                   children: [
@@ -352,7 +581,7 @@ class SpeciesDetailScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Assigned to $assignedTankName',
+                        'Assigned to ${widget.assignedTankName}',
                         style: const TextStyle(
                           color: AppColors.text,
                           fontSize: 13,
@@ -399,18 +628,111 @@ class SpeciesDetailScreen extends StatelessWidget {
             _TextInfoCard(
               icon: LucideIcons.heart,
               title: 'Care',
-              text: species.careNote,
+              text: species.careNote.isEmpty
+                  ? 'No care guidance is provided for this species.'
+                  : species.careNote,
             ),
             _TextInfoCard(
               icon: LucideIcons.users,
-              title: 'Compatibility',
-              text: species.compatibilityNote,
+              title: 'Compatibility notes',
+              text: species.compatibilityNote.isEmpty
+                  ? 'No compatibility notes are provided for this species.'
+                  : species.compatibilityNote,
             ),
           ],
         ),
       ),
     );
   }
+}
+
+String _speciesSummary(FishSpecies species) {
+  if (species.careNote.isNotEmpty) return species.careNote;
+  if (species.description.isNotEmpty) return species.description;
+  return 'Care guidance is not provided.';
+}
+
+class _SpeciesLoadingState extends StatelessWidget {
+  const _SpeciesLoadingState({this.detail = false});
+
+  final bool detail;
+
+  @override
+  Widget build(BuildContext context) => SoftCard(
+    child: Row(
+      children: [
+        const SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            detail ? 'Loading species details…' : 'Loading species…',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SpeciesErrorState extends StatelessWidget {
+  const _SpeciesErrorState({
+    required this.message,
+    required this.retrying,
+    required this.onRetry,
+  });
+
+  final String message;
+  final bool retrying;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => SoftCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: const TextStyle(color: AppColors.text)),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: retrying ? null : onRetry,
+          icon: const Icon(LucideIcons.refreshCw, size: 16),
+          label: const Text('Retry'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SpeciesStaleState extends StatelessWidget {
+  const _SpeciesStaleState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => SoftCard(
+    child: Row(
+      children: [
+        const Icon(LucideIcons.cloudOff, color: AppColors.offline),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            '$message Showing the last successful data.',
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Retry species refresh',
+          onPressed: onRetry,
+          icon: const Icon(LucideIcons.refreshCw),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SpeciesHeading extends StatelessWidget {
@@ -465,7 +787,9 @@ class _SpeciesHeading extends StatelessWidget {
           const SizedBox(height: 13),
           Text(
             species.description.isEmpty
-                ? species.careNote
+                ? species.careNote.isEmpty
+                      ? 'No description is provided for this species.'
+                      : species.careNote
                 : species.description,
             style: const TextStyle(
               color: AppColors.muted,
@@ -685,6 +1009,8 @@ class _TypeLabel extends StatelessWidget {
       ),
       child: Text(
         type,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           color: AppColors.tealDark,
           fontSize: 9,

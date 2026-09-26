@@ -36,11 +36,13 @@ enum SpeciesSuitability {
 enum DeviceConnectionStatus {
   online,
   offline,
+  disabled,
   unknown;
 
   String get label => switch (this) {
     DeviceConnectionStatus.online => 'Device online',
     DeviceConnectionStatus.offline => 'Device offline',
+    DeviceConnectionStatus.disabled => 'Device disabled',
     DeviceConnectionStatus.unknown => 'State unknown',
   };
 }

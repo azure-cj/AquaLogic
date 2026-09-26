@@ -434,6 +434,7 @@ Color _connectionColor(DeviceConnectionStatus status) {
   return switch (status) {
     DeviceConnectionStatus.online => AppColors.success,
     DeviceConnectionStatus.offline => AppColors.offline,
+    DeviceConnectionStatus.disabled => AppColors.muted,
     DeviceConnectionStatus.unknown => AppColors.muted,
   };
 }
@@ -442,6 +443,7 @@ IconData _connectionIcon(DeviceConnectionStatus status) {
   return switch (status) {
     DeviceConnectionStatus.online => LucideIcons.wifi,
     DeviceConnectionStatus.offline => LucideIcons.wifiOff,
+    DeviceConnectionStatus.disabled => LucideIcons.circleSlash,
     DeviceConnectionStatus.unknown => LucideIcons.circleHelp,
   };
 }

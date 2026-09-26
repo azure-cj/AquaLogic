@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class AboutScreen extends StatelessWidget {
-  const AboutScreen({super.key});
+  const AboutScreen({super.key, this.isLiveData = false});
+
+  final bool isLiveData;
 
   @override
   Widget build(BuildContext context) {
@@ -65,22 +67,27 @@ class AboutScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   const InfoRow(
                     label: 'Surface',
-                    value: 'Android-first mobile prototype',
+                    value: 'Android-first Flutter app',
                     icon: LucideIcons.smartphone,
                   ),
                   const Divider(height: 1),
-                  const InfoRow(
+                  InfoRow(
                     label: 'Data mode',
-                    value: 'Local mock repositories',
+                    value: isLiveData
+                        ? 'Railway API + secure sign-in'
+                        : 'Local mock repositories',
                     icon: LucideIcons.database,
                   ),
                 ],
               ),
             ),
-            const EmptyState(
-              title: 'Backend integration is deferred',
-              message:
-                  'This interface is prepared for future API repositories. It does not send commands or connect to production services.',
+            EmptyState(
+              title: isLiveData
+                  ? 'Production integration is active'
+                  : 'Backend integration is deferred',
+              message: isLiveData
+                  ? 'Authentication, Home, Tanks, Alerts and Monitoring, species, and account identity use Railway. Equipment data is read-only. Profile editing, offline cache, push notifications, and physical device controls are not available in mobile.'
+                  : 'This interface is prepared for future API repositories. It does not send commands or connect to production services.',
               icon: LucideIcons.info,
             ),
           ],

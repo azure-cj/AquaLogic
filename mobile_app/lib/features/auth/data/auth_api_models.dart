@@ -115,6 +115,7 @@ class BackendAuthUser {
     name: name,
     email: email,
     role: role,
+    isActive: isActive,
     mustChangePassword: mustChangePassword ?? this.mustChangePassword,
   );
 }

@@ -496,6 +496,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: FishLibraryScreen()));
+    await tester.pumpAndSettle();
     expect(find.text('Species directory'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'tang');
     await tester.pumpAndSettle();
@@ -526,6 +527,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -1400));
     await tester.pumpAndSettle();
@@ -602,6 +604,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(
       find.text(
@@ -802,6 +805,9 @@ void main() {
 
 class _EmptyAlertRepository implements AlertRepository {
   const _EmptyAlertRepository();
+
+  @override
+  bool get isLiveData => false;
 
   @override
   Future<List<AlertInfo>> loadWaterQualityAlerts({
