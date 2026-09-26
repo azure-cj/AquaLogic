@@ -508,7 +508,7 @@ Last reviewed: 2026-09-26
   that it appeared on the physical Android phone. No FCM token or FID was
   queried or exposed.
 
-### M6.5 Alert and monitoring event triggers — implemented and locally verified
+### M6.5 Alert and monitoring event triggers — deployed and healthy
 
 - New Alert creation enqueues `water_quality_alert:{alert_id}:created` in the
   source transaction. Existing active Alerts do not enqueue again when readings
@@ -526,12 +526,15 @@ Last reviewed: 2026-09-26
   A clean isolated SQLite migration reached `0018_push_device_fid_registration`
   (head); no schema change was needed for M6.5. The only warning is the
   intentional deprecated-token fallback used for legacy rows.
-- M6.5 has not been deployed; production remains at the verified M6.3 sender
-  deployment. No production sensor, threshold, or hardware state was changed.
-  M6.6 navigation is implemented and locally verified; its production release
-  and physical notification-open checks remain gated.
+- Commit `4a693ae` is deployed from `main` to Railway production. The pre-deploy
+  Alembic command succeeded and a direct production check confirmed
+  `0018_push_device_fid_registration` is at head. `/health` returned 200/`ok`,
+  and production OpenAPI exposes `/push/devices/current` and
+  `/push/devices/current/{installation_id}`. Sanitized runtime-log and response
+  checks found no Firebase credential, FID, or FCM-token values. No production
+  sensor, threshold, or hardware state was changed.
 
-### M6.6 authenticated notification navigation — locally implemented and verified
+### M6.6 authenticated notification navigation — deployed; physical taps pending
 
 - Firebase initial opens, `onMessageOpenedApp`, and foreground local-notification
   taps now enter one navigation coordinator. Version 1 payloads are validated
@@ -551,9 +554,10 @@ Last reviewed: 2026-09-26
   release APK built at
   `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). No live
   notification was sent as part of local verification.
-- M6.5 and M6.6 changes are still local and unpublished. After production
-  deployment, install this APK and complete physical
-  alert, outage, and recovery tap checks before considering M6.6 complete.
+- The M6.6 client changes are included in the deployed release. Install this
+  APK and complete physical Alert, monitoring outage, and recovery tap checks
+  with the app foregrounded, backgrounded, and swiped away before considering
+  M6.6 complete. No additional notification was sent during release checks.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
@@ -561,10 +565,9 @@ real actuator commands/device connectivity, command reconciliation, and
 production equipment safety controls are not integrated in the Flutter client.
 M6.2 authenticated device registration and M6.3 sender health are verified in
 production. M6.4's physical registration and one-notification receipt gate has
-passed. M6.5 event triggers are implemented and pass the local backend suite;
-the changes are authorized for release and await Railway deployment. M6.6
-navigation is locally implemented and passes Flutter tests/build, with
-production deployment and physical taps still pending.
+passed. M6.5 event triggers are deployed and pass the local backend suite.
+M6.6 navigation is deployed and passes Flutter tests/build; physical Android
+tap verification remains pending.
 
 ## Active follow-up work
 

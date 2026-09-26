@@ -115,9 +115,9 @@ transaction.
 **Consequences:** M6.5 reuses the existing event-key and event/device unique
 constraints; no schema migration is required. Events created without eligible
 devices remain recorded with zero deliveries and are not backfilled when a
-device registers later. M6.5 is locally verified. M6.6 authenticated
-notification navigation is also locally implemented and verified; production
-deployment and physical tap checks remain separate gates.
+device registers later. M6.5 and M6.6 passed local verification and were
+deployed to Railway from `main` in commit `4a693ae`. Production health and
+migration-head checks passed; the physical M6.6 tap gate remains pending.
 
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 
