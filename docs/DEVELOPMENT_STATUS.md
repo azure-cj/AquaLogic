@@ -554,10 +554,19 @@ Last reviewed: 2026-09-26
   release APK built at
   `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). No live
   notification was sent as part of local verification.
-- The M6.6 client changes are included in the deployed release. Install this
-  APK and complete physical Alert, monitoring outage, and recovery tap checks
-  with the app foregrounded, backgrounded, and swiped away before considering
-  M6.6 complete. No additional notification was sent during release checks.
+- Added a guarded operator command for physical deep-link checks. It references
+  an existing active Alert, active monitoring incident, or
+  `reporting_recovered` incident; creates only one manual outbox event/delivery
+  for that existing record; targets one current FID-registered Android
+  installation; and refuses if the deterministic event already exists. It
+  never edits or creates operational Alert/MonitoringIncident rows. The six
+  command tests and full backend suite passed (215 tests); no M6.6 notification
+  has been sent yet.
+- The latest APK is installed on the authorized Android phone and was launched.
+  A production check returned only `active=true`, `session_bound=true`, and
+  `fid_registered=true`. Physical taps for Alert, monitoring outage, and
+  recovery across foreground, background, and swiped-away app states remain
+  pending. Do not use Android Force Stop for the swiped-away check.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,

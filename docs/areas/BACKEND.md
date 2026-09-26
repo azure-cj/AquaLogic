@@ -67,6 +67,11 @@ Last reviewed: 2026-09-26
 - `backend/app/cli/send_test_push.py`: one-confirmation M6.4 operator command
   that selects the latest eligible admin Android installation with an FID,
   reserves one outbox delivery, and never accepts or prints Firebase identifiers.
+- `backend/app/cli/send_deeplink_test_push.py`: one-confirmation M6.6 operator
+  command that references an existing Alert, active monitoring incident, or
+  `reporting_recovered` incident; it creates no operational source records,
+  sends to one eligible FID-registered Android installation, and refuses a
+  deterministic event that already exists.
 - `backend/app/models/security.py`: revocable auth sessions and the
   session-bound `PushDevice` registration model.
 - `backend/app/models/push_notification.py`: logical notification events and

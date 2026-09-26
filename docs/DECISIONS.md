@@ -119,6 +119,23 @@ device registers later. M6.5 and M6.6 passed local verification and were
 deployed to Railway from `main` in commit `4a693ae`. Production health and
 migration-head checks passed; the physical M6.6 tap gate remains pending.
 
+## 2026-09-26 — Test notification navigation with existing operational records
+
+**Decision:** Provide a confirmation-gated operator command that targets one
+existing active Alert, active monitoring incident, or incident resolved as
+`reporting_recovered`. It creates one manual outbox event and one delivery for
+the latest eligible session-bound Android installation with a registered FID.
+It does not create or modify operational Alert/MonitoringIncident rows.
+
+**Reason:** The M6.6 physical gate must exercise the production FID sender and
+authoritative app routing without inventing production sensor or incident data.
+
+**Consequences:** The command uses the normal versioned payload and
+deterministic event key, requires `--confirm`, and refuses an event key that
+already exists, preventing repeated test sends for the same source record. The
+manual source is distinguishable in outbox history. Physical notification taps
+remain a human verification gate.
+
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 
 **Decision:** M5 reuses the shared authenticated `ApiClient` for `/fish`,
