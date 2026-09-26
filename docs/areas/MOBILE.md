@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M5 live data integration complete; M6.1 Flutter FCM client foundation implemented; profile editing and activity remain outside the live API slice
+Status: M6.2 authenticated device registration implemented locally; Railway deployment verification, Firebase Admin delivery, event triggers, and notification navigation remain pending
 Last reviewed: 2026-09-26
 
 ## Read first
@@ -390,7 +390,35 @@ The physical Android 12 check on 2026-09-26 reported authorized notification
 access and obtained a 142-character token in masked debug output. The Firebase
 Console lifecycle test remains for the developer to run manually.
 
-## Remaining live integration work after M5
+## M6.2 Authenticated device registration
+
+Production composition starts one registration coordinator alongside the M6.1
+FCM service and API auth service. It registers only after auth restore/login has
+established a completed `admin` or `staff` session and an FCM token is
+available. Later token refresh and a newly established session use the same
+idempotent registration path. Registration errors are contained and retried
+with bounded backoff; they do not change the authentication state or block app
+startup.
+
+The client creates one random UUID per app installation, stores it in Android
+secure storage, and never reads hardware identifiers. It sends the UUID, Android
+platform, and FCM token through the shared authenticated `ApiClient` to
+`PUT /push/devices/current`. The backend derives both user and `AuthSession`
+from the validated access JWT. Token refresh updates the existing installation;
+signing into another account rebinds it. The response does not include the
+token, and the client does not display or log it. Normal logout attempts
+`DELETE /push/devices/current/{installation_id}` before revoking the backend
+session; logout proceeds if this request fails.
+
+Migration `0015_authenticated_push_devices` adds session-bound registrations.
+The backend eligibility query excludes inactive devices/accounts, unsupported
+roles, and expired or revoked sessions even when deactivation did not reach the
+server. Automated tests use fake HTTP, token, and registration boundaries. The
+API and migration are implemented locally; Railway deployment and a
+real-token-to-Railway registration check remain part of the M6.2 live gate. No
+server-side Firebase sender or notification event trigger is included yet.
+
+## Remaining work after M6.2 registration
 
 The following remain outside the completed M5 integration:
 
@@ -400,10 +428,11 @@ The following remain outside the completed M5 integration:
 - A backend recent-activity source and historical sensor readings/charts.
 - Real actuator commands and production equipment safety controls remain
   disabled in Flutter.
-- Railway FCM-token registration, Firebase Admin sending, background delivery
-  workers, and external monitoring delivery remain deferred. M6.1 implements
-  the client-side Firebase initialization, permission, token lifecycle,
-  foreground display, background handler registration, and open-event capture.
+- Firebase Admin sending, a PostgreSQL notification outbox, event triggers, and
+  notification tap navigation remain later milestones. M6.1 provides the
+  client-side Firebase initialization, permission, token lifecycle, foreground
+  display, background handler registration, and open-event capture; M6.2
+  provides local authenticated token registration.
 
 Mock repositories remain available for deterministic tests and features without
 live API support. Production composition uses API repositories for

@@ -24,6 +24,26 @@ Railway. Logs expose only masked token information. Backend registration,
 Firebase Admin sending, alert triggers, and deep links remain separate M6
 milestones.
 
+## 2026-09-26 — Bind Android push registrations to AquaLogic auth sessions
+
+**Decision:** Store one `PushDevice` per stable Android app-installation ID,
+with the full FCM token, backend user, and the `AuthSession` derived from the
+validated access token's `sid`. Keep installation IDs random and local to the
+app install. Registration is idempotent; token refresh updates the row and
+account switching rebinds it. Both registration and deactivation require the
+current staff/admin session, and recipient eligibility rechecks device, user,
+role, and session state.
+
+**Reason:** A failed mobile unregister request must not leave a revoked or
+expired session eligible for future delivery. The server remains authoritative
+for identity and access, and Firebase remains a transport provider.
+
+**Consequences:** Migration `0015_authenticated_push_devices` and the
+`/push/devices/current` API establish the M6.2 registration boundary. Responses
+and logs omit the full FCM token. This milestone does not send messages; Firebase
+Admin, the outbox, alert/monitoring triggers, and notification navigation remain
+gated follow-up work.
+
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 
 **Decision:** M5 reuses the shared authenticated `ApiClient` for `/fish`,

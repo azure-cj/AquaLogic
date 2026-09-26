@@ -1,13 +1,15 @@
 # AquaLogic Domain Model
 
 Status: Current backend model summary
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-26
 
 ## Entities
 
 | Entity | Purpose | Important relationships |
 | --- | --- | --- |
 | User | Staff identity, role, active state, and password-change state | Resolves alerts; admin role controls staff and threshold writes |
+| AuthSession | Revocable authenticated session | Belongs to a user; access JWT `sid` identifies the session |
+| PushDevice | Android FCM registration for one app installation | Unique installation ID and token; bound to the registering user and `AuthSession` |
 | Customer | Customer or account associated with managed tanks | Owns zero or more tanks |
 | Tank | Managed aquarium and public display metadata | May belong to a customer; has fish, readings, alerts, and optional monitoring-threshold overrides |
 | FishSpecies | Grouped species-level identity, diet, care, compatibility, and customer-facing profile information | Assigned to tanks through `TankFish` |
@@ -142,6 +144,13 @@ no manual resolution action or external notification.
 - Only active users can authenticate.
 - Users with temporary passwords must complete password change before accessing
   the main staff dashboard.
+- A `PushDevice` installation belongs to one current user/session and its FCM
+  token belongs to one registration. Only active devices for active `admin` or
+  `staff` users with an unrevoked, unexpired bound session are eligible for
+  delivery. Client payloads cannot choose the user or session.
+- Installation IDs are random per app install and are not hardware identifiers.
+  FCM tokens are stored for transport but omitted from ordinary API responses
+  and logs; FCM never grants AquaLogic access or becomes domain-state authority.
 - Only administrators can create/update staff accounts or write global defaults
   and tank threshold overrides; staff can read effective threshold settings.
 - Only administrators can queue or read actuator commands and state; staff

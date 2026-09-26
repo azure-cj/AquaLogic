@@ -20,6 +20,7 @@ import 'package:aqualogic/features/home/data/api_home_repository.dart';
 import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/push_notifications/data/push_notification_service.dart';
+import 'package:aqualogic/features/push_notifications/data/push_device_registration.dart';
 import 'package:aqualogic/features/tanks/data/api_tank_repository.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +37,8 @@ class AquaLogicApp extends StatefulWidget {
     this.fishRepository,
     this.equipmentRepository,
     this.pushNotificationService,
+    this.pushDeviceRegistrationRepository,
+    this.pushInstallationIdStore,
   });
 
   final AuthService? authService;
@@ -45,6 +48,8 @@ class AquaLogicApp extends StatefulWidget {
   final FishRepository? fishRepository;
   final EquipmentRepository? equipmentRepository;
   final PushNotificationService? pushNotificationService;
+  final PushDeviceRegistrationRepository? pushDeviceRegistrationRepository;
+  final PushInstallationIdStore? pushInstallationIdStore;
 
   @override
   State<AquaLogicApp> createState() => _AquaLogicAppState();
@@ -58,6 +63,7 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
   late final AlertRepository _alertRepository;
   late final FishRepository _fishRepository;
   late final EquipmentRepository _equipmentRepository;
+  PushDeviceRegistrationCoordinator? _pushDeviceRegistrationCoordinator;
 
   @override
   void initState() {
@@ -104,8 +110,24 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
           ),
           _ => const MockEquipmentRepository(),
         };
-    unawaited(_authService.initialize());
     final pushNotificationService = widget.pushNotificationService;
+    if (pushNotificationService != null && _authService is ApiAuthService) {
+      final coordinator = PushDeviceRegistrationCoordinator(
+        authService: _authService,
+        pushNotificationService: pushNotificationService,
+        repository:
+            widget.pushDeviceRegistrationRepository ??
+            ApiPushDeviceRegistrationRepository(
+              apiClient: _authService.apiClient,
+            ),
+        installationIdStore:
+            widget.pushInstallationIdStore ?? SecurePushInstallationIdStore(),
+      );
+      _pushDeviceRegistrationCoordinator = coordinator;
+      _authService.setBeforeSignOutHook(coordinator.deactivateCurrent);
+      coordinator.start();
+    }
+    unawaited(_authService.initialize());
     if (pushNotificationService != null) {
       unawaited(pushNotificationService.initialize());
     }
@@ -113,6 +135,11 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
 
   @override
   void dispose() {
+    final coordinator = _pushDeviceRegistrationCoordinator;
+    if (_authService is ApiAuthService) {
+      _authService.setBeforeSignOutHook(null);
+    }
+    if (coordinator != null) unawaited(coordinator.dispose());
     if (_ownsAuthService) _authService.dispose();
     super.dispose();
   }

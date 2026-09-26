@@ -409,11 +409,36 @@ Last reviewed: 2026-09-26
   and tap-launch states remains a manual verification step. No test message was
   sent during implementation.
 
+### M6.2 Authenticated Android device registration — local implementation
+
+- Added `PushDevice` and migration `0015_authenticated_push_devices`, with
+  unique installation/token constraints and user/session foreign keys.
+- `PUT /push/devices/current` derives the user and session from the validated
+  JWT `sid`, accepts only Android, upserts refreshed tokens, and safely rebinds
+  one installation when the signed-in account changes. Its response omits the
+  full FCM token. Authenticated deactivation is session-scoped.
+- Flutter stores a random installation UUID in Android secure storage and
+  coordinates registration after auth restore/login, token availability, and
+  token refresh. It performs best-effort deactivation before logout; registration
+  and deactivation failures do not block authentication.
+- Backend recipient eligibility excludes inactive devices/accounts, unsupported
+  roles, and revoked or expired sessions. No Firebase sender or notification
+  trigger is added in this milestone.
+- Local M6.2 gates passed on 2026-09-26: backend full suite (160 passed),
+  clean SQLite upgrade to Alembic head `0015`, Flutter full suite (180 passed),
+  `flutter analyze` (no issues), release APK build, and `git diff --check`.
+  A local PostgreSQL integration migration check was not available in this
+  environment.
+- The M6.2 live gate remains pending: migration deployment to Railway and a
+  real-token registration check from the physical phone. M6.2 is not marked
+  complete until those are confirmed.
+
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
-real actuator commands/device connectivity, command reconciliation, Railway
-FCM-token registration, Firebase Admin sending, and production equipment safety
-controls are not integrated in the Flutter client.
+real actuator commands/device connectivity, command reconciliation, Firebase
+Admin sending, and production equipment safety controls are not integrated in
+the Flutter client. M6.2 registration is implemented locally but not yet
+deployed to Railway.
 
 ## Active follow-up work
 

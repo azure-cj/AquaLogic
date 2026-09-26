@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -14,7 +16,7 @@ from swagger_ui_bundle import swagger_ui_path
 
 from .config import settings
 from .database import Base, engine
-from .routes import alerts, auth, dashboard, devices, fish, management, monitoring_incidents, public, security, sensors, species_suitability, tanks
+from .routes import alerts, auth, dashboard, devices, fish, management, monitoring_incidents, public, push_devices, security, sensors, species_suitability, tanks
 from .services.decision_engine import ensure_default_thresholds
 from .services.demo_sensor import start_demo_generator
 from .services.monitoring_incidents import start_periodic_maintenance
@@ -52,6 +54,21 @@ app = FastAPI(
 # swagger-ui-bundle ships a Swagger UI release that supports OpenAPI 3.0.x.
 # FastAPI 0.140 sets this as an app attribute rather than constructor option.
 app.openapi_version = "3.0.3"
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    errors = exc.errors()
+    if request.method == "PUT" and request.url.path == "/push/devices/current":
+        # Pydantic validation details include the rejected input by default.
+        # Registration input contains a private FCM token, so never reflect it.
+        errors = [
+            {key: value for key, value in error.items() if key != "input"}
+            for error in errors
+        ]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
 
 def _openapi_schema() -> dict:
@@ -184,3 +201,4 @@ app.include_router(management.router)
 app.include_router(dashboard.router)
 app.include_router(security.router)
 app.include_router(monitoring_incidents.router)
+app.include_router(push_devices.router)

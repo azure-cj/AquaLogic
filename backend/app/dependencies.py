@@ -43,6 +43,33 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+def get_current_auth_session(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AuthSession:
+    """Return the validated session identified by this access token's sid."""
+    try:
+        session_id = str(decode_access_token(token)["sid"])
+    except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+        raise _credentials_exception()
+
+    session = db.scalar(
+        select(AuthSession).where(
+            AuthSession.id == session_id,
+            AuthSession.user_id == current_user.id,
+        )
+    )
+    if (
+        session is None
+        or session.revoked_at is not None
+        or (session.expires_at if session.expires_at.tzinfo else session.expires_at.replace(tzinfo=utc_now().tzinfo))
+        <= utc_now()
+    ):
+        raise _credentials_exception()
+    return session
+
+
 def require_password_change_complete(current_user: User = Depends(get_current_user)) -> User:
     if current_user.must_change_password:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Password change is required")

@@ -85,6 +85,12 @@ class ApiClient {
     headers: headers,
   );
 
+  Future<ApiResponse> delete(
+    String path, {
+    bool authenticated = false,
+    Map<String, String> headers = const {},
+  }) => request('DELETE', path, authenticated: authenticated, headers: headers);
+
   Future<ApiResponse> request(
     String method,
     String path, {

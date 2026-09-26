@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-09-25
+Last reviewed: 2026-09-26
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -34,8 +34,8 @@ link back here rather than duplicate a competing project status.
   and sensor/alert behavior.
 - [`areas/WEB.md`](areas/WEB.md): React structure, routes, API usage, and UI
   validation.
-- [`areas/MOBILE.md`](areas/MOBILE.md): Flutter prototype structure and current
-  demo-data boundary.
+- [`areas/MOBILE.md`](areas/MOBILE.md): Flutter app structure, Railway API
+  integration, authenticated device registration, and remaining push milestones.
 - [`areas/FIRMWARE.md`](areas/FIRMWARE.md): ESP32 sketch, bundled libraries,
   hardware scope, and future integration boundary.
 

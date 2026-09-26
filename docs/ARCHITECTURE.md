@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-26
 
 ## System overview
 
@@ -12,7 +12,7 @@ flowchart LR
     API --> Rules["Threshold decision engine"]
     Rules --> Alerts["Persisted alerts"]
     Demo["Optional demo sensor service"] --> API
-    Mobile["Flutter staff prototype\nlocal demo data"] -. future API client .-> API
+    Mobile["Flutter Android client\nauthenticated Railway API"] --> API
     Admin["Admin dashboard"] --> API
     ESP["ESP32 sensors + actuators on tester LAN"] --> Bridge["Temporary laptop bridge"]
     Bridge -->|"HTTPS tunnel / device key"| API
@@ -29,9 +29,9 @@ and includes the route modules. The main implementation areas are:
 - `app/models/`: SQLAlchemy persistence models, including registered devices,
   actuator commands, current actuator state, and state history.
 - `app/schemas/`: Pydantic request and response models.
-- `app/routes/`: auth, tanks, fish, sensors, devices, alerts, public, management,
-  and dashboard endpoints. `devices.py` owns fixed-tank sensor ingestion and
-  the device-key actuator boundary.
+- `app/routes/`: auth, tanks, fish, sensors, devices, alerts, push-device
+  registration, public, management, and dashboard endpoints. `devices.py` owns
+  fixed-tank sensor ingestion and the device-key actuator boundary.
 - `app/services/decision_engine.py`: effective threshold checks, status
   calculation, and alert creation.
 - `app/services/thresholds.py`: global fallback and tank override resolution,
@@ -67,10 +67,14 @@ append-only audit events support revocation and incident review.
 
 ### Mobile
 
-`mobile_app/` is a Flutter prototype. Its current readings, alerts, fish data,
-and control interactions are built from local demo data. It should not be
-described as a backend client until an API client, authentication, and loading /
-offline behavior are implemented.
+`mobile_app/` is an Android-first Flutter client. Authentication, Home, Tanks,
+Alerts/Monitoring, Species, and read-only Equipment use Railway APIs with
+loading and unavailable-data states; mock repositories remain injectable for
+tests and unsupported flows. Firebase Messaging is the client transport
+boundary. M6.2 stores an installation UUID and FCM token in PostgreSQL, bound to
+the user and `AuthSession` validated from the access token's `sid`. It does not
+send notifications yet. Firebase is not a source of AquaLogic identity,
+authorization, tank, alert, monitoring, or sensor data.
 
 ### Firmware
 

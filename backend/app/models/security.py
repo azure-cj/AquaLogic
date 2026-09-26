@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -24,6 +24,38 @@ class AuthSession(Base):
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="session", cascade="all, delete-orphan"
     )
+
+
+class PushDevice(Base):
+    __tablename__ = "push_devices"
+    __table_args__ = (
+        UniqueConstraint("installation_id", name="uq_push_devices_installation_id"),
+        UniqueConstraint("fcm_token", name="uq_push_devices_fcm_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    auth_session_id: Mapped[str] = mapped_column(
+        ForeignKey("auth_sessions.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    installation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    # Stored only for Firebase delivery. API responses and ordinary logs omit it.
+    fcm_token: Mapped[str] = mapped_column(String(4096), nullable=False)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False, default="android")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    last_registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship("User")
+    auth_session: Mapped["AuthSession"] = relationship("AuthSession")
 
 
 class RefreshToken(Base):

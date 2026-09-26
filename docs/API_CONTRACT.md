@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-09-25
+Last reviewed: 2026-09-26
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -45,10 +45,33 @@ route. These reads do not provide recent activity.
 | POST | `/auth/change-password` | Authenticated | Complete or change password |
 | POST | `/auth/setup-password` | Setup link | Atomically activate or reset an account from a one-time token |
 | GET/DELETE | `/auth/sessions` and `/auth/sessions/{session_id}` | Authenticated | List/revoke the caller's sessions |
+| PUT | `/push/devices/current` | Authenticated admin/staff | Register or refresh the Android installation token; response omits the token |
+| DELETE | `/push/devices/current/{installation_id}` | Authenticated admin/staff | Deactivate the current session's installation |
 
 User creation and reset responses return one-time `setup_url` values rather
 than plaintext passwords. Setup links are fragment tokens and expire after 30
 minutes. Password changes and resets revoke existing sessions.
+
+## Authenticated Android push-device registration
+
+`PUT /push/devices/current` requires a completed, authenticated `admin` or
+`staff` session. Its body contains only `installation_id`, `fcm_token`, and
+`platform: "android"`. The backend derives `user_id` and `auth_session_id` from
+the validated bearer token's `sid`; caller-supplied identity/session fields are
+rejected. The response contains the registration ID, platform, active state, and
+registration time, and never returns the FCM token.
+
+Registration upserts by stable app-installation UUID. A refreshed token updates
+that row; signing in to another account rebinds the installation to the new
+user/session. A token found on a conflicting stale row is moved transactionally
+so only one registration retains it. `DELETE /push/devices/current/{installation_id}`
+deactivates only a row owned by the
+current user and session and is safe to repeat. Session revocation, expiration,
+inactive users, and inactive registrations are excluded by the server-side
+recipient-eligibility query even when best-effort mobile deactivation fails.
+
+These routes only register or deactivate devices. They do not send notifications;
+Firebase Admin delivery and the notification outbox are later milestones.
 
 ## Mobile Tanks reads
 

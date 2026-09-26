@@ -19,6 +19,9 @@ abstract class AuthService extends ChangeNotifier {
   AuthStatus get status;
   AuthUser? get currentUser;
 
+  /// Changes only when a new backend session is established, not on refresh.
+  int get sessionGeneration => 0;
+
   /// Called once by app composition. Local/test services can keep the default.
   Future<void> initialize() async {}
 

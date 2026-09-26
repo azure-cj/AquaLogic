@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-26
 
 ## Read first
 
@@ -44,6 +44,16 @@ Last reviewed: 2026-09-23
 - `backend/app/routes/management.py` and `backend/app/routes/security.py`:
   administrator account lifecycle summaries, sanitized session management,
   and filtered security audit access.
+- `backend/app/routes/push_devices.py`: authenticated Android installation
+  registration/deactivation. User and session ownership come from the validated
+  bearer token; the response never includes the FCM token.
+- `backend/app/services/push_devices.py`: recipient eligibility filtered by
+  active device, active admin/staff account, and unrevoked, unexpired session.
+  Firebase sending and notification events are not implemented in M6.2.
+- `backend/app/models/security.py`: revocable auth sessions and the
+  session-bound `PushDevice` registration model.
+- `backend/alembic/versions/0015_authenticated_push_devices.py`: unique
+  installation/token constraints and session/user foreign keys.
 - `backend/app/routes/fish.py`: fish species directory and admin-only species
   photo upload storage under the configured media root.
 - `backend/app/models/device.py`: registered devices, actuator command ledger,

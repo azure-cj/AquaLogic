@@ -39,12 +39,23 @@ class ApiAuthService extends AuthService {
   AuthUser? _currentUser;
   String? _accessToken;
   DateTime? _accessTokenExpiresAt;
+  int _sessionGeneration = 0;
+  Future<void> Function()? _beforeSignOut;
 
   @override
   AuthStatus get status => _status;
 
   @override
   AuthUser? get currentUser => _currentUser;
+
+  @override
+  int get sessionGeneration => _sessionGeneration;
+
+  /// Lets app composition perform best-effort authenticated cleanup before
+  /// this service revokes the current backend session.
+  void setBeforeSignOutHook(Future<void> Function()? hook) {
+    _beforeSignOut = hook;
+  }
 
   @override
   Future<void> initialize() async {
@@ -85,7 +96,7 @@ class ApiAuthService extends AuthService {
         authenticated: true,
       );
       final user = BackendAuthUser.fromMeJson(meResponse.body).toDomain();
-      _setUser(user);
+      _setUser(user, newSession: true);
     } on ApiFailure catch (failure) {
       if (failure.isUnauthenticated) {
         await _clearLocalSession();
@@ -120,7 +131,7 @@ class ApiAuthService extends AuthService {
       await _saveRefreshCredential(response.headers, requireCredential: true);
       _accessToken = token.accessToken;
       _accessTokenExpiresAt = token.expiresAt;
-      _setUser(user);
+      _setUser(user, newSession: true);
       return user;
     } catch (error) {
       final token = _responseAccessToken(response.body);
@@ -148,7 +159,7 @@ class ApiAuthService extends AuthService {
       await _saveRefreshCredential(response.headers, requireCredential: true);
       _accessToken = token.accessToken;
       _accessTokenExpiresAt = token.expiresAt;
-      _setUser(user);
+      _setUser(user, newSession: true);
     } catch (error) {
       final token = _responseAccessToken(response.body);
       if (token != null) await _bestEffortLogout(token);
@@ -161,6 +172,11 @@ class ApiAuthService extends AuthService {
   @override
   Future<void> signOut() async {
     try {
+      try {
+        await _beforeSignOut?.call();
+      } catch (_) {
+        // Device deactivation is best effort; logout must remain available.
+      }
       final storedCredential = await _credentialStore.read();
       if (_accessToken == null &&
           storedCredential != null &&
@@ -288,7 +304,8 @@ class ApiAuthService extends AuthService {
     }
   }
 
-  void _setUser(AuthUser user) {
+  void _setUser(AuthUser user, {bool newSession = false}) {
+    if (newSession) _sessionGeneration++;
     _currentUser = user;
     _setStatus(
       user.mustChangePassword

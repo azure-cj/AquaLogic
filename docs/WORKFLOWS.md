@@ -300,8 +300,8 @@ provider-native PostgreSQL backup automation.
 1. Update backend schema/model/route behavior.
 2. Update affected backend tests.
 3. Update the web API models/client and UI consumers.
-4. Check mobile impact even though the current mobile prototype is not yet
-   connected.
+4. Check the Railway-backed mobile auth and operational-data clients, as well
+   as any mock-only screens that still use local prototype data.
 5. Update `docs/API_CONTRACT.md` and `docs/DEVELOPMENT_STATUS.md` if the public
    behavior or status changed.
 

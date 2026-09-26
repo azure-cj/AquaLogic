@@ -10,7 +10,7 @@ from .threshold import (
     TankThresholdOverride,
     TankThresholdRevision,
 )
-from .security import AccountSetupToken, AuthSession, AuthThrottle, RefreshToken, SecurityAuditEvent
+from .security import AccountSetupToken, AuthSession, AuthThrottle, PushDevice, RefreshToken, SecurityAuditEvent
 from .device import ActuatorCommand, ActuatorState, ActuatorStateHistory, RegisteredDevice
 from .monitoring_incident import MonitoringIncident
 
@@ -29,6 +29,7 @@ __all__ = [
     "TankThresholdRevision",
     "AccountSetupToken",
     "AuthSession",
+    "PushDevice",
     "AuthThrottle",
     "RefreshToken",
     "SecurityAuditEvent",
