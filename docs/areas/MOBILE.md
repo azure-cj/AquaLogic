@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are implemented and locally verified, with production release and physical tap checks pending
+Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are deployed, and the M6.6 physical tap checks passed
 Last reviewed: 2026-09-26
 
 ## Read first
@@ -499,11 +499,16 @@ the [Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup)
   in Alerts.
 - Local checks passed: Flutter full suite (198 passed), `flutter analyze` (no
   issues), and a release APK build at
-  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). M6.5/M6.6
-  are not published yet; no live notification was sent during these checks.
-- After the authorized production deployment, install this APK and check Alert,
-  monitoring outage, and recovery opens from foreground, background, and a
-  stopped process. Do not use Android Force Stop for the stopped-process case.
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). The
+  backend suite passed (215 tests), and a clean SQLite migration reached
+  `0018_push_device_fid_registration` (head).
+- The deployed M6.6 checks passed on the registered physical Android phone:
+  foreground Alert tap opened authoritative Alert Detail; background
+  monitoring-outage tap opened the incident context; and recovery tapped after
+  swiping AquaLogic away from Recents opened Monitoring History with a recovered
+  incident selected. Android Force Stop was not used. The latest health check
+  returned `ok`, OpenAPI exposed the current-device registration routes, and
+  production Alembic was at `0018_push_device_fid_registration` (head).
 
 ## Remaining push work
 
@@ -515,10 +520,8 @@ The following remain outside the completed M5 integration:
 - A backend recent-activity source and historical sensor readings/charts.
 - Real actuator commands and production equipment safety controls remain
   disabled in Flutter.
-- M6.4's physical delivery gate, M6.5's local trigger gate, and M6.6's local
-  navigation gate have passed. M6.5/M6.6 still need authorized production
-  release and deployment verification, followed by the M6.6 physical tap checks.
-  M6.1 provides client-side Firebase initialization, permission, token lifecycle,
+- M6.2–M6.6 acceptance gates have passed. M6.1 provides client-side Firebase
+  initialization, permission, token lifecycle,
   foreground display, background handler registration, and open-event capture;
   M6.2 provides authenticated registration, extended with FIDs in M6.3.
 

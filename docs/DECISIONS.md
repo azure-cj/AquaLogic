@@ -116,8 +116,11 @@ transaction.
 constraints; no schema migration is required. Events created without eligible
 devices remain recorded with zero deliveries and are not backfilled when a
 device registers later. M6.5 and M6.6 passed local verification and were
-deployed to Railway from `main` in commit `4a693ae`. Production health and
-migration-head checks passed; the physical M6.6 tap gate remains pending.
+deployed to Railway from `main`; the guarded physical deep-link test command is
+in commit `d5b99c9`. Production health and migration-head checks passed. The
+physical M6.6 Alert, monitoring-outage, and recovery tap checks also passed on
+the registered Android phone across foreground, background, and swiped-away
+states, without querying or exposing Firebase identifiers.
 
 ## 2026-09-26 — Test notification navigation with existing operational records
 
@@ -133,8 +136,10 @@ authoritative app routing without inventing production sensor or incident data.
 **Consequences:** The command uses the normal versioned payload and
 deterministic event key, requires `--confirm`, and refuses an event key that
 already exists, preventing repeated test sends for the same source record. The
-manual source is distinguishable in outbox history. Physical notification taps
-remain a human verification gate.
+manual source is distinguishable in outbox history. The physical Alert,
+monitoring-outage, and recovery notification destinations were verified on the
+registered Android phone; the recovery check used an app swiped away from
+Recents, without using Android Force Stop.
 
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 

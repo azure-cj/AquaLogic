@@ -534,7 +534,7 @@ Last reviewed: 2026-09-26
   checks found no Firebase credential, FID, or FCM-token values. No production
   sensor, threshold, or hardware state was changed.
 
-### M6.6 authenticated notification navigation — deployed; physical taps pending
+### M6.6 authenticated notification navigation — deployed; physical taps verified
 
 - Firebase initial opens, `onMessageOpenedApp`, and foreground local-notification
   taps now enter one navigation coordinator. Version 1 payloads are validated
@@ -552,21 +552,31 @@ Last reviewed: 2026-09-26
   missing records and request failures keep their existing neutral/retry UI.
 - Flutter full suite: 198 passed. `flutter analyze` reported no issues, and the
   release APK built at
-  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). No live
-  notification was sent as part of local verification.
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB).
 - Added a guarded operator command for physical deep-link checks. It references
   an existing active Alert, active monitoring incident, or
   `reporting_recovered` incident; creates only one manual outbox event/delivery
   for that existing record; targets one current FID-registered Android
   installation; and refuses if the deterministic event already exists. It
   never edits or creates operational Alert/MonitoringIncident rows. The six
-  command tests and full backend suite passed (215 tests); no M6.6 notification
-  has been sent yet.
+  command tests and full backend suite passed (215 tests). The three physical
+  checks each used this command with an existing source record and one eligible
+  installation.
 - The latest APK is installed on the authorized Android phone and was launched.
   A production check returned only `active=true`, `session_bound=true`, and
-  `fid_registered=true`. Physical taps for Alert, monitoring outage, and
-  recovery across foreground, background, and swiped-away app states remain
-  pending. Do not use Android Force Stop for the swiped-away check.
+  `fid_registered=true`. On the physical phone, a foreground Alert notification
+  opened the authoritative Alert Detail; a background monitoring-outage
+  notification opened its Monitoring incident context; and a recovery
+  notification, tapped after AquaLogic was swiped away from Recents (without
+  Force Stop), opened Monitoring History with a recovered incident selected.
+  The device screen confirmed the final history destination. No FID or FCM token
+  was queried or exposed.
+- After commit `d5b99c9`, Railway `/health` returned `ok`, production OpenAPI
+  exposed both current-device registration routes, and Alembic reported
+  `0018_push_device_fid_registration` at head. A clean isolated SQLite upgrade
+  also reached that head. The final local checks passed: backend suite (215
+  passed), Flutter suite (198 passed), `flutter analyze`, release APK build,
+  and `git diff --check`.
 
 Home, the Tanks directory/detail, and Alerts/Monitoring are connected to live
 read-only API data. Separate sensor-history charts, activity, profile editing,
@@ -575,8 +585,9 @@ production equipment safety controls are not integrated in the Flutter client.
 M6.2 authenticated device registration and M6.3 sender health are verified in
 production. M6.4's physical registration and one-notification receipt gate has
 passed. M6.5 event triggers are deployed and pass the local backend suite.
-M6.6 navigation is deployed and passes Flutter tests/build; physical Android
-tap verification remains pending.
+M6.6 navigation is deployed, passes Flutter tests/build, and its physical Alert,
+monitoring-outage, and recovery tap checks passed across foreground, background,
+and swiped-away app states.
 
 ## Active follow-up work
 
