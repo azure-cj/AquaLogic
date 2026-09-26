@@ -10,6 +10,7 @@ import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
 import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
+import 'package:aqualogic/features/push_notifications/models/push_notification_intent.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
@@ -160,6 +161,212 @@ void main() {
       );
       expect(find.text('This alert is no longer available.'), findsNothing);
       expect(find.byKey(const ValueKey('alerts-source-retry')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'water-quality notification opens the current resolved Alert detail',
+    (tester) async {
+      final repository = _ScriptedAlertRepository(
+        waterLoader: ({required history}) async =>
+            history ? [_handledAlert] : const [],
+        monitoringLoader:
+            ({required history, required page, required pageSize}) async =>
+                _page(const [], page: page, total: 0),
+      );
+      final shellKey = GlobalKey<AquaLogicShellState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AquaLogicShell(
+            key: shellKey,
+            user: _staff,
+            homeRepository: _LinkedHomeRepository(_LinkedAlertRepository()),
+            alertRepository: repository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      shellKey.currentState!.openNotification(
+        const PushNotificationIntent(
+          kind: PushNotificationIntentKind.waterQualityAlert,
+          eventKey: 'water_quality_alert:901:created',
+          recordId: '901',
+          tankId: '8',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDetailScreen), findsOneWidget);
+      expect(find.text('Backend alert record 901'), findsOneWidget);
+      expect(find.text('Handled'), findsWidgets);
+      expect(
+        find.textContaining('does not confirm that the water condition'),
+        findsWidgets,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'monitoring recovery notification finds resolved history context',
+    (tester) async {
+      final repository = _ScriptedAlertRepository(
+        waterLoader: ({required history}) async => const [],
+        monitoringLoader:
+            ({required history, required page, required pageSize}) async =>
+                _page(
+                  history ? [_recoveredIncident] : const [],
+                  page: page,
+                  total: history ? 1 : 0,
+                ),
+      );
+      final shellKey = GlobalKey<AquaLogicShellState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AquaLogicShell(
+            key: shellKey,
+            user: _staff,
+            homeRepository: _LinkedHomeRepository(_LinkedAlertRepository()),
+            alertRepository: repository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      shellKey.currentState!.openNotification(
+        const PushNotificationIntent(
+          kind: PushNotificationIntentKind.monitoringRecovered,
+          eventKey: 'monitoring_incident:703:recovered',
+          recordId: '703',
+          tankId: '8',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('monitoring-incident-703')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Reporting recovered and a new reading was received.'),
+        findsWidgets,
+      );
+      expect(find.text('Recovered'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('monitoring outage notification opens the active incident', (
+    tester,
+  ) async {
+    final requestedHistory = <bool>[];
+    final repository = _ScriptedAlertRepository(
+      waterLoader: ({required history}) async => const [],
+      monitoringLoader:
+          ({required history, required page, required pageSize}) async {
+            requestedHistory.add(history);
+            return _page(
+              history ? const [] : [_activeIncident],
+              page: page,
+              total: history ? 0 : 1,
+            );
+          },
+    );
+    final shellKey = GlobalKey<AquaLogicShellState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AquaLogicShell(
+          key: shellKey,
+          user: _staff,
+          homeRepository: _LinkedHomeRepository(_LinkedAlertRepository()),
+          alertRepository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    shellKey.currentState!.openNotification(
+      const PushNotificationIntent(
+        kind: PushNotificationIntentKind.monitoringIncident,
+        eventKey: 'monitoring_incident:701:opened',
+        recordId: '701',
+        tankId: '8',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(requestedHistory, isNotEmpty);
+    expect(requestedHistory.every((history) => !history), isTrue);
+    expect(
+      find.byKey(const ValueKey('monitoring-incident-701')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Monitoring incident · reporting state, not water quality'),
+      findsOneWidget,
+    );
+    expect(find.text('No recent sensor report received.'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('unknown notification intent uses the safe Alerts fallback', (
+    tester,
+  ) async {
+    final shellKey = GlobalKey<AquaLogicShellState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AquaLogicShell(
+          key: shellKey,
+          user: _staff,
+          homeRepository: _LinkedHomeRepository(_LinkedAlertRepository()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    shellKey.currentState!.openNotification(null);
+    await tester.pump();
+
+    expect(find.text('This notification could not be opened.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'stale alert notification shows a neutral missing-record notice',
+    (tester) async {
+      final repository = _ScriptedAlertRepository(
+        waterLoader: ({required history}) async => const [],
+        monitoringLoader:
+            ({required history, required page, required pageSize}) async =>
+                _page(const [], page: page, total: 0),
+      );
+      final shellKey = GlobalKey<AquaLogicShellState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AquaLogicShell(
+            key: shellKey,
+            user: _staff,
+            homeRepository: _LinkedHomeRepository(_LinkedAlertRepository()),
+            alertRepository: repository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      shellKey.currentState!.openNotification(
+        const PushNotificationIntent(
+          kind: PushNotificationIntentKind.waterQualityAlert,
+          eventKey: 'water_quality_alert:999:created',
+          recordId: '999',
+          tankId: '8',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('This alert is no longer available.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
@@ -569,6 +776,18 @@ const _disabledIncident = MonitoringIncident(
   status: MonitoringIncidentStatus.resolved,
   resolutionReason: MonitoringResolutionReason.monitoringDisabled,
   recoveredLabel: 'Resolved Sep 25',
+  durationSeconds: 1800,
+);
+
+const _recoveredIncident = MonitoringIncident(
+  id: '703',
+  tankId: '8',
+  tankName: 'Backend Tank Eight',
+  message: 'Reporting recovered and a new reading was received.',
+  startedLabel: 'Started Sep 24',
+  status: MonitoringIncidentStatus.resolved,
+  resolutionReason: MonitoringResolutionReason.reportingRecovered,
+  recoveredLabel: 'Recovered Sep 25',
   durationSeconds: 1800,
 );
 

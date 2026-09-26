@@ -1,6 +1,6 @@
 # Mobile Area Guide
 
-Status: M6.2 authenticated device registration verified on Railway and a physical Android installation; M6.3 FID sender is deployed, with an Android FCM-registration correction in progress after the first production test was rejected; M6.4 remains gated on physical re-registration and one successful test push; M6.5 event triggers and M6.6 navigation have not started
+Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are implemented and locally verified, with production release and physical tap checks pending
 Last reviewed: 2026-09-26
 
 ## Read first
@@ -67,11 +67,11 @@ Still mock-backed / not implemented:
   the mobile API slice. Tank Detail omits mock-only activity for live data.
 - Physical actuator commands and background refresh are not implemented.
   M6.1 added the Flutter FCM client foundation, M6.2 authenticated device
-  registration is verified, and M6.3 backend sending has deployed. The Android
-  FID-registration correction and M6.4 physical send gate remain active.
-  Production alert/monitoring triggers remain
-  deferred to M6.5. Species and read-only equipment use Railway repositories
-  under M5, described below.
+  registration is verified, M6.3 backend sending is deployed, and M6.4's
+  physical test notification was received. M6.5 source-event triggers are
+  implemented and tested locally; their production release remains pending.
+  Species and read-only equipment use Railway repositories under M5, described
+  below.
 
 ## Role-Aware Home V1
 
@@ -441,23 +441,71 @@ whose explicit FCM-registration marker is true and falls back to the retained
 FCM token for compatibility. An unregistered recipient deactivates only the
 matching current identifier.
 Global credential errors keep deliveries retryable and never deactivate
-devices. No alert or monitoring source code enqueues these events yet; those
-triggers remain M6.5. A missing or invalid global credential is logged without
-exception detail, leaves deliveries retryable, and pauses that process's
-dispatcher until Railway restarts with corrected configuration.
+devices. M6.5 now enqueues from new Alert creation, MonitoringIncident opening,
+and successful `reporting_recovered` transitions. Repeated readings or
+severity changes on the same Alert, water-quality resolutions,
+`monitoring_disabled`, and `tank_retired` create no additional event. Event
+creation and eligible-recipient snapshots share the source transaction; Firebase
+network calls remain in the independent dispatcher. A missing or invalid global
+credential is logged without exception detail, leaves deliveries retryable,
+and pauses that process's dispatcher until Railway restarts with corrected
+configuration.
 
 `PUSH_NOTIFICATIONS_ENABLED` defaults to false. Firebase credentials belong in
 Railway's `FIREBASE_SERVICE_ACCOUNT_JSON_B64` secret, never in the repository,
 Flutter, or `google-services.json`. Credential provisioning was handled
 directly in Railway and is not represented in source control. The first
 controlled production test was rejected as an unregistered recipient, which
-showed that storing an FID alone did not prove FCM had registered it. The
-corrected Android registration and migration `0018` are in progress. M6.4
-remains gated on an updated physical Android installation registering its FID,
-one successful controlled test, and human receipt confirmation. See the
-[Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup).
+showed that storing an FID alone did not prove FCM had registered it. Android
+registration was corrected in migration `0018`; production registration was
+reverified, and the human confirmed receipt of one later controlled test. See
+the [Firebase Admin setup checkpoint](../WORKFLOWS.md#firebase-admin-push-setup).
 
-## Remaining work after M6.2 registration
+## M6.5 production-event trigger behavior
+
+- New water-quality Alert rows create one
+  `water_quality_alert:{alert_id}:created` event. Repeated abnormal readings
+  and warning/critical changes update the existing Alert without another event.
+  A later new Alert row after resolution creates its own event; neither operator
+  handling nor automatic normalization creates a resolution push.
+- A newly created MonitoringIncident creates one
+  `monitoring_incident:{incident_id}:opened` event. Only a successful
+  `reporting_recovered` transition creates
+  `monitoring_incident:{incident_id}:recovered`; disabling monitoring or
+  retiring a tank does not claim recovery.
+- Deterministic event keys, unique event/device deliveries, and recipient
+  materialization at enqueue prevent repeated detector cycles and later device
+  registrations from generating a backlog. Push provider failures occur after
+  the operational transaction and do not undo sensor, Alert, or incident
+  persistence.
+- M6.5 is locally verified by the backend suite; it has not yet been deployed.
+  No production sensor readings, thresholds, or hardware were manipulated.
+
+## M6.6 authenticated notification navigation
+
+- Firebase initial opens, background `onMessageOpenedApp` taps, and foreground
+  local-notification taps feed one navigation coordinator. The versioned
+  string-only payload parser accepts only known event types, positive record
+  IDs, and matching event keys; it ignores message text and any claimed state.
+- One pending tap can wait through auth restoration, login, or required
+  password change. Navigation starts only after the authenticated shell is
+  ready. A bounded in-memory deduplicator suppresses repeated event keys or
+  Firebase message IDs.
+- Water-quality alerts are loaded through the existing authenticated alert
+  repository before Alert Detail opens, so current resolved state is shown.
+  Monitoring outage and recovery references use the existing Monitoring active
+  and history streams. Missing records use neutral fallback UI; network errors
+  retain the existing retry state. Unknown or malformed payloads land safely
+  in Alerts.
+- Local checks passed: Flutter full suite (198 passed), `flutter analyze` (no
+  issues), and a release APK build at
+  `mobile_app/build/app/outputs/flutter-apk/app-release.apk` (60.7 MB). M6.5/M6.6
+  are not published yet; no live notification was sent during these checks.
+- After the authorized production deployment, install this APK and check Alert,
+  monitoring outage, and recovery opens from foreground, background, and a
+  stopped process. Do not use Android Force Stop for the stopped-process case.
+
+## Remaining push work
 
 The following remain outside the completed M5 integration:
 
@@ -467,12 +515,12 @@ The following remain outside the completed M5 integration:
 - A backend recent-activity source and historical sensor readings/charts.
 - Real actuator commands and production equipment safety controls remain
   disabled in Flutter.
-- The M6.3 FID-registration correction and authenticated physical re-registration
-  gates must pass before M6.4; physical test push, event triggers, and
-  notification tap navigation are the later M6.4–M6.6 gates. M6.1 provides the client-side
-  Firebase initialization, permission, token lifecycle, foreground display,
-  background handler registration, and open-event capture; M6.2 provides
-  authenticated device registration, extended with FIDs in M6.3.
+- M6.4's physical delivery gate, M6.5's local trigger gate, and M6.6's local
+  navigation gate have passed. M6.5/M6.6 still need authorized production
+  release and deployment verification, followed by the M6.6 physical tap checks.
+  M6.1 provides client-side Firebase initialization, permission, token lifecycle,
+  foreground display, background handler registration, and open-event capture;
+  M6.2 provides authenticated registration, extended with FIDs in M6.3.
 
 Mock repositories remain available for deterministic tests and features without
 live API support. Production composition uses API repositories for

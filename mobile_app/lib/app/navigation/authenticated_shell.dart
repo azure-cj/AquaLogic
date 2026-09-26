@@ -14,7 +14,9 @@ import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 /// The user role comes from authentication state; it is never selected by a
 /// presentation widget or inferred from the submitted credentials.
 class AuthenticatedShell extends StatelessWidget {
-  const AuthenticatedShell({super.key});
+  const AuthenticatedShell({super.key, this.onReady});
+
+  final ValueChanged<AquaLogicShellState>? onReady;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +31,7 @@ class AuthenticatedShell extends StatelessWidget {
           TankRepositoryScope.maybeOf(context) ?? const MockTankRepository(),
       alertRepository:
           AlertRepositoryScope.maybeOf(context) ?? const MockAlertRepository(),
+      onReady: onReady,
     );
   }
 }

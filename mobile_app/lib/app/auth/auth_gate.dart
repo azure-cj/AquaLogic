@@ -2,18 +2,24 @@ import 'package:flutter/material.dart';
 
 import 'package:aqualogic/app/auth/auth_scope.dart';
 import 'package:aqualogic/app/navigation/authenticated_shell.dart';
+import 'package:aqualogic/app/navigation/aqualogic_shell.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:aqualogic/features/auth/screens/login_screen.dart';
 import 'package:aqualogic/features/auth/screens/password_change_screen.dart';
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key, this.animateInitialState = true});
+  const AuthGate({
+    super.key,
+    this.animateInitialState = true,
+    this.onAuthenticatedShellReady,
+  });
 
   /// Lets a covering startup screen own the first visible transition.
   ///
   /// State changes after the first frame keep the normal AuthGate animation.
   final bool animateInitialState;
+  final ValueChanged<AquaLogicShellState>? onAuthenticatedShellReady;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -25,10 +31,20 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     final authService = AuthScope.of(context);
+    final authenticatedUserId = authService.currentUser?.id;
     final child = switch (authService.status) {
       AuthStatus.checking => const _AuthChecking(),
       AuthStatus.unauthenticated => const LoginScreen(),
-      AuthStatus.authenticated => const AuthenticatedShell(),
+      AuthStatus.authenticated => AuthenticatedShell(
+        onReady: (shell) {
+          if (authService.status != AuthStatus.authenticated ||
+              authService.currentUser?.id != authenticatedUserId ||
+              shell.widget.user.id != authenticatedUserId) {
+            return;
+          }
+          widget.onAuthenticatedShellReady?.call(shell);
+        },
+      ),
       AuthStatus.mustChangePassword => const PasswordChangeScreen(),
       AuthStatus.connectionUnavailable => const _AuthUnavailable(),
     };

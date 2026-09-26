@@ -9,7 +9,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import _validate_monitoring, settings
 from app.database import Base, configure_sqlite_foreign_keys
-from app.models import Alert, MonitoringIncident, RegisteredDevice, SecurityAuditEvent, SensorReading, Tank
+from app.models import (
+    Alert,
+    MonitoringIncident,
+    PushNotificationEvent,
+    RegisteredDevice,
+    SecurityAuditEvent,
+    SensorReading,
+    Tank,
+)
 from app.security import hash_opaque_token
 from app.services.decision_engine import ensure_default_thresholds, ingest_reading
 from app.services import monitoring_incidents
@@ -380,6 +388,12 @@ def test_concurrent_detector_cycles_share_one_active_row(tmp_path: Path):
     check = session_factory()
     try:
         assert check.scalar(select(func.count()).select_from(MonitoringIncident)) == 1
+        incident = check.scalar(select(MonitoringIncident))
+        event = check.scalar(select(PushNotificationEvent))
+        assert incident is not None
+        assert event is not None
+        assert event.event_key == f"monitoring_incident:{incident.id}:opened"
+        assert check.scalar(select(func.count()).select_from(PushNotificationEvent)) == 1
     finally:
         check.close()
         Base.metadata.drop_all(bind=engine)

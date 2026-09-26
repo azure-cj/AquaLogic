@@ -16,6 +16,7 @@ from app.database import SessionLocal
 from app.models import MonitoringIncident, RegisteredDevice, SensorReading, Tank
 from app.services.auth_security import audit_event
 from app.services.actuator_commands import reconcile_all_actuator_commands
+from app.services.push_notifications import enqueue_push_notification
 from app.security import utc_now
 
 
@@ -82,6 +83,16 @@ def resolve_active_monitoring_incident(
     )
     db.flush()
     db.refresh(incident)
+    if reason == "reporting_recovered":
+        enqueue_push_notification(
+            db,
+            event_type="monitoring_recovered",
+            source_id=incident.id,
+            tank_id=incident.tank_id,
+            title="Monitoring restored",
+            body="A tank has resumed reporting. Open AquaLogic for details.",
+            now=resolved_value,
+        )
     return incident
 
 
@@ -208,6 +219,15 @@ def detect_monitoring_incidents(
                             if latest_received_at
                             else None,
                         },
+                    )
+                    enqueue_push_notification(
+                        db,
+                        event_type="monitoring_incident",
+                        source_id=incident.id,
+                        tank_id=tank.id,
+                        title="Monitoring outage",
+                        body="A tank has stopped reporting. Open AquaLogic for details.",
+                        now=now,
                     )
                 created += 1
             except IntegrityError:

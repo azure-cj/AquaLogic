@@ -158,6 +158,7 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
   ) async {
     if (!_localNotificationsInitialized) return;
     final payload = jsonEncode(<String, Object?>{
+      'message_id': message.messageId,
       'title': message.title,
       'body': message.body,
       'data': message.data,
@@ -188,6 +189,7 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
   PushNotificationOpenEvent _openEventFromRemoteMessage(RemoteMessage message) {
     final notification = message.notification;
     return PushNotificationOpenEvent(
+      messageId: message.messageId,
       title: notification?.title,
       body: notification?.body,
       data: Map<String, Object?>.from(message.data),
@@ -211,6 +213,9 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
       if (decoded is! Map<String, dynamic>) return null;
       final data = decoded['data'];
       return PushNotificationOpenEvent(
+        messageId: decoded['message_id'] is String
+            ? decoded['message_id'] as String
+            : null,
         title: decoded['title'] is String ? decoded['title'] as String : null,
         body: decoded['body'] is String ? decoded['body'] as String : null,
         data: data is Map<String, dynamic>

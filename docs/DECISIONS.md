@@ -95,8 +95,29 @@ that was merely fetched from one registered with FCM.
 **Consequences:** Migration `0018_push_device_fid_registration` keeps existing
 rows on the token fallback until a corrected Android client registers again.
 Registration/session eligibility, logout deactivation, and response/log
-redaction remain in force. The physical M6.4 gate must be repeated with the
-updated APK before event triggers in M6.5 begin.
+redaction remain in force. The physical M6.4 gate was repeated with the updated
+APK and later passed; see the current status in `DEVELOPMENT_STATUS.md`.
+
+## 2026-09-26 — Trigger push events from operational source transitions
+
+**Decision:** Enqueue one deterministic event in the source transaction when a
+new water-quality Alert row is created, a new MonitoringIncident is opened, or
+an active incident successfully resolves as `reporting_recovered`. Do not
+enqueue for repeat readings, Alert severity changes, water-quality resolution,
+`monitoring_disabled`, or `tank_retired`. Materialize eligible delivery rows at
+enqueue time and keep Firebase network calls in the independent dispatcher.
+
+**Reason:** Push should describe a real change in authoritative Railway state
+without creating reading-level spam or suggesting that administrative closure
+proves monitoring recovered. Provider failures must remain outside the source
+transaction.
+
+**Consequences:** M6.5 reuses the existing event-key and event/device unique
+constraints; no schema migration is required. Events created without eligible
+devices remain recorded with zero deliveries and are not backfilled when a
+device registers later. M6.5 is locally verified. M6.6 authenticated
+notification navigation is also locally implemented and verified; production
+deployment and physical tap checks remain separate gates.
 
 ## 2026-09-25 — Connect mobile Species and read-only Equipment through existing APIs
 

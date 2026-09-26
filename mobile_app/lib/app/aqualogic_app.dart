@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:aqualogic/app/auth/auth_scope.dart';
+import 'package:aqualogic/app/auth/auth_gate.dart';
 import 'package:aqualogic/app/alerts/alert_repository_scope.dart';
 import 'package:aqualogic/app/control/equipment_repository_scope.dart';
 import 'package:aqualogic/app/fish/fish_repository_scope.dart';
 import 'package:aqualogic/app/home/home_repository_scope.dart';
 import 'package:aqualogic/app/tanks/tank_repository_scope.dart';
 import 'package:aqualogic/app/startup/splash_screen.dart';
+import 'package:aqualogic/app/navigation/aqualogic_shell.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/auth/data/api_auth_service.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
@@ -21,6 +23,7 @@ import 'package:aqualogic/features/home/data/home_repository.dart';
 import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/push_notifications/data/push_notification_service.dart';
 import 'package:aqualogic/features/push_notifications/data/push_device_registration.dart';
+import 'package:aqualogic/features/push_notifications/data/notification_navigation_coordinator.dart';
 import 'package:aqualogic/features/tanks/data/api_tank_repository.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
 import 'package:flutter/material.dart';
@@ -64,6 +67,8 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
   late final FishRepository _fishRepository;
   late final EquipmentRepository _equipmentRepository;
   PushDeviceRegistrationCoordinator? _pushDeviceRegistrationCoordinator;
+  NotificationNavigationCoordinator? _notificationNavigationCoordinator;
+  AquaLogicShellState? _authenticatedShell;
 
   @override
   void initState() {
@@ -111,6 +116,20 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
           _ => const MockEquipmentRepository(),
         };
     final pushNotificationService = widget.pushNotificationService;
+    if (pushNotificationService != null) {
+      final coordinator = NotificationNavigationCoordinator(
+        authService: _authService,
+        pushNotificationService: pushNotificationService,
+        navigate: (intent) {
+          final shell = _authenticatedShell;
+          if (shell == null || !shell.mounted) return false;
+          shell.openNotification(intent);
+          return true;
+        },
+      );
+      _notificationNavigationCoordinator = coordinator;
+      coordinator.start();
+    }
     if (pushNotificationService != null && _authService is ApiAuthService) {
       final coordinator = PushDeviceRegistrationCoordinator(
         authService: _authService,
@@ -138,6 +157,10 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
     final coordinator = _pushDeviceRegistrationCoordinator;
     if (_authService is ApiAuthService) {
       _authService.setBeforeSignOutHook(null);
+    }
+    final notificationCoordinator = _notificationNavigationCoordinator;
+    if (notificationCoordinator != null) {
+      unawaited(notificationCoordinator.dispose());
     }
     if (coordinator != null) unawaited(coordinator.dispose());
     if (_ownsAuthService) _authService.dispose();
@@ -197,10 +220,21 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
                 repository: _fishRepository,
                 child: EquipmentRepositoryScope(
                   repository: _equipmentRepository,
-                  child: const SplashScreen(
+                  child: SplashScreen(
                     minimumDisplayDuration: _startupPreview
                         ? Duration(seconds: 6)
                         : Duration(milliseconds: 600),
+                    next: AuthGate(
+                      animateInitialState: false,
+                      onAuthenticatedShellReady:
+                          _notificationNavigationCoordinator == null
+                          ? null
+                          : (shell) {
+                              _authenticatedShell = shell;
+                              _notificationNavigationCoordinator
+                                  ?.onAuthenticatedShellReady();
+                            },
+                    ),
                   ),
                 ),
               ),

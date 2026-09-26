@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:aqualogic/app/aqualogic_app.dart';
 import 'package:aqualogic/features/auth/data/mock_auth_service.dart';
 import 'package:aqualogic/features/auth/screens/login_screen.dart';
+import 'package:aqualogic/features/push_notifications/data/notification_navigation_coordinator.dart';
 import 'package:aqualogic/features/push_notifications/data/push_notification_service.dart';
 import 'package:aqualogic/features/push_notifications/models/push_notification_message.dart';
 import 'package:flutter/material.dart';
@@ -241,6 +242,43 @@ void main() {
   });
 
   test(
+    'initial, background Firebase, and local taps share one coordinator',
+    () async {
+      final auth = MockAuthService();
+      await auth.signIn(email: 'staff@aqualogic.local', password: 'staff123');
+      platform.initialFirebaseOpen = _validOpenEvent(
+        'water_quality_alert',
+        '70',
+      );
+      platform.initialLocalOpen = _validOpenEvent('monitoring_recovered', '71');
+      final navigations = <String>[];
+      final coordinator = NotificationNavigationCoordinator(
+        authService: auth,
+        pushNotificationService: service,
+        navigate: (intent) {
+          if (intent != null) navigations.add(intent.eventKey);
+          return true;
+        },
+      )..start();
+      coordinator.onAuthenticatedShellReady();
+      await service.initialize();
+
+      platform.opens.add(_validOpenEvent('monitoring_incident', '72'));
+      platform.localOpens.add(_validOpenEvent('monitoring_recovered', '73'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(navigations, [
+        'water_quality_alert:70:created',
+        'monitoring_incident:71:recovered',
+        'monitoring_incident:72:opened',
+        'monitoring_incident:73:recovered',
+      ]);
+      await coordinator.dispose();
+      auth.dispose();
+    },
+  );
+
+  test(
     'local notification setup failure does not block FCM registration',
     () async {
       platform.failLocalInitialization = true;
@@ -288,6 +326,45 @@ void main() {
     },
   );
 
+  testWidgets(
+    'cold-start push open waits for sign-in before using authenticated navigation',
+    (tester) async {
+      final auth = MockAuthService();
+      final fake = _FakePushNotificationService(
+        initialOpen: PushNotificationOpenEvent(
+          messageId: 'cold-start-unknown',
+          data: const <String, Object?>{'type': 'future_event_type'},
+        ),
+      );
+      await tester.pumpWidget(
+        AquaLogicApp(authService: auth, pushNotificationService: fake),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.text('This notification could not be opened.'), findsNothing);
+
+      final signIn = auth.signIn(
+        email: 'staff@aqualogic.local',
+        password: 'staff123',
+      );
+      await tester.pump(const Duration(milliseconds: 220));
+      await signIn;
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(
+        find.text('This notification could not be opened.'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+      await fake.dispose();
+    },
+  );
+
   testWidgets('Firebase startup failure does not block the auth flow', (
     tester,
   ) async {
@@ -306,6 +383,24 @@ void main() {
     expect(find.byType(LoginScreen), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+PushNotificationOpenEvent _validOpenEvent(String type, String recordId) {
+  final alert = type == 'water_quality_alert';
+  final recovered = type == 'monitoring_recovered';
+  final eventKey = alert
+      ? 'water_quality_alert:$recordId:created'
+      : 'monitoring_incident:$recordId:${recovered ? 'recovered' : 'opened'}';
+  return PushNotificationOpenEvent(
+    messageId: 'fake-message-$type-$recordId',
+    data: <String, Object?>{
+      'schema_version': '1',
+      'type': type,
+      'event_key': eventKey,
+      'tank_id': '8',
+      alert ? 'alert_id' : 'incident_id': recordId,
+    },
+  );
 }
 
 class _FakePushNotificationPlatform implements PushNotificationPlatform {
@@ -427,6 +522,9 @@ class _FakePushNotificationPlatform implements PushNotificationPlatform {
 }
 
 class _FakePushNotificationService implements PushNotificationService {
+  _FakePushNotificationService({this.initialOpen});
+
+  final PushNotificationOpenEvent? initialOpen;
   final StreamController<String> tokens = StreamController<String>.broadcast(
     sync: true,
   );
@@ -462,6 +560,8 @@ class _FakePushNotificationService implements PushNotificationService {
   @override
   Future<void> initialize() async {
     initializeCount++;
+    final event = initialOpen;
+    if (event != null) opens.add(event);
   }
 
   @override

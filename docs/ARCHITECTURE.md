@@ -75,7 +75,8 @@ boundary. M6.2 stores an AquaLogic installation UUID, the Firebase Installation
 ID (FID), and the separate FCM token in PostgreSQL, bound to the user and
 `AuthSession` validated from the access token's `sid`. M6.3 adds a lazy backend
 Admin SDK sender that targets registered FIDs and falls back to tokens only for
-legacy rows, plus an event/delivery outbox. Source-event triggers remain M6.5.
+legacy rows, plus an event/delivery outbox. M6.5 connects new Alert, monitoring
+outage, and true reporting-recovery transitions to that outbox.
 Neither Firebase identifier appears in normal API responses or application
 logs. Firebase is not a source of AquaLogic identity, authorization, tank,
 alert, monitoring, or sensor data.
@@ -106,11 +107,13 @@ from current web and backend work.
 7. Authenticated web clients read fleet, incident history, alerts, and analytics
    data.
 8. Public web clients read a restricted tank view by public ID.
-9. The M6.3 outbox helper can record a deterministic notification event and
-   eligible per-device deliveries in the same source transaction. A separate
-   dispatcher leases deliveries, rechecks device/user/role/session state, then
-   sends through Firebase Admin outside the source transaction. Alert and
-   monitoring code does not enqueue events until M6.5.
+9. A newly created Alert, MonitoringIncident, or successfully recovered
+   MonitoringIncident enqueues its deterministic event and currently eligible
+   per-device deliveries in the same source transaction. Alert updates,
+   water-quality resolution, and administrative monitoring closure do not
+   enqueue additional events. A separate dispatcher leases deliveries,
+   rechecks device/user/role/session state, then sends through Firebase Admin
+   outside the source transaction.
 
 Push events are idempotent by `event_key`; ordinary duplicate delivery rows are
 prevented by `(event_id, push_device_id)`. Lease claims prevent concurrent
@@ -118,7 +121,8 @@ workers from intentionally sending the same row. Bounded retries provide
 duplicate-resistant, at-least-once transport characteristics: a response lost
 after FCM accepts a message may still cause a duplicate on retry. Firebase
 credentials remain Railway secrets; push is disabled by default, and Firebase
-remains a transport only.
+remains a transport only. Events with no eligible devices have no delivery rows;
+later device registration does not backfill historical notifications.
 
 Tank deletion is a database-first administrator operation serialized through
 the same tank lifecycle lock as retirement. The route captures the current hero

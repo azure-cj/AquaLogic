@@ -11,6 +11,7 @@ import 'package:aqualogic/features/home/data/mock_home_repository.dart';
 import 'package:aqualogic/features/home/models/home_dashboard_data.dart';
 import 'package:aqualogic/features/home/screens/home_screen.dart';
 import 'package:aqualogic/features/more/screens/more_screen.dart';
+import 'package:aqualogic/features/push_notifications/models/push_notification_intent.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
 import 'package:aqualogic/features/sensors/models/sensor_snapshot.dart';
 import 'package:aqualogic/features/tanks/data/mock_tank_repository.dart';
@@ -28,18 +29,20 @@ class AquaLogicShell extends StatefulWidget {
     this.homeRepository = const MockHomeRepository(),
     this.tankRepository = const MockTankRepository(),
     this.alertRepository = const MockAlertRepository(),
+    this.onReady,
   });
 
   final AuthUser user;
   final HomeRepository homeRepository;
   final TankRepository tankRepository;
   final AlertRepository alertRepository;
+  final ValueChanged<AquaLogicShellState>? onReady;
 
   @override
-  State<AquaLogicShell> createState() => _AquaLogicShellState();
+  State<AquaLogicShell> createState() => AquaLogicShellState();
 }
 
-class _AquaLogicShellState extends State<AquaLogicShell> {
+class AquaLogicShellState extends State<AquaLogicShell> {
   static const _hideThreshold = 22.0;
   static const _showThreshold = 12.0;
   static const _nearTopThreshold = 8.0;
@@ -60,6 +63,12 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
   void initState() {
     super.initState();
     _snapshot = MockSensorFeed.snapshot(_tick);
+    final onReady = widget.onReady;
+    if (onReady != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) onReady(this);
+      });
+    }
     if (widget.homeRepository.refreshDemoData) {
       _timer = Timer.periodic(const Duration(seconds: 4), (_) {
         setState(() {
@@ -347,6 +356,26 @@ class _AquaLogicShellState extends State<AquaLogicShell> {
       ),
     ),
   );
+
+  /// Routes a validated push reference through the existing incident center.
+  /// The screen/repository fetches current backend state before opening detail.
+  void openNotification(PushNotificationIntent? intent) {
+    if (!mounted) return;
+    _selectDestination(2);
+    if (intent == null) {
+      _showHomeDestinationNotice('This notification could not be opened.');
+      return;
+    }
+
+    final stream = switch (intent.kind) {
+      PushNotificationIntentKind.waterQualityAlert => AlertStream.waterQuality,
+      PushNotificationIntentKind.monitoringIncident ||
+      PushNotificationIntentKind.monitoringRecovered => AlertStream.monitoring,
+    };
+    unawaited(
+      _openIncidentCenter(stream: stream, referenceId: intent.recordId),
+    );
+  }
 
   void _alertResolved(AlertInfo alert) {
     if (alert.isActive) return;

@@ -7,6 +7,7 @@ from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, Thr
 from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
+from app.services.push_notifications import enqueue_push_notification
 from app.services.thresholds import EffectiveThreshold, resolve_effective_thresholds
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
@@ -110,14 +111,26 @@ def ingest_reading(
         if severity is not None:
             message = f"{parameter.replace('_', ' ').title()} is outside its {severity.value} threshold"
             if alert is None:
-                db.add(
-                    Alert(
-                        tank_id=tank_id,
-                        reading_id=reading.id,
-                        parameter=parameter,
-                        severity=severity,
-                        message=message,
-                    )
+                alert = Alert(
+                    tank_id=tank_id,
+                    reading_id=reading.id,
+                    parameter=parameter,
+                    severity=severity,
+                    message=message,
+                )
+                db.add(alert)
+                db.flush()
+                enqueue_push_notification(
+                    db,
+                    event_type="water_quality_alert",
+                    source_id=alert.id,
+                    tank_id=tank_id,
+                    title="Water-quality alert",
+                    body=(
+                        f"A new {severity.value} water-quality alert needs attention. "
+                        "Open AquaLogic for details."
+                    ),
+                    now=reading.received_at,
                 )
             elif alert.severity != severity or alert.reading_id != reading.id:
                 alert.severity = severity
