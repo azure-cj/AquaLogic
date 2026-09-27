@@ -146,7 +146,7 @@ export type TankOperations = {
 };
 
 export type ActuatorName = 'uv' | 'led' | 'feeder' | 'pump_a' | 'pump_b';
-export type ActuatorAction = 'on' | 'off' | 'timer' | 'schedule' | 'feed_now' | 'config' | 'dispense' | 'stop' | 'retract';
+export type ActuatorAction = 'on' | 'off' | 'timer' | 'schedule' | 'feed_now' | 'config' | 'dispense' | 'test_dispense' | 'refill_confirm' | 'stop' | 'retract';
 export type ActuatorCommandStatus = 'queued' | 'executing' | 'succeeded' | 'failed' | 'expired' | 'outcome_unknown';
 
 export type LightActuatorState = {
@@ -177,6 +177,16 @@ export type PumpActuatorState = {
   dose_count: number;
   last_dispensed: string;
   volume_ml: number;
+  remaining_ml?: number | null;
+  capacity_ml?: number | null;
+  volume_known?: boolean | null;
+  refill_required?: boolean | null;
+  clock_synced?: boolean | null;
+  schedule?: FeederScheduleSlot[] | null;
+  last_chemical_dose_at?: string | null;
+  next_eligible_at?: string | null;
+  next_dose_at?: string | null;
+  schedule_event?: string | null;
 };
 
 export type ActuatorState = LightActuatorState | FeederActuatorState | PumpActuatorState;

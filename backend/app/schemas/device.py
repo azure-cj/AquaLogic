@@ -17,7 +17,7 @@ COMMAND_EXPIRY_MAX_SECONDS = 300
 TIME_PATTERN = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
 
 ActuatorName = Literal["uv", "led", "feeder", "pump_a", "pump_b"]
-ActuatorAction = Literal["on", "off", "timer", "schedule", "feed_now", "config", "dispense", "stop", "retract"]
+ActuatorAction = Literal["on", "off", "timer", "schedule", "feed_now", "config", "dispense", "test_dispense", "refill_confirm", "stop", "retract"]
 CommandStatus = Literal["queued", "executing", "succeeded", "failed", "expired", "outcome_unknown"]
 
 
@@ -89,6 +89,12 @@ class FeederSchedulePayload(BaseModel):
     slots: list[FeederScheduleSlot] = Field(min_length=FEEDER_SCHEDULE_SLOTS, max_length=FEEDER_SCHEDULE_SLOTS)
 
 
+class PumpSchedulePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slots: list[FeederScheduleSlot] = Field(min_length=FEEDER_SCHEDULE_SLOTS, max_length=FEEDER_SCHEDULE_SLOTS)
+
+
 class ActuatorCommandCreate(BaseModel):
     """Admin command input; payload is normalized to the bridge contract."""
 
@@ -106,8 +112,8 @@ class ActuatorCommandCreate(BaseModel):
             "uv": {"on", "off", "timer", "schedule"},
             "led": {"on", "off", "timer", "schedule"},
             "feeder": {"feed_now", "config", "schedule"},
-            "pump_a": {"dispense", "stop", "retract"},
-            "pump_b": {"dispense", "stop", "retract"},
+            "pump_a": {"dispense", "test_dispense", "refill_confirm", "schedule", "stop", "retract"},
+            "pump_b": {"dispense", "test_dispense", "refill_confirm", "schedule", "stop", "retract"},
         }[self.actuator]
         if self.action not in expected:
             raise ValueError(f"Action {self.action!r} is not allowed for {self.actuator}")
@@ -129,6 +135,8 @@ class ActuatorCommandCreate(BaseModel):
             self.payload = LightTimerPayload.model_validate(self.payload).model_dump()
         elif self.action == "schedule" and self.actuator in {"uv", "led"}:
             self.payload = LightSchedulePayload.model_validate(self.payload).model_dump()
+        elif self.action == "schedule" and self.actuator in {"pump_a", "pump_b"}:
+            self.payload = PumpSchedulePayload.model_validate(self.payload).model_dump()
         elif self.action == "config":
             self.payload = FeederConfigPayload.model_validate(self.payload).model_dump()
         elif self.action == "schedule":
@@ -141,7 +149,7 @@ class ActuatorCommandCreate(BaseModel):
             if self.payload:
                 raise ValueError("Pump dispense uses the firmware-configured volume and does not accept a payload")
             self.payload = {}
-        elif self.action in {"stop", "retract"}:
+        elif self.action in {"test_dispense", "refill_confirm", "stop", "retract"}:
             if self.payload:
                 raise ValueError("This pump action does not accept a payload")
             self.payload = {}
@@ -251,6 +259,16 @@ class PumpActuatorState(BaseModel):
     dose_count: StrictInt = Field(ge=0, le=2_147_483_647)
     last_dispensed: StrictStr = Field(max_length=80)
     volume_ml: float = Field(ge=0, le=100)
+    remaining_ml: float | None = Field(default=None, ge=0, le=100)
+    capacity_ml: float | None = Field(default=None, gt=0, le=100)
+    volume_known: StrictBool | None = None
+    refill_required: StrictBool | None = None
+    clock_synced: StrictBool | None = None
+    schedule: list[FeederScheduleSlot] | None = Field(default=None, min_length=FEEDER_SCHEDULE_SLOTS, max_length=FEEDER_SCHEDULE_SLOTS)
+    last_chemical_dose_at: StrictStr | None = Field(default=None, max_length=80)
+    next_eligible_at: StrictStr | None = Field(default=None, max_length=80)
+    next_dose_at: StrictStr | None = Field(default=None, max_length=80)
+    schedule_event: StrictStr | None = Field(default=None, max_length=240)
 
 
 class ActuatorStateReport(BaseModel):

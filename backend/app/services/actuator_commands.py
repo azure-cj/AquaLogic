@@ -178,7 +178,7 @@ def active_pump_dispense(
     filters = (
         ActuatorCommand.device_id == device_id,
         ActuatorCommand.actuator == actuator,
-        ActuatorCommand.action == "dispense",
+        ActuatorCommand.action.in_(["dispense", "test_dispense"]),
         ActuatorCommand.status.in_(["executing", "outcome_unknown"]),
         (
             ActuatorCommand.status == "executing"

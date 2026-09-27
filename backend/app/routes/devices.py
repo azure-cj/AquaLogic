@@ -569,7 +569,7 @@ def queue_actuator_command(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Active device is not registered to this tank")
     requested_at = utc_now()
     _reconcile_device_commands(db, device.id, request, requested_at)
-    if payload.actuator in PUMP_ACTUATORS and payload.action == "dispense":
+    if payload.actuator in PUMP_ACTUATORS and payload.action in {"dispense", "test_dispense"}:
         conflict = _pump_dispense_conflict(db, device.id, payload.actuator)
         if conflict is not None:
             audit_event(
@@ -666,7 +666,7 @@ def _actuator_status_for_device(db: Session, device: RegisteredDevice) -> Device
             select(ActuatorCommand).where(
                 ActuatorCommand.device_id == device.id,
                 ActuatorCommand.actuator.in_(PUMP_ACTUATORS),
-                ActuatorCommand.action == "dispense",
+                ActuatorCommand.action.in_(["dispense", "test_dispense"]),
                 (
                     (ActuatorCommand.status == "executing")
                     | (
@@ -864,7 +864,7 @@ def mark_actuator_command_executing(
     db.expire(command)
     db.refresh(command)
     if command.status == "queued":
-        if command.actuator in PUMP_ACTUATORS and command.action == "dispense":
+        if command.actuator in PUMP_ACTUATORS and command.action in {"dispense", "test_dispense"}:
             conflict = _pump_dispense_conflict(db, device.id, command.actuator, exclude_command_id=command.command_id)
             if conflict is not None:
                 audit_event(

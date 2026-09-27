@@ -65,12 +65,46 @@ const status = {
     {
       actuator: 'pump_a' as const,
       refreshed_at: '2026-08-15T10:00:00Z',
-      state: { active: false, dose_count: 0, last_dispensed: 'Never', volume_ml: 1 },
+      state: {
+        active: false,
+        dose_count: 0,
+        last_dispensed: 'Never',
+        volume_ml: 1,
+        remaining_ml: 5,
+        capacity_ml: 5,
+        volume_known: true,
+        refill_required: false,
+        clock_synced: true,
+        schedule: [
+          { enabled: false, time: '08:00' },
+          { enabled: false, time: '12:00' },
+          { enabled: false, time: '18:00' },
+        ],
+        next_eligible_at: 'Available now',
+        next_dose_at: '2026-08-15T12:00:00+08:00',
+      },
     },
     {
       actuator: 'pump_b' as const,
       refreshed_at: '2026-08-15T10:00:00Z',
-      state: { active: false, dose_count: 0, last_dispensed: 'Never', volume_ml: 1 },
+      state: {
+        active: false,
+        dose_count: 0,
+        last_dispensed: 'Never',
+        volume_ml: 1,
+        remaining_ml: 5,
+        capacity_ml: 5,
+        volume_known: true,
+        refill_required: false,
+        clock_synced: true,
+        schedule: [
+          { enabled: false, time: '08:00' },
+          { enabled: false, time: '12:00' },
+          { enabled: false, time: '18:00' },
+        ],
+        next_eligible_at: 'Available now',
+        next_dose_at: '2026-08-15T12:00:00+08:00',
+      },
     },
   ],
 };
@@ -160,29 +194,125 @@ describe('admin actuator controls', () => {
     expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
   });
 
-  it('requires confirmation for pump dispense and retract, and queues the configured-volume test command', async () => {
+  it('requires confirmation for a water-only pump test and retract', async () => {
     const user = userEvent.setup();
     renderPanel();
     expect((await screen.findAllByText('Configured-volume dispense')).length).toBe(2);
     expect(screen.getAllByText('1.00 mL')).toHaveLength(4);
-    await user.click(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' }));
+    await user.click(screen.getByRole('button', { name: 'Syringe Pump A water-only test' }));
     let dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('Manual check only');
-    expect(dialog).toHaveTextContent('configured 1.00 mL dose');
+    expect(dialog).toHaveTextContent('water-only test');
+    expect(dialog).toHaveTextContent('configured 1.00 mL');
+    expect(dialog).toHaveTextContent('does not start the chemical-dose cooldown');
     expect(dialog).toHaveTextContent('Tank: Tank 1');
     expect(dialog).toHaveTextContent('esp32-control-01 (online)');
-    await user.click(within(dialog).getByRole('button', { name: 'Dispense / test' }));
-    await screen.findByText('Syringe Pump A dispense/test request queued. The system will update its status after processing.');
+    await user.click(within(dialog).getByRole('button', { name: 'Run water-only test' }));
+    await screen.findByText('Syringe Pump A water-only test request queued. The system will update its status after processing.');
 
     await user.click(screen.getByRole('button', { name: 'Syringe Pump A retract' }));
     dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('retract action');
+    expect(dialog).toHaveTextContent('retract motor action');
     await user.click(within(dialog).getByRole('button', { name: 'Retract' }));
     await screen.findByText('Syringe Pump A retract request queued. The system will update its status after processing.');
 
     const calls = vi.mocked(api).mock.calls.filter(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
-    expect(calls.some(([, init]) => init?.body?.toString().includes('"actuator":"pump_a"') && init.body.toString().includes('"action":"dispense"') && init.body.toString().includes('"payload":{}') && init.body.toString().includes('"expires_in_seconds":20'))).toBe(true);
+    expect(calls.some(([, init]) => init?.body?.toString().includes('"actuator":"pump_a"') && init.body.toString().includes('"action":"test_dispense"') && init.body.toString().includes('"payload":{}') && init.body.toString().includes('"expires_in_seconds":20'))).toBe(true);
     expect(calls.some(([, init]) => init?.body?.toString().includes('"action":"retract"'))).toBe(true);
+  });
+
+  it('confirms a fixed-volume chemical pump schedule before queuing it', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const pumpCard = (await screen.findByRole('heading', { name: 'Syringe Pump A' })).closest('article');
+    expect(pumpCard).not.toBeNull();
+    const pump = within(pumpCard!);
+    await user.click(pump.getByRole('checkbox', { name: 'Slot 1' }));
+    await user.click(pump.getByRole('button', { name: 'Save chemical schedule' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('fixed 1.00 mL doses');
+    expect(dialog).toHaveTextContent('08:00 Asia/Manila time');
+    expect(dialog).toHaveTextContent('shared two-hour cooldown');
+    expect(vi.mocked(api).mock.calls.some(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST')).toBe(false);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Enable chemical schedule' }));
+    await screen.findByText('Syringe Pump A schedule request queued. The system will update its status after processing.');
+    const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
+    expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
+    expect(call?.[1]?.body).toContain('"action":"schedule"');
+    expect(call?.[1]?.body).toContain('"slots":[{"enabled":true,"time":"08:00"}');
+  });
+
+  it('shows remaining volume and cooldown state, then confirms physical refill without motor movement', async () => {
+    const user = userEvent.setup();
+    const depletedStatus = {
+      ...status,
+      actuators: status.actuators.map((item) => item.actuator === 'pump_a'
+        ? { ...item, state: { ...item.state, remaining_ml: 0, refill_required: true, next_eligible_at: '2026-08-15T14:00:00+08:00' } }
+        : item),
+    };
+    vi.mocked(api).mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/tanks/1/actuators/status') return Promise.resolve(depletedStatus);
+      if (path === '/tanks/1/actuators/history?page=1&page_size=10') {
+        return Promise.resolve({ items: [], page: 1, page_size: 10, total: 0, total_pages: 0, has_previous: false, has_next: false, summary: emptySummary });
+      }
+      if (path === '/tanks/1/actuators/commands' && init?.method === 'POST') return Promise.resolve({ command_id: 'refill-command', status: 'queued' });
+      return Promise.reject(new Error(`Unexpected path ${path}`));
+    });
+
+    renderPanel();
+    const pumpCard = (await screen.findByRole('heading', { name: 'Syringe Pump A' })).closest('article');
+    expect(pumpCard).not.toBeNull();
+    const pump = within(pumpCard!);
+    expect(pump.getByText('0.00 / 5.00 mL')).toBeInTheDocument();
+    expect(pump.getByText('Required')).toBeInTheDocument();
+    expect(pump.getByText('2026-08-15T14:00:00+08:00')).toBeInTheDocument();
+    expect(pump.getByText('2026-08-15T12:00:00+08:00')).toBeInTheDocument();
+    expect(pump.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
+
+    await user.click(pump.getByRole('button', { name: 'Syringe Pump A confirm refill' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Physically check and refill Syringe Pump A to 5.00 mL');
+    expect(dialog).toHaveTextContent('does not move the motor');
+    expect(dialog).toHaveTextContent('does not move the motor or reset the two-hour cooldown');
+    expect(dialog).toHaveTextContent('2026-08-15T14:00:00+08:00');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm refill' }));
+    await screen.findByText('Syringe Pump A refill confirmation request queued. The system will update its status after processing.');
+    const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
+    expect(call?.[1]?.body).toContain('"action":"refill_confirm"');
+    expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
+  });
+
+  it('shows a blocked scheduled dose inline and as an alert when status changes', async () => {
+    const user = userEvent.setup();
+    const blockedMessage = 'Scheduled dose skipped: shared two-hour cooldown is active.';
+    let statusReads = 0;
+    vi.mocked(api).mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/tanks/1/actuators/status') {
+        statusReads += 1;
+        if (statusReads > 1) {
+          return Promise.resolve({
+            ...status,
+            actuators: status.actuators.map((item) => item.actuator === 'pump_a'
+              ? { ...item, state: { ...item.state, schedule_event: blockedMessage } }
+              : item),
+          });
+        }
+        return Promise.resolve(status);
+      }
+      if (path === '/tanks/1/actuators/history?page=1&page_size=10') {
+        return Promise.resolve({ items: [], page: 1, page_size: 10, total: 0, total_pages: 0, has_previous: false, has_next: false, summary: emptySummary });
+      }
+      if (path === '/tanks/1/actuators/commands' && init?.method === 'POST') return Promise.resolve({ command_id: 'feed-command', status: 'queued' });
+      return Promise.reject(new Error(`Unexpected path ${path}`));
+    });
+
+    renderPanel();
+    await user.click(await screen.findByRole('button', { name: 'Feed now' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Feed now' }));
+    await screen.findAllByText('Manual feed request queued. The system will update its status after processing.');
+    expect(await screen.findAllByText(blockedMessage)).not.toHaveLength(0);
+    await waitFor(() => expect(document.querySelector('[data-sonner-toast]')).toHaveTextContent(blockedMessage));
   });
 
   it('paginates command history without losing the page context', async () => {
@@ -349,7 +479,7 @@ describe('admin actuator controls', () => {
     renderPanel();
     expect(await screen.findByText('Equipment connection is offline or stale')).toBeInTheDocument();
     expect(screen.getByText('Light and feeder requests may expire while waiting. Pump maintenance checks are available only when the connection is online.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
   });
 
   it('locks only the uncertain pump dispense and gates administrator physical verification', async () => {
@@ -400,7 +530,7 @@ describe('admin actuator controls', () => {
     renderPanel();
     expect(await screen.findByText('Outcome unknown — physical verification required.')).toBeInTheDocument();
     expect(screen.getByText('The earlier dispense may have reached the equipment. Verify the pump locally before another dispense. Stop remains available; this verification clears only the software lock.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Syringe Pump A dispense/test' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Syringe Pump A stop' })).toBeEnabled();
     expect(screen.getAllByText('Outcome unknown').length).toBeGreaterThanOrEqual(2);
 

@@ -48,8 +48,15 @@ const defaultFeederSchedule: FeederScheduleSlot[] = [
   { enabled: false, time: '18:00' },
 ];
 
+const defaultPumpSchedule: FeederScheduleSlot[] = [
+  { enabled: false, time: '08:00' },
+  { enabled: false, time: '14:00' },
+  { enabled: false, time: '20:00' },
+];
+
 const HISTORY_PAGE_SIZE = 10;
 const PUMP_COMMAND_EXPIRY_SECONDS = 20;
+const PUMP_CONFIGURATION_EXPIRY_SECONDS = PUMP_COMMAND_EXPIRY_SECONDS;
 
 type HistoryActuatorFilter = 'all' | ActuatorName;
 type HistoryStatusFilter = 'all' | ActuatorCommandStatus;
@@ -60,7 +67,8 @@ type TooltipPosition = {
   arrowLeft: number;
   placement: 'top' | 'bottom';
 };
-type PumpConfirmation = { actuator: 'pump_a' | 'pump_b'; action: 'dispense' | 'retract' };
+type PumpConfirmation = { actuator: 'pump_a' | 'pump_b'; action: 'test_dispense' | 'retract' | 'refill_confirm' };
+type PumpScheduleConfirmation = { actuator: 'pump_a' | 'pump_b'; slots: FeederScheduleSlot[] };
 
 const commandStatusDescription: Record<ActuatorCommandStatus, string> = {
   queued: 'Waiting to be sent — no equipment action yet',
@@ -96,6 +104,8 @@ const actionLabels: Record<ActuatorAction, string> = {
   feed_now: 'Feed now',
   config: 'Update configuration',
   dispense: 'Dispense / test',
+  test_dispense: 'Water-only pump test',
+  refill_confirm: 'Confirm syringe refill',
   stop: 'Stop',
   retract: 'Retract',
 };
@@ -117,14 +127,25 @@ function formatPayloadSummary(command: ActuatorCommand) {
     return duration ? `Run for ${duration}` : 'Timer configuration';
   }
   if (command.action === 'dispense') {
-    return 'Run the configured dose';
+    return 'Run the configured chemical dose';
+  }
+  if (command.action === 'test_dispense') {
+    return 'Run the configured water-only maintenance test';
+  }
+  if (command.action === 'refill_confirm') {
+    return 'Confirm the syringe was physically refilled';
   }
   if (command.action === 'config') {
     const angle = typeof payload.open_angle === 'number' ? `${payload.open_angle} degrees` : 'configured angle';
     const duration = formatDuration(payload.duration_ms) ?? 'configured duration';
     return `Open ${angle} for ${duration}`;
   }
-  if (command.action === 'schedule' && command.actuator !== 'feeder') {
+  if (command.action === 'schedule' && (command.actuator === 'pump_a' || command.actuator === 'pump_b')) {
+    const slots = Array.isArray(payload.slots) ? payload.slots : [];
+    const enabledSlots = slots.filter((slot) => typeof slot === 'object' && slot !== null && 'enabled' in slot && slot.enabled).length;
+    return `${enabledSlots} of 3 fixed-volume chemical dose slots enabled`;
+  }
+  if (command.action === 'schedule' && (command.actuator === 'uv' || command.actuator === 'led')) {
     const enabled = payload.enabled ? 'Enabled' : 'Disabled';
     return `${enabled} - daily ${payload.on_time ?? '—'} to ${payload.off_time ?? '—'}`;
   }
@@ -341,9 +362,13 @@ function LightCard({
 function PumpCard({
   actuator,
   state,
+  schedule,
+  onScheduleChange,
+  onSaveSchedule,
   onDispense,
   onStop,
   onRetract,
+  onRefill,
   busy,
   disabled,
   lock,
@@ -351,9 +376,13 @@ function PumpCard({
 }: {
   actuator: 'pump_a' | 'pump_b';
   state: PumpActuatorState | null;
+  schedule: FeederScheduleSlot[];
+  onScheduleChange: (schedule: FeederScheduleSlot[]) => void;
+  onSaveSchedule: () => void;
   onDispense: () => void;
   onStop: () => void;
   onRetract: () => void;
+  onRefill: () => void;
   busy: string | null;
   disabled: boolean;
   lock: PumpDispenseLock | undefined;
@@ -361,11 +390,16 @@ function PumpCard({
 }) {
   const label = actuator === 'pump_a' ? 'Syringe Pump A' : 'Syringe Pump B';
   const busyFor = (action: string) => busy === `${actuator}:${action}`;
+  const remaining = state?.volume_known === false
+    ? 'Fill not confirmed'
+    : state?.remaining_ml !== undefined && state?.remaining_ml !== null
+      ? `${state.remaining_ml.toFixed(2)} / ${(state.capacity_ml ?? 5).toFixed(2)} mL`
+      : 'Unknown';
   return (
     <article className="actuator-card pump-card">
       <div className="actuator-card-header">
         <div>
-          <p className="actuator-kicker">Maintenance check</p>
+          <p className="actuator-kicker">Water-only maintenance test</p>
           <h3>{label}</h3>
         </div>
         <span className={`actuator-state ${state?.active ? 'is-on' : state ? 'is-off' : 'is-unknown'}`}>
@@ -374,18 +408,22 @@ function PumpCard({
         </span>
       </div>
       <div className="actuator-meta-grid">
-        <span><small>Test cycles</small><strong>{state?.dose_count ?? '—'}</strong></span>
+        <span><small>Dispense cycles</small><strong>{state?.dose_count ?? '—'}</strong></span>
         <span><small>Configured dose</small><strong>{state ? `${state.volume_ml.toFixed(2)} mL` : '—'}</strong></span>
         <span><small>Last dispense</small><strong>{state?.last_dispensed ?? '—'}</strong></span>
-        <span><small>Connection</small><strong>{disabled ? 'Connection required' : 'Ready'}</strong></span>
+        <span><small>Estimated volume</small><strong>{remaining}</strong></span>
+        <span><small>Refill</small><strong>{state?.refill_required ? 'Required' : state?.volume_known ? 'Confirmed' : 'Unknown'}</strong></span>
+        <span><small>Device clock</small><strong>{state?.clock_synced ? 'Asia/Manila synced' : state?.clock_synced === false ? 'Waiting for NTP' : 'Unknown'}</strong></span>
+        <span><small>Next eligible</small><strong>{state?.next_eligible_at || 'Not reported'}</strong></span>
+        <span><small>Next scheduled dose</small><strong>{state?.next_dose_at || 'Not scheduled'}</strong></span>
       </div>
       <div className="pump-configured-dose">
-        <span><strong>Configured-volume dispense</strong><small>This uses the configured dose volume rather than a time cutoff.</small></span>
+        <span><strong>Configured-volume dispense</strong><small>Maintenance tests use water only. Chemical schedule doses are fixed-volume and independent of pH.</small></span>
         <strong>{state ? `${state.volume_ml.toFixed(2)} mL` : 'Unknown'}</strong>
       </div>
       <div className="pump-action-grid" aria-label={`${label} manual test controls`}>
-        <button className="button button-primary" type="button" aria-label={`${label} dispense/test`} disabled={disabled || Boolean(busy) || Boolean(lock)} onClick={onDispense}>
-          <Play size={15} /> Dispense / test
+        <button className="button button-primary" type="button" aria-label={`${label} water-only test`} disabled={disabled || Boolean(busy) || Boolean(lock) || state?.refill_required === true} onClick={onDispense}>
+          <Play size={15} /> Water-only test
         </button>
         <button className="button button-danger pump-stop-button" type="button" aria-label={`${label} stop`} disabled={disabled || (Boolean(busy) && !lock)} onClick={onStop}>
           <Square size={14} /> Stop
@@ -393,7 +431,23 @@ function PumpCard({
         <button className="button button-secondary" type="button" aria-label={`${label} retract`} disabled={disabled || Boolean(busy)} onClick={onRetract}>
           <RotateCcw size={15} /> Retract
         </button>
+        <button className="button button-secondary" type="button" aria-label={`${label} confirm refill`} disabled={disabled || Boolean(busy) || Boolean(lock)} onClick={onRefill}>
+          Confirm refill
+        </button>
       </div>
+      <div className="actuator-schedule pump-schedule">
+        <div className="actuator-schedule-heading"><strong>Chemical dose schedule</strong><small>Asia/Manila · three fixed-volume slots · blocked occurrences are skipped</small></div>
+        {schedule.map((slot, index) => (
+          <div className="feeder-slot" key={index}>
+            <label className="toggle-label"><input type="checkbox" checked={slot.enabled} disabled={disabled || Boolean(busy)} onChange={(event) => onScheduleChange(schedule.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} /> Slot {index + 1}</label>
+            <input aria-label={`${label} schedule slot ${index + 1} time`} type="time" value={slot.time} disabled={disabled || Boolean(busy)} onChange={(event) => onScheduleChange(schedule.map((item, itemIndex) => itemIndex === index ? { ...item, time: event.target.value } : item))} />
+          </div>
+        ))}
+        <button className="button button-secondary" type="button" disabled={disabled || Boolean(busy)} onClick={onSaveSchedule}>Save chemical schedule</button>
+      </div>
+      {state?.schedule_event && <div className="pump-uncertainty-note" role="status">{state.schedule_event}</div>}
+      {state?.refill_required && <small className="pump-disabled-note">Dosing is blocked until an administrator checks the syringe and confirms it is filled.</small>}
+      {state?.clock_synced === false && <small className="pump-disabled-note">Schedule execution and chemical doses are paused until the device synchronizes time through the router.</small>}
       {lock?.status === 'executing' && <small className="pump-uncertainty-note">An earlier dispense is still awaiting confirmation. Do not start another dispense.</small>}
       {lock?.status === 'outcome_unknown' && (
         <div className="pump-uncertainty-note" role="status">
@@ -403,7 +457,8 @@ function PumpCard({
         </div>
       )}
       {disabled && <small className="pump-disabled-note">Reconnect the equipment connection before starting a pump test. No offline test is queued.</small>}
-      {busyFor('dispense') && <small className="actuator-busy">Queueing pump test…</small>}
+      {busyFor('test_dispense') && <small className="actuator-busy">Queueing water-only pump test…</small>}
+      {busyFor('schedule') && <small className="actuator-busy">Saving pump schedule…</small>}
     </article>
   );
 }
@@ -547,6 +602,7 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
   const [busy, setBusy] = useState<string | null>(null);
   const [feedConfirmOpen, setFeedConfirmOpen] = useState(false);
   const [pumpConfirmation, setPumpConfirmation] = useState<PumpConfirmation | null>(null);
+  const [pumpScheduleConfirmation, setPumpScheduleConfirmation] = useState<PumpScheduleConfirmation | null>(null);
   const [verificationLock, setVerificationLock] = useState<PumpDispenseLock | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyActuator, setHistoryActuator] = useState<HistoryActuatorFilter>('all');
@@ -555,11 +611,14 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
   const [uvSchedule, setUvSchedule] = useState<LightScheduleForm>(defaultSchedule);
   const [ledSchedule, setLedSchedule] = useState<LightScheduleForm>(defaultSchedule);
   const [feederSchedule, setFeederSchedule] = useState<FeederScheduleSlot[]>(defaultFeederSchedule);
+  const [pumpASchedule, setPumpASchedule] = useState<FeederScheduleSlot[]>(defaultPumpSchedule);
+  const [pumpBSchedule, setPumpBSchedule] = useState<FeederScheduleSlot[]>(defaultPumpSchedule.map((slot) => ({ ...slot })));
   const [uvTimer, setUvTimer] = useState('10');
   const [ledTimer, setLedTimer] = useState('10');
   const [feederAngle, setFeederAngle] = useState('125');
   const [feederDuration, setFeederDuration] = useState('1000');
   const [scheduleInitialized, setScheduleInitialized] = useState(false);
+  const lastPumpScheduleEvents = useRef<Record<string, string>>({});
 
   const status = useQuery({
     queryKey: ['tank-actuator-status', tankId],
@@ -585,6 +644,7 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     setHistoryStatus('all');
     setExpandedCommandId(null);
     setPumpConfirmation(null);
+    setPumpScheduleConfirmation(null);
     setVerificationLock(null);
     setScheduleInitialized(false);
   }, [tankId]);
@@ -594,6 +654,8 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     const uv = asLightState(status.data.actuators.find((item) => item.actuator === 'uv'));
     const led = asLightState(status.data.actuators.find((item) => item.actuator === 'led'));
     const feeder = asFeederState(status.data.actuators.find((item) => item.actuator === 'feeder'));
+    const pumpA = asPumpState(status.data.actuators.find((item) => item.actuator === 'pump_a'));
+    const pumpB = asPumpState(status.data.actuators.find((item) => item.actuator === 'pump_b'));
     if (uv) setUvSchedule({ enabled: uv.schedule_enabled, on_time: uv.on_time, off_time: uv.off_time });
     if (led) setLedSchedule({ enabled: led.schedule_enabled, on_time: led.on_time, off_time: led.off_time });
     if (feeder) {
@@ -601,8 +663,21 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
       setFeederDuration(String(feeder.duration_ms));
       setFeederSchedule(feeder.schedule);
     }
+    if (pumpA?.schedule) setPumpASchedule(pumpA.schedule);
+    if (pumpB?.schedule) setPumpBSchedule(pumpB.schedule);
     setScheduleInitialized(true);
   }, [scheduleInitialized, status.data]);
+
+  useEffect(() => {
+    if (!status.data) return;
+    for (const actuator of ['pump_a', 'pump_b'] as const) {
+      const pump = asPumpState(status.data.actuators.find((item) => item.actuator === actuator));
+      const event = pump?.schedule_event ?? '';
+      const previous = lastPumpScheduleEvents.current[actuator];
+      if (previous !== undefined && event && event !== previous) notify.error(event);
+      lastPumpScheduleEvents.current[actuator] = event;
+    }
+  }, [status.data]);
 
   const queueCommand = async (
     actuator: ActuatorName,
@@ -632,6 +707,21 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     } finally {
       setBusy(null);
     }
+  };
+
+  const savePumpSchedule = (actuator: 'pump_a' | 'pump_b', slots: FeederScheduleSlot[]) => {
+    if (readOnly) return;
+    const enabled = slots.some((slot) => slot.enabled);
+    if (enabled) {
+      const state = asPumpState(status.data?.actuators.find((item) => item.actuator === actuator));
+      if (!state || state.volume_known !== true || state.refill_required) {
+        notify.error('Check the syringe, refill it if needed, and confirm its fill before enabling chemical schedule slots.');
+        return;
+      }
+      setPumpScheduleConfirmation({ actuator, slots });
+      return;
+    }
+    void queueCommand(actuator, 'schedule', { slots }, `${actuatorLabels[actuator]} schedule`, PUMP_CONFIGURATION_EXPIRY_SECONDS);
   };
 
   const clearUncertainty = async () => {
@@ -670,6 +760,7 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
   const pumpBLock = status.data?.pump_dispense_locks?.find((lock) => lock.actuator === 'pump_b');
   const confirmedPumpLabel = pumpConfirmation ? actuatorLabels[pumpConfirmation.actuator] : '';
   const confirmedPumpVolume = pumpConfirmation?.actuator === 'pump_a' ? pumpA?.volume_ml : pumpB?.volume_ml;
+  const confirmedPumpNextEligible = pumpConfirmation?.actuator === 'pump_a' ? pumpA?.next_eligible_at : pumpB?.next_eligible_at;
 
   return (
     <>
@@ -761,15 +852,19 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
             </div>
             <div className="pump-safety-warning" role="note">
               <AlertTriangle size={18} aria-hidden="true" />
-              <span><strong>Manual check only — confirm the setup first.</strong><small>Use empty syringes or water only, keep both pumps clear of chemicals, and stay ready to press Stop. These checks are available only when maintenance mode is enabled.</small></span>
+              <span><strong>Manual maintenance checks are water-only.</strong><small>Use water only, keep chemicals out of both syringes during testing, and stay ready to press Stop. Chemical schedules run fixed configured mL doses independently of pH and use the shared two-hour cooldown.</small></span>
             </div>
             <div className="pump-grid">
               <PumpCard
                 actuator="pump_a"
                 state={pumpA}
-                onDispense={() => setPumpConfirmation({ actuator: 'pump_a', action: 'dispense' })}
+                schedule={pumpASchedule}
+                onScheduleChange={setPumpASchedule}
+                onSaveSchedule={() => savePumpSchedule('pump_a', pumpASchedule)}
+                onDispense={() => setPumpConfirmation({ actuator: 'pump_a', action: 'test_dispense' })}
                 onStop={() => void queueCommand('pump_a', 'stop', {}, 'Syringe Pump A stop', PUMP_COMMAND_EXPIRY_SECONDS)}
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_a', action: 'retract' })}
+                onRefill={() => setPumpConfirmation({ actuator: 'pump_a', action: 'refill_confirm' })}
                 busy={busy}
                 disabled={pumpsDisabled}
                 lock={pumpALock}
@@ -778,9 +873,13 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
               <PumpCard
                 actuator="pump_b"
                 state={pumpB}
-                onDispense={() => setPumpConfirmation({ actuator: 'pump_b', action: 'dispense' })}
+                schedule={pumpBSchedule}
+                onScheduleChange={setPumpBSchedule}
+                onSaveSchedule={() => savePumpSchedule('pump_b', pumpBSchedule)}
+                onDispense={() => setPumpConfirmation({ actuator: 'pump_b', action: 'test_dispense' })}
                 onStop={() => void queueCommand('pump_b', 'stop', {}, 'Syringe Pump B stop', PUMP_COMMAND_EXPIRY_SECONDS)}
                 onRetract={() => setPumpConfirmation({ actuator: 'pump_b', action: 'retract' })}
+                onRefill={() => setPumpConfirmation({ actuator: 'pump_b', action: 'refill_confirm' })}
                 busy={busy}
                 disabled={pumpsDisabled}
                 lock={pumpBLock}
@@ -922,12 +1021,18 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
       />
       <ConfirmDialog
         open={pumpConfirmation !== null}
-        title={pumpConfirmation?.action === 'dispense' ? `Start ${confirmedPumpLabel} test?` : `Retract ${confirmedPumpLabel}?`}
-        message={pumpConfirmation?.action === 'dispense'
-          ? `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). Manual check only: this will start the ${confirmedPumpLabel} configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'} dose. The system waits for completion and uses a bounded safety timeout. Do not repeat the command if its physical outcome becomes uncertain; confirm the syringe is empty or contains water and keep your hand near Stop.`
-          : `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). This starts the ${confirmedPumpLabel} retract action. Confirm the setup is safe and the pump is not handling chemicals; Stop remains immediately available.`}
-        confirmLabel={pumpConfirmation?.action === 'dispense' ? 'Dispense / test' : 'Retract'}
-        tone={pumpConfirmation?.action === 'dispense' ? 'primary' : 'danger'}
+        title={pumpConfirmation?.action === 'test_dispense'
+          ? `Start ${confirmedPumpLabel} water-only test?`
+          : pumpConfirmation?.action === 'refill_confirm'
+            ? `Confirm ${confirmedPumpLabel} refill?`
+            : `Retract ${confirmedPumpLabel}?`}
+        message={pumpConfirmation?.action === 'test_dispense'
+          ? `Tank: ${tankName ?? `Tank ${tankId}`}. Connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). This is a water-only test using the configured ${confirmedPumpVolume !== undefined ? `${confirmedPumpVolume.toFixed(2)} mL` : 'volume'}; it updates the volume estimate but does not start the chemical-dose cooldown. Confirm water is installed, stay near Stop, and do not repeat if the physical outcome becomes uncertain.`
+          : pumpConfirmation?.action === 'refill_confirm'
+            ? `Physically check and refill ${confirmedPumpLabel} to ${(pumpConfirmation.actuator === 'pump_a' ? pumpA?.capacity_ml : pumpB?.capacity_ml ?? 5)?.toFixed(2) ?? '5.00'} mL before confirming. This only resets its estimated remaining volume; it does not move the motor or reset the two-hour cooldown. Next chemical dose eligibility remains ${confirmedPumpNextEligible || 'not reported'}.`
+            : `Tank: ${tankName ?? `Tank ${tankId}`}. Connection: ${status.data?.device_id ?? 'registered device'} (${status.data?.device_online ? 'online' : 'not confirmed online'}). This starts the ${confirmedPumpLabel} retract motor action. It does not update the volume estimate; confirm the setup is safe and keep Stop available.`}
+        confirmLabel={pumpConfirmation?.action === 'test_dispense' ? 'Run water-only test' : pumpConfirmation?.action === 'refill_confirm' ? 'Confirm refill' : 'Retract'}
+        tone={pumpConfirmation?.action === 'retract' ? 'danger' : 'primary'}
         busy={pumpConfirmation ? busy === `${pumpConfirmation.actuator}:${pumpConfirmation.action}` : false}
         onConfirm={() => {
           const confirmation = pumpConfirmation;
@@ -937,11 +1042,32 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
             confirmation.actuator,
             confirmation.action,
             {},
-            `${actuatorLabels[confirmation.actuator]} ${confirmation.action === 'dispense' ? 'dispense/test' : 'retract'}`,
-            PUMP_COMMAND_EXPIRY_SECONDS,
+            `${actuatorLabels[confirmation.actuator]} ${confirmation.action === 'test_dispense' ? 'water-only test' : confirmation.action === 'refill_confirm' ? 'refill confirmation' : 'retract'}`,
+            confirmation.action === 'refill_confirm' ? PUMP_CONFIGURATION_EXPIRY_SECONDS : PUMP_COMMAND_EXPIRY_SECONDS,
           );
         }}
         onClose={() => setPumpConfirmation(null)}
+      />
+      <ConfirmDialog
+        open={pumpScheduleConfirmation !== null}
+        title={`Enable ${pumpScheduleConfirmation ? actuatorLabels[pumpScheduleConfirmation.actuator] : 'pump'} chemical schedule?`}
+        message={pumpScheduleConfirmation ? `This saves fixed ${((pumpScheduleConfirmation.actuator === 'pump_a' ? pumpA?.volume_ml : pumpB?.volume_ml) ?? 0).toFixed(2)} mL doses at ${pumpScheduleConfirmation.slots.filter((slot) => slot.enabled).map((slot) => slot.time).join(', ')} Asia/Manila time, regardless of current pH. Check that the correct syringe contains the intended liquid. A shared two-hour cooldown applies across both pumps; a busy or cooldown-blocked scheduled occurrence is skipped and is not caught up later.` : ''}
+        confirmLabel="Enable chemical schedule"
+        tone="danger"
+        busy={pumpScheduleConfirmation ? busy === `${pumpScheduleConfirmation.actuator}:schedule` : false}
+        onConfirm={() => {
+          const confirmation = pumpScheduleConfirmation;
+          if (!confirmation) return;
+          setPumpScheduleConfirmation(null);
+          void queueCommand(
+            confirmation.actuator,
+            'schedule',
+            { slots: confirmation.slots },
+            `${actuatorLabels[confirmation.actuator]} schedule`,
+            PUMP_CONFIGURATION_EXPIRY_SECONDS,
+          );
+        }}
+        onClose={() => setPumpScheduleConfirmation(null)}
       />
       <ConfirmDialog
         open={verificationLock !== null}

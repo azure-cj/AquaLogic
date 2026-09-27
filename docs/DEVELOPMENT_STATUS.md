@@ -77,6 +77,14 @@ Last reviewed: 2026-09-27
   reported as `outcome_unknown` rather than generic `failed`, and the existing
   periodic maintenance loop reconciles overdue commands without a browser
   request. No bridge retry or replay path was added.
+- The expanded ESP32 firmware uses router-synchronized Asia/Manila NTP time for
+  local schedules and persists schedule settings, per-day occurrence markers,
+  and pump safety state in NVS. Pump schedules run configured fixed mL doses;
+  all chemical doses share a persisted two-hour minimum cooldown, tracked
+  against 5 mL syringe capacity. Fresh/depleted syringe dosing requires
+  explicit refill confirmation. The web administrator schedule form and
+  motor-free refill confirmation flow forward through the bridge; its manual
+  pump test is a separate water-only action.
 - Goal 2 tank deletion cleanup is implemented: permanent deletion captures the
   current tank hero URL, commits the relational cascade first, and then
   best-effort removes only contained AquaLogic-owned local media. Missing,
@@ -608,6 +616,10 @@ and swiped-away app states.
   test using the temporary dashboard/API tunnel and confirm local-only ESP32
   access. Verify the configured firmware-reported mL dose completes before the
   bridge timeout. Pump testing must use empty syringes or water only.
+- Have the collaborator compile/upload the expanded firmware and validate
+  NTP time, reboot persistence, scheduled execution, the shared cooldown,
+  five 1 mL cycles, refill confirmation from both UIs, and skipped-dose status
+  using water only; the repository has no Arduino CLI/PlatformIO build setup.
 - Validate Goal 1 timing and safety on hardware: allow a normal command to
   complete within the bridge's permitted timing without becoming unknown,
   exercise a deliberately interrupted/ambiguous report path, confirm the dashboard shows
@@ -636,11 +648,15 @@ and swiped-away app states.
   deferred.
 - Account editing, organization/customer profile data, recent activity, and
   older equipment-history pages are not currently in the mobile API slice.
-- Additional sensor hardware and production-grade actuator safety controls;
-  pump schedules, pH auto-dose, and backend scheduler workers remain deferred.
+- Additional sensor hardware, production-grade actuator safety controls, and
+  backend-generated scheduler workers remain deferred. Device-local pump
+  schedules are implemented; optional threshold-driven pH auto-dose remains
+  disabled by default.
 - Raspberry Pi deployment and hardware safety controls.
-- Timezone-aware schedule management, device-clock synchronization, and
-  schedule-event history for device-resident feeding and lighting schedules.
+- The ESP32 needs router access after a cold boot to synchronize its NTP clock;
+  scheduled behavior remains paused until that sync completes because no RTC is
+  installed. Device-local pump schedule events are reported in current state,
+  not retained as a separate event-history timeline.
 - Schedules for filtration, dosing, and water replacement.
 - Pagination and database-level analytics for larger datasets.
 
@@ -668,6 +684,11 @@ and swiped-away app states.
   hardware timing and emergency-stop behavior remain pending validation.
 - Tunnel infrastructure is temporary test infrastructure only. The ESP32 must
   remain on the tester's private Wi-Fi and is never publicly exposed.
+- The ESP32 local fallback AP starts after sustained router Wi-Fi loss and
+  keeps STA retries active; the collaborator has hardware-tested this M1 path.
+  The separate bridge SQLite outbox handles Internet/Railway loss only while
+  local ESP32 connectivity remains; live Railway/hardware validation of M2 is
+  still required.
 - WebSocket streaming is not implemented.
 - `npm audit --omit=dev` reports GHSA-qwww-vcr4-c8h2 for the mandated
   `react-router-dom@7.18.1`. AquaLogic is a Vite SPA and does not enable the

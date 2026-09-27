@@ -28,6 +28,7 @@ FEEDER_ANGLE_MAX = 180
 FEEDER_DURATION_MIN_MS = 500
 FEEDER_DURATION_MAX_MS = 60_000
 FEEDER_SCHEDULE_SLOTS = 3
+PUMP_SCHEDULE_SLOTS = 3
 PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS = 30
 PUMP_COMPLETION_TIMEOUT_MIN_SECONDS = 5
 PUMP_COMPLETION_TIMEOUT_MAX_SECONDS = 120
@@ -35,6 +36,7 @@ PUMP_STATUS_POLL_INTERVAL_SECONDS = 0.25
 COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 PUMP_ACTUATORS = {"pump_a", "pump_b"}
+PUMP_DOSE_ACTIONS = {"dispense", "test_dispense"}
 BACKLOG_BATCH_LIMIT = 50
 BACKLOG_MAX_PER_CYCLE = 500
 BACKLOG_ESTIMATION_FLAG = "time_estimated"
@@ -285,10 +287,34 @@ def _validate_command_payload(actuator: str, action: str, payload: object) -> di
             if payload:
                 raise BridgeError(f"{actuator} dispense uses the firmware-configured volume and does not accept a payload")
             return {}
+        if action == "test_dispense":
+            if payload:
+                raise BridgeError(f"{actuator} water-only test dispense does not accept a payload")
+            return {}
+        if action == "refill_confirm":
+            if payload:
+                raise BridgeError(f"{actuator} refill confirmation does not accept a payload")
+            return {}
         if action in {"stop", "retract"}:
             if payload:
                 raise BridgeError(f"{actuator}/{action} does not accept a payload")
             return {}
+        if action == "schedule":
+            _require_keys(payload, {"slots"}, f"{actuator} schedule payload")
+            slots = payload["slots"]
+            if not isinstance(slots, list) or len(slots) != PUMP_SCHEDULE_SLOTS:
+                raise BridgeError("Pump schedule must contain exactly three slots")
+            normalized_slots = []
+            for index, slot in enumerate(slots):
+                if not isinstance(slot, dict) or set(slot) != {"enabled", "time"}:
+                    raise BridgeError(f"Pump schedule slot {index} is invalid")
+                if not isinstance(slot["enabled"], bool):
+                    raise BridgeError(f"Pump schedule slot {index} enabled must be boolean")
+                normalized_slots.append({
+                    "enabled": slot["enabled"],
+                    "time": _validate_time(slot["time"], f"Pump schedule slot {index} time"),
+                })
+            return {"slots": normalized_slots}
         raise BridgeError(f"Actuator action {actuator}/{action} is not allowlisted")
 
     if action in {"on", "off", "feed_now"}:
@@ -393,13 +419,29 @@ def translate_actuator_command(command: object) -> dict[str, Any]:
             expected = {"schedule": "saved"}
     elif actuator in PUMP_ACTUATORS:
         prefix = "/syringeA" if actuator == "pump_a" else "/syringeB"
-        path = f"{prefix}/{action}"
-        query = {}
-        expected = {
-            "dispense": {"dispensed": True},
-            "stop": {"stopped": True},
-            "retract": {"retracted": True},
-        }[action]
+        if action == "schedule":
+            path = f"{prefix}/schedule"
+            query = {}
+            for index, slot in enumerate(payload["slots"]):
+                hour, minute = _split_time(slot["time"], f"Pump schedule slot {index} time")
+                query.update({f"h{index}": hour, f"m{index}": minute, f"e{index}": "1" if slot["enabled"] else "0"})
+            expected = {"schedule": "saved"}
+        elif action == "refill_confirm":
+            path = f"{prefix}/refill-confirm"
+            query = {}
+            expected = {"refill_confirmed": True}
+        elif action == "test_dispense":
+            path = f"{prefix}/test-dispense"
+            query = {}
+            expected = {"dispensed": True}
+        else:
+            path = f"{prefix}/{action}"
+            query = {}
+            expected = {
+                "dispense": {"dispensed": True},
+                "stop": {"stopped": True},
+                "retract": {"retracted": True},
+            }[action]
     elif action == "feed_now":
         path = "/feeder/feed"
         query = {}
@@ -507,8 +549,9 @@ def _translate_pump_status(payload: object) -> dict[str, Any]:
     ):
         raise BridgeError("ESP32 pump status remaining volume exceeds its capacity")
     schedule = payload["schedule"]
-    if not isinstance(schedule, list) or len(schedule) != FEEDER_SCHEDULE_SLOTS:
+    if not isinstance(schedule, list) or len(schedule) != PUMP_SCHEDULE_SLOTS:
         raise BridgeError("ESP32 pump status must contain exactly three schedule slots")
+    normalized_schedule = []
     for index, slot in enumerate(schedule):
         if not isinstance(slot, dict) or set(slot) != {"hour", "minute", "enabled"}:
             raise BridgeError(f"ESP32 pump schedule slot {index} is invalid")
@@ -520,12 +563,35 @@ def _translate_pump_status(payload: object) -> dict[str, Any]:
             or not isinstance(slot["enabled"], bool)
         ):
             raise BridgeError(f"ESP32 pump schedule slot {index} is invalid")
-    return {
+        normalized_schedule.append({"enabled": slot["enabled"], "time": f"{slot['hour']:02d}:{slot['minute']:02d}"})
+
+    normalized = {
         "active": payload["active"],
         "dose_count": payload["dose_count"],
         "last_dispensed": payload["last_dispensed"],
         "volume_ml": float(payload["volume_ml"]),
+        "schedule": normalized_schedule,
     }
+    for field in ("remaining_ml", "capacity_ml"):
+        if field in payload:
+            normalized[field] = float(payload[field])
+    for field in ("volume_known", "refill_required", "clock_synced"):
+        if field in payload:
+            if not isinstance(payload[field], bool):
+                raise BridgeError(f"ESP32 pump status contains an invalid {field} flag")
+            normalized[field] = payload[field]
+    for field, max_length in (
+        ("last_chemical_dose_at", 80),
+        ("next_eligible_at", 80),
+        ("next_dose_at", 80),
+        ("schedule_event", 240),
+    ):
+        if field in payload:
+            value = payload[field]
+            if not isinstance(value, str) or len(value) > max_length:
+                raise BridgeError(f"ESP32 pump status contains an invalid {field}")
+            normalized[field] = value
+    return normalized
 
 
 def fetch_json(url: str, timeout: float, headers: dict[str, str] | None = None) -> object:
@@ -815,7 +881,7 @@ def _wait_for_configured_pump_dose(
 def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dict[str, Any]:
     """Make one allowlisted physical call without reissuing ambiguous commands."""
     initial_pump_status: dict[str, Any] | None = None
-    if translated["actuator"] in PUMP_ACTUATORS and translated["action"] == "dispense":
+    if translated["actuator"] in PUMP_ACTUATORS and translated["action"] in PUMP_DOSE_ACTIONS:
         pump_statuses = _read_pump_statuses(config)
         if any(status["active"] for status in pump_statuses.values()):
             raise BridgeError("A syringe pump is already active; dispense was not started")
@@ -826,7 +892,7 @@ def _execute_translated_command(config: dict, translated: dict[str, Any]) -> dic
         raise AmbiguousPhysicalOutcome("ESP32 returned an invalid actuator response after dispatch")
 
     result: dict[str, Any] = {"path": translated["path"], "response": raw_response}
-    if translated["actuator"] in PUMP_ACTUATORS and translated["action"] == "dispense":
+    if translated["actuator"] in PUMP_ACTUATORS and translated["action"] in PUMP_DOSE_ACTIONS:
         try:
             result.update(_wait_for_configured_pump_dose(config, translated["actuator"], initial_pump_status or {}))
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
@@ -875,7 +941,11 @@ def process_pending_actuator_commands(config: dict) -> int:
         except (BridgeError, URLError, TimeoutError, OSError):
             raise
 
-        if translated["actuator"] in PUMP_ACTUATORS and not config.get("pump_manual_test_enabled", False):
+        if (
+            translated["actuator"] in PUMP_ACTUATORS
+            and translated["action"] in {"dispense", "test_dispense", "retract"}
+            and not config.get("pump_manual_test_enabled", False)
+        ):
             try:
                 _report_failed(config, translated["command_id"], "Pump manual testing is disabled in bridge configuration")
             except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as report_error:

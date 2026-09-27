@@ -1,7 +1,7 @@
 # Pump Maintenance
 
-Status: Implemented guarded maintenance workflow with uncertainty interlock; automatic dosing deferred
-Last reviewed: 2026-08-23
+Status: Implemented guarded water-only maintenance and device-resident chemical schedules
+Last reviewed: 2026-09-27
 
 ## Purpose
 
@@ -10,22 +10,28 @@ the current bridge into a chemical-treatment system.
 
 ## Current implemented behavior
 
-Pump A and Pump B are available only from the administrator actuator workspace
-and only as maintenance checks. Supported actions are:
+Pump A and Pump B are available from the administrator actuator workspace for
+water-only maintenance tests and fixed-volume schedule configuration. Supported
+bridge actions are:
 
-- `dispense` / test
+- `dispense` (manual chemical dose through the local device dashboard or an
+  explicitly authorized bridge command)
+- `test_dispense` (water-only maintenance; no chemical cooldown)
 - `stop`
 - `retract`
+- `schedule` (three device-resident chemical-dose slots)
+- `refill_confirm` (volume estimate only; no motor movement)
 
 The bridge must have a fresh fixed-device heartbeat before a pump command is
 queued. Pump testing is disabled by default through
 `pump_manual_test_enabled` and must be enabled only for an intentional test
 setup.
 
-The UI requires confirmation before dispense/test and retract. Stop remains a
-visible safety control. The maintenance warning instructs the tester to use
-empty syringes or water only, keep both pumps clear of chemicals, and remain
-ready to stop the equipment.
+The UI requires confirmation before a water-only test, retract, refill
+confirmation, and enabling any chemical schedule slot. Stop remains a visible
+safety control. Tests use empty syringes or water only, keep both pumps clear
+of chemicals, and remain ready to stop the equipment. Optional
+threshold-driven pH auto-dose remains device-local and disabled by default.
 
 Before tank deletion or a physical move, finish or physically verify any pump
 work, stop the equipment, and follow the [hardware decommissioning and
@@ -38,9 +44,10 @@ firmware-resident configuration was erased.
 
 ## Configured-volume dispense
 
-The received firmware owns the configured dose volume and exposes no volume
-setting endpoint. A dispense command therefore has an empty payload. The
-bridge:
+The firmware owns the configured dose volume and exposes no volume setting
+endpoint. Maintenance-test and schedule commands use empty payloads for the
+physical action; a schedule carries three validated `enabled`/`HH:MM` slots.
+The bridge:
 
 1. Reads both pump statuses and refuses to start while either pump is active.
 2. Calls the selected firmware dispense route exactly once.
@@ -51,8 +58,28 @@ bridge:
    `outcome_unknown` because the physical result cannot be inferred from the
    timeout or stop response.
 
-The reported `volume_ml` is firmware state and is informational to AquaLogic;
-the browser cannot edit it.
+The status flow reports the configured dose and tracked volume state. Both
+syringes have a tracked 5 mL capacity; at the default 1 mL dose that allows
+five doses. A fresh or depleted syringe blocks dosing until an administrator
+physically checks/refills it and confirms the refill through either UI. That
+confirmation only updates the estimated volume and does not move the motor or
+reset cooldown. Retract remains a separate motor action and does not claim a
+refill.
+
+Manual chemical doses, Pump A/B schedules, and optional pH auto-dose share one
+persisted two-hour minimum cooldown. A water-only maintenance test tracks the
+selected syringe's volume but does not start that chemical cooldown. Before a
+local chemical dispense, the dashboard asks the operator to check the syringe
+and reports the configured dose and next eligible time. The administrator
+schedule confirmation identifies the fixed mL dose, local times, cooldown,
+and the fact that blocked occurrences are skipped.
+
+Schedules and pump safety state are stored in ESP32 NVS. Chemical dosing and
+schedule execution remain paused after a cold boot until router-synchronized
+Asia/Manila NTP time is valid. If a scheduled occurrence is blocked by
+cooldown, volume, pump activity, or persistence failure, it is skipped, shown
+in device status/dashboard and surfaced as an administrator toast; it is not
+retried or caught up.
 
 Before another dispense, AquaLogic reconciles stale commands and blocks the
 same registered device plus same pump while an earlier dispense is `executing`
@@ -97,16 +124,14 @@ the earlier dispense did not occur.
 
 ## Deferred scope
 
-- Automatic chemical dosing.
-- pH auto-dose.
-- Sensor-driven dosing.
-- Pump schedules.
+- Backend-generated automatic dose commands and scheduler workers.
 - Editable firmware dose configuration.
 - Mobile, public, staff, or customer pump controls.
 
 ## Acceptance criteria
 
-- Pump controls are visibly maintenance-only and administrator-only.
+- Web maintenance controls are visibly water-only; chemical schedules require
+  administrator confirmation, and all browser pump controls are admin-only.
 - Offline pump commands are rejected rather than queued.
 - Dispense uses the firmware-configured volume and no client duration payload.
 - An incomplete dispense may receive one safety stop but is never retried.

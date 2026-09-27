@@ -23,8 +23,22 @@ LIGHT_STATE = {
 PUMP_STATE = {
     "active": False,
     "dose_count": 2,
-    "last_dispensed": "12:34:56",
+    "last_dispensed": "2026-09-27T20:00:00+08:00",
     "volume_ml": 1.0,
+    "remaining_ml": 4.0,
+    "capacity_ml": 5.0,
+    "volume_known": True,
+    "refill_required": False,
+    "clock_synced": True,
+    "schedule": [
+        {"enabled": True, "time": "20:00"},
+        {"enabled": False, "time": "08:30"},
+        {"enabled": True, "time": "14:15"},
+    ],
+    "last_chemical_dose_at": "2026-09-27T20:00:00+08:00",
+    "next_eligible_at": "2026-09-27T22:00:00+08:00",
+    "next_dose_at": "2026-09-28T08:00:00+08:00",
+    "schedule_event": "Pump A schedule was skipped",
 }
 
 
@@ -371,6 +385,56 @@ def test_pump_commands_require_an_online_bridge_and_empty_dispense_payload(clien
         tank["id"],
         {"actuator": "pump_b", "action": "stop", "payload": {}, "expires_in_seconds": 31},
     ).status_code == 422
+
+
+def test_pump_schedule_validation_and_water_test_refill_actions(client, auth_headers):
+    tank = create_tank(client, auth_headers, "Pump schedule tank")
+    device = register(client, auth_headers, tank["id"], "esp32-pump-schedule-01")
+    mark_bridge_online(client, device)
+
+    slots = [
+        {"enabled": True, "time": "20:00"},
+        {"enabled": False, "time": "08:30"},
+        {"enabled": True, "time": "14:15"},
+    ]
+    scheduled = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "pump_a", "action": "schedule", "payload": {"slots": slots}},
+    )
+    assert scheduled.status_code == 201
+    assert scheduled.json()["payload"] == {"slots": slots}
+
+    test_command = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "pump_a", "action": "test_dispense", "payload": {}},
+    )
+    assert test_command.status_code == 201
+    assert test_command.json()["action"] == "test_dispense"
+
+    refill = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "pump_b", "action": "refill_confirm", "payload": {}},
+    )
+    assert refill.status_code == 201
+    assert refill.json()["action"] == "refill_confirm"
+
+    invalid = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {"actuator": "pump_b", "action": "schedule", "payload": {"slots": [
+            {"enabled": True, "time": "24:00"},
+            {"enabled": False, "time": "08:30"},
+            {"enabled": False, "time": "14:15"},
+        ]}},
+    )
+    assert invalid.status_code == 422
 
 
 def test_pump_commands_use_fixed_mapping_and_report_state(client, auth_headers):

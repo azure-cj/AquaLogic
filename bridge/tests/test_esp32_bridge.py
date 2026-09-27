@@ -293,6 +293,9 @@ def command(actuator, action, payload):
         (command("feeder", "config", {"open_angle": 125, "duration_ms": 1000}), "/feeder/config", {"angle": "125", "duration": "1000"}),
         (command("feeder", "schedule", {"slots": [{"enabled": True, "time": "08:00"}, {"enabled": False, "time": "12:30"}, {"enabled": True, "time": "18:00"}]}), "/feeder/schedule", {"h0": "08", "m0": "00", "e0": "1", "h1": "12", "m1": "30", "e1": "0", "h2": "18", "m2": "00", "e2": "1"}),
         (command("pump_a", "dispense", {}), "/syringeA/dispense", {}),
+        (command("pump_a", "test_dispense", {}), "/syringeA/test-dispense", {}),
+        (command("pump_a", "refill_confirm", {}), "/syringeA/refill-confirm", {}),
+        (command("pump_a", "schedule", {"slots": [{"enabled": True, "time": "20:00"}, {"enabled": False, "time": "08:30"}, {"enabled": True, "time": "14:15"}]}), "/syringeA/schedule", {"h0": "20", "m0": "00", "e0": "1", "h1": "08", "m1": "30", "e1": "0", "h2": "14", "m2": "15", "e2": "1"}),
         (command("pump_a", "stop", {}), "/syringeA/stop", {}),
         (command("pump_a", "retract", {}), "/syringeA/retract", {}),
         (command("pump_b", "dispense", {}), "/syringeB/dispense", {}),
@@ -304,6 +307,33 @@ def test_translates_each_allowlisted_firmware_endpoint(raw, path, query):
     translated = bridge.translate_actuator_command(raw)
     assert translated["path"] == path
     assert translated["query"] == query
+
+
+def test_pump_schedule_and_refill_commands_forward_when_manual_tests_are_disabled():
+    config = {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "key",
+        "timeout_seconds": 1,
+        "pump_manual_test_enabled": False,
+    }
+    schedule = command("pump_a", "schedule", {"slots": [
+        {"enabled": True, "time": "20:00"},
+        {"enabled": False, "time": "08:30"},
+        {"enabled": True, "time": "14:15"},
+    ]})
+    refill = command("pump_b", "refill_confirm", {})
+    with patch.object(bridge, "_pending_commands", return_value=[schedule, refill]), \
+        patch.object(bridge, "_mark_executing"), \
+        patch.object(bridge, "refresh_actuator_states"), \
+        patch.object(bridge, "_report_succeeded") as succeeded, \
+        patch.object(bridge, "fetch_json", side_effect=[{"schedule": "saved"}, {"refill_confirmed": True}]) as fetch:
+        assert bridge.process_pending_actuator_commands(config) == 2
+    assert [call.args[0] for call in fetch.call_args_list] == [
+        "http://192.168.1.50/syringeA/schedule?h0=20&m0=00&e0=1&h1=08&m1=30&e1=0&h2=14&m2=15&e2=1",
+        "http://192.168.1.50/syringeB/refill-confirm",
+    ]
+    assert succeeded.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -318,6 +348,10 @@ def test_translates_each_allowlisted_firmware_endpoint(raw, path, query):
         command("pump_a", "dispense", {"volume_ml": 1}),
         command("pump_b", "dispense", {"unexpected": True}),
         command("pump_a", "stop", {"unexpected": True}),
+        command("pump_a", "test_dispense", {"volume_ml": 1}),
+        command("pump_b", "refill_confirm", {"confirmed": True}),
+        command("pump_a", "schedule", {"slots": [{"enabled": True, "time": "08:00"}]}),
+        command("pump_b", "schedule", {"slots": [{"enabled": True, "time": "24:00"}, {"enabled": False, "time": "12:00"}, {"enabled": False, "time": "18:00"}]}),
     ],
 )
 def test_rejects_non_allowlisted_or_invalid_actuator_commands(raw):
@@ -360,7 +394,17 @@ def test_translates_and_validates_firmware_status_payloads():
             {"hour": 18, "minute": 0, "enabled": False},
         ],
     })
-    assert pump == {"active": True, "dose_count": 2, "last_dispensed": "12:34:56", "volume_ml": 1.0}
+    assert pump == {
+        "active": True,
+        "dose_count": 2,
+        "last_dispensed": "12:34:56",
+        "volume_ml": 1.0,
+        "schedule": [
+            {"enabled": False, "time": "08:00"},
+            {"enabled": False, "time": "12:30"},
+            {"enabled": False, "time": "18:00"},
+        ],
+    }
 
 
 @pytest.mark.parametrize(
@@ -396,13 +440,24 @@ def test_translates_and_validates_firmware_status_payloads():
     ids=["pump_a-current-firmware", "pump_b-current-firmware"],
 )
 def test_translates_current_firmware_pump_status_with_extra_fields(status):
-    # Current /syringeA/status and /syringeB/status include remaining_ml and
-    # capacity_ml in addition to the fields used by the bridge.
+    # Remaining volume, capacity, and the three saved slots are forwarded to
+    # the admin status projection.
     assert bridge._translate_pump_status(status) == {
         "active": False,
         "dose_count": 0,
         "last_dispensed": "Never",
         "volume_ml": 1.0,
+        "remaining_ml": 5.0,
+        "capacity_ml": 5.0,
+        "schedule": [
+            {"enabled": False, "time": "08:00"},
+            {"enabled": False, "time": "14:00"},
+            {"enabled": False, "time": "20:00"},
+        ] if status["schedule"][0]["hour"] == 8 else [
+            {"enabled": False, "time": "09:00"},
+            {"enabled": False, "time": "15:00"},
+            {"enabled": False, "time": "21:00"},
+        ],
     }
 
 
@@ -420,6 +475,36 @@ def test_translates_pump_status_with_future_firmware_fields():
         "future_firmware_field": {"value": "ignored by bridge"},
     }
     assert bridge._translate_pump_status(status)["active"] is False
+
+
+def test_translates_extended_pump_safety_status_fields():
+    status = {
+        "active": False,
+        "dose_count": 1,
+        "last_dispensed": "2026-09-27T20:00:00+08:00",
+        "volume_ml": 1.0,
+        "remaining_ml": 4.0,
+        "capacity_ml": 5.0,
+        "volume_known": True,
+        "refill_required": False,
+        "clock_synced": True,
+        "last_chemical_dose_at": "2026-09-27T20:00:00+08:00",
+        "next_eligible_at": "2026-09-27T22:00:00+08:00",
+        "next_dose_at": "2026-09-28T08:00:00+08:00",
+        "schedule_event": "Pump A scheduled dose skipped: cooldown",
+        "schedule": [
+            {"hour": 8, "minute": 0, "enabled": True},
+            {"hour": 14, "minute": 0, "enabled": False},
+            {"hour": 20, "minute": 0, "enabled": False},
+        ],
+    }
+    translated = bridge._translate_pump_status(status)
+    assert translated["remaining_ml"] == 4.0
+    assert translated["capacity_ml"] == 5.0
+    assert translated["clock_synced"] is True
+    assert translated["refill_required"] is False
+    assert translated["schedule"][0] == {"enabled": True, "time": "08:00"}
+    assert translated["next_eligible_at"] == "2026-09-27T22:00:00+08:00"
 
 
 def test_successful_command_is_sent_once_and_reported():

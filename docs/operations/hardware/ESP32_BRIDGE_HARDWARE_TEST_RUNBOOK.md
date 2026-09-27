@@ -9,14 +9,17 @@ Last reviewed: 2026-09-27
 - The ESP32 is never placed behind a tunnel or exposed to the internet.
 - One temporary HTTPS tunnel may expose the owner dashboard/API only.
 - The bridge is the only component that calls the ESP32 actuator endpoints.
-- v1 controls UV, normal LED, fish feeder, and Pump A/B manual tests only.
-  Pump schedules, pH auto-dose, and sensor-driven dosing are not available in
-  AquaLogic.
+- The bridge controls UV, normal LED, fish feeder, water-only Pump A/B
+  maintenance tests, administrator pump schedules, and refill confirmations.
+  Schedule doses and optional threshold-driven pH auto-dose run on the ESP32;
+  pH auto-dose remains disabled by default. There is no backend scheduler.
 - Pump tests are dry-run mechanical checks only: use empty syringes or water,
   never chemicals. Confirm the physical setup before every dispense or retract
   command and keep the visible Stop control ready.
 - The tester-only `pump_manual_test_enabled` setting defaults to `false` and
-  must be `true` only during a controlled empty/water motor test.
+  must be `true` only during a controlled empty/water motor test. This gate
+  applies to water-only tests and retracts, not schedule configuration or
+  motor-free refill confirmation.
 - Hardware calls are one-shot. A timeout, lost response, malformed terminal
   response, or completion/state-poll failure after dispatch may mean the
   actuator already ran, so the bridge reports `Outcome unknown` and does not
@@ -36,6 +39,17 @@ reconfiguration of the existing tank mapping: use the [canonical
 move/reprovisioning workflow](../../WORKFLOWS.md#moving-equipment-to-another-tank)
 for deactivation, physical relocation, new provisioning, fresh-reading and
 equipment-identity checks, schedule recreation, and rollback guidance.
+
+## Schedule and syringe safeguards
+
+The device uses router-synchronized NTP for Asia/Manila wall time and stores
+schedule and pump safety state in NVS. On a cold boot without router access,
+schedules and chemical dosing remain paused until time synchronization returns.
+Schedule slots start disabled. Both pumps share a two-hour minimum between
+chemical doses. With the default 1 mL dose and 5 mL capacity, five doses consume
+the syringe estimate; refilling must be physically done and confirmed in the
+local dashboard or administrator UI. Confirmation does not drive the motor or
+change cooldown. Retract is separate. Hardware checks below must use water.
 
 ## Owner computer
 
@@ -127,6 +141,36 @@ python bridge\esp32_bridge.py --config bridge\bridge-config.json
 The bridge validates and forwards sensor readings, polls pending commands,
 calls only the allowlisted local routes, and reports state/results. It does not
 print the device key or Wi-Fi configuration.
+
+## Collaborator schedule and refill check
+
+Use only water in the syringe for these actuator checks. Keep the emergency
+Stop control within reach. The physical behavior still needs verification in
+the collaborator's Arduino environment and hardware:
+
+1. Confirm the device has connected to the router and its dashboard reports
+   Asia/Manila clock synchronization. Configure one pump slot a few minutes
+   ahead and explicitly save/confirm it.
+2. Reboot after saving. Verify the pump schedule, volume estimate, and last
+   chemical-dose cooldown survive the reboot. Confirm a cold boot without
+   router access pauses scheduled/chemical operation until NTP returns.
+3. Run scheduled water doses and verify the other pump and all manual,
+   scheduled, and optional pH chemical paths remain blocked until two hours
+   after an actual chemical-dose start. A busy/cooldown-blocked scheduled
+   occurrence should be reported and skipped rather than caught up later.
+4. With the default 1.00 mL dose and 5.00 mL capacity, complete five dose
+   cycles, respecting the two-hour minimum. On the next dispense request,
+   verify the local dashboard instructs the operator to check the syringe and
+   blocks dosing at zero estimated volume.
+5. Physically refill to 5.00 mL and confirm refill once from the local ESP32
+   dashboard, then repeat through the administrator UI. Each confirmation must
+   reset only the volume estimate; it must not move the motor or reset the
+   cooldown. Run a separate water-only maintenance test and verify that it
+   does not start the chemical cooldown.
+
+Do not shorten the firmware cooldown or use chemicals to accelerate this
+validation. A faster multi-cycle check needs a separately approved
+test-only timing change.
 
 ## Two offline persistence layers
 

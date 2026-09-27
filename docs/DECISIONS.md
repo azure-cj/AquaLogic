@@ -1,7 +1,7 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-09-26
+Last reviewed: 2026-09-27
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
@@ -1027,6 +1027,28 @@ report behavior, one-shot safety stop, and duplicate-dispense prevention with
 empty syringes or water only. External notifications, automatic dosing,
 command replay, generalized scheduling, and enterprise job infrastructure
 remain deferred.
+
+## 2026-09-27 — Use synchronized device time and explicit syringe state for dosing
+
+**Decision:** Keep schedules on the ESP32 and use router-synchronized NTP in
+Asia/Manila, persisting schedule settings and pump safety state in NVS. Require
+operator confirmation of syringe fill on a fresh device and after its tracked
+5 mL capacity is consumed. Fixed-volume scheduled chemical doses, manual
+chemical doses, and optional threshold-driven pH auto-dose share one persisted
+two-hour cooldown. A blocked schedule occurrence is reported and skipped.
+Expose water-only manual pump maintenance tests through the web admin; make
+refill confirmation motor-free and preserve Retract as a distinct action.
+
+**Reason:** The former uptime-derived clock shifted daily controls across
+reboots, while a time-only schedule did not protect a depleted syringe or
+prevent closely spaced doses across the two pumps. Device-owned execution
+preserves the current bridge contract without creating backend scheduler jobs.
+
+**Consequences:** Cold-boot schedules and chemical dosing pause until the
+router supplies valid NTP time. Five-dose, refill, shared-cooldown, reboot, and
+skipped-occurrence behavior requires collaborator hardware validation with
+water. Existing ESP32 buffering/backlog, bridge SQLite outbox, and backend
+actuator-command audit semantics remain separate and unchanged.
 
 ## Adding a decision
 

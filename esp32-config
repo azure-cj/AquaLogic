@@ -8,10 +8,15 @@
 #include <ESP32Servo.h>
 #include <AccelStepper.h>
 #include <LittleFS.h>
+#include <Preferences.h>
+#include <time.h>
 
 const unsigned long WIFI_CONNECT_TIMEOUT_MS = 10000UL;
 const unsigned long WIFI_RETRY_INTERVAL_MS = 5000UL;
+const unsigned long FALLBACK_AP_DELAY_MS = 12000UL;
+const unsigned long FALLBACK_AP_SHUTDOWN_GRACE_MS = 15000UL;
 const unsigned long BUFFER_FLUSH_INTERVAL_MS = 30000UL;
+const unsigned long CHEMICAL_DOSE_COOLDOWN_MS = 2UL * 60UL * 60UL * 1000UL;
 const unsigned long BUFFER_MAX_RECORDS = 2000UL;
 const size_t BUFFER_MAX_BYTES = 128UL * 1024UL;
 const uint8_t RAM_QUEUE_MAX = 10;
@@ -50,6 +55,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 WebServer server(80);
 Servo feederServo;
+Preferences devicePreferences;
 
 AccelStepper stepperA(AccelStepper::HALF4WIRE, SYRA_IN1, SYRA_IN3, SYRA_IN2, SYRA_IN4);
 AccelStepper stepperB(AccelStepper::HALF4WIRE, SYRB_IN1, SYRB_IN3, SYRB_IN2, SYRB_IN4);
@@ -104,10 +110,15 @@ FeedTime feedSchedule[3] = {
 };
 
 int lastClockMinute = -1;
+int feedLastFiredDate[3] = {0, 0, 0};
 bool wifiConnected = false;
 bool wifiConnecting = false;
 unsigned long wifiConnectStartedAt = 0;
 unsigned long wifiLastRetryAt = 0;
+bool fallbackApActive = false;
+unsigned long wifiDisconnectedAt = 0;
+unsigned long staReconnectedAt = 0;
+unsigned long fallbackApLastStartAt = 0;
 bool mdnsStarted = false;
 bool manualOfflineMode = false;
 bool pendingManualOffline = false;
@@ -139,6 +150,9 @@ String        syringeALastDispensed = "Never";
 // so neither manual dispense nor auto-dosing can drive the plunger past empty.
 float         syringeACapacityML  = 5.0;
 float         syringeARemainingML = 5.0;
+bool          syringeAVolumeKnown = false;
+int           syringeALastFiredDate[3] = {0, 0, 0};
+String        syringeALastScheduleEvent = "";
 
 struct SyringeTime { int hour; int minute; bool enabled; bool firedToday; };
 SyringeTime syringeASchedule[3] = {
@@ -159,6 +173,9 @@ String        syringeBLastDispensed = "Never";
 // VOLUME LIMITER — same as Syringe A.
 float         syringeBCapacityML  = 5.0;
 float         syringeBRemainingML = 5.0;
+bool          syringeBVolumeKnown = false;
+int           syringeBLastFiredDate[3] = {0, 0, 0};
+String        syringeBLastScheduleEvent = "";
 
 SyringeTime syringeBSchedule[3] = {
   {9,  0, false, false},
@@ -172,10 +189,233 @@ float         phTargetMin         = 6.5;
 float         phTargetMax         = 7.5;
 unsigned long phDoseCooldownMs    = 15000;  // TEMP FOR DEMO — restore to 300000 (5 min) before real chemicals!
 unsigned long lastPhDoseMs        = 0;
+time_t        lastChemicalDoseEpoch = 0;
+bool          persistentStateReady = false;
+bool          scheduleSettingsLoaded = false;
+String        pumpDoseBlockReason = "";
 String        phAutoLastAction    = "None";
 
 bool  demoMode     = true;
 float demoPhValue  = 7.0;
+
+const time_t MIN_VALID_NTP_EPOCH = 1735689600; // 2025-01-01 UTC
+const char* AQUA_TZ = "PHT-8"; // Asia/Manila has no daylight-saving time.
+
+bool deviceClockSynchronized() {
+  return time(nullptr) >= MIN_VALID_NTP_EPOCH;
+}
+
+bool getDeviceLocalTime(struct tm& localTime) {
+  time_t now = time(nullptr);
+  if (now < MIN_VALID_NTP_EPOCH) return false;
+  return localtime_r(&now, &localTime) != nullptr;
+}
+
+int deviceDateKey(const struct tm& localTime) {
+  return (localTime.tm_year + 1900) * 10000 +
+         (localTime.tm_mon + 1) * 100 + localTime.tm_mday;
+}
+
+String formatDeviceEpoch(time_t epoch) {
+  if (epoch < MIN_VALID_NTP_EPOCH) return "";
+  struct tm localTime;
+  if (!localtime_r(&epoch, &localTime)) return "";
+  char buffer[32];
+  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &localTime);
+  return String(buffer) + "+08:00";
+}
+
+String deviceCooldownRemainingText() {
+  if (!deviceClockSynchronized()) return "Waiting for NTP time sync";
+  time_t now = time(nullptr);
+  if (lastChemicalDoseEpoch <= 0 || now >= lastChemicalDoseEpoch + 7200)
+    return "Eligible now";
+  return formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
+}
+
+unsigned long chemicalCooldownRemainingMs() {
+  if (!deviceClockSynchronized()) return CHEMICAL_DOSE_COOLDOWN_MS;
+  time_t now = time(nullptr);
+  if (lastChemicalDoseEpoch <= 0 || now >= lastChemicalDoseEpoch + 7200) return 0;
+  return (unsigned long)(lastChemicalDoseEpoch + 7200 - now) * 1000UL;
+}
+
+time_t nextScheduleEpoch(const SyringeTime* schedule, time_t now) {
+  struct tm localTime;
+  if (!localtime_r(&now, &localTime)) return 0;
+  time_t next = 0;
+  for (int i = 0; i < 3; i++) {
+    if (!schedule[i].enabled) continue;
+    struct tm slot = localTime;
+    slot.tm_hour = schedule[i].hour;
+    slot.tm_min = schedule[i].minute;
+    slot.tm_sec = 0;
+    time_t candidate = mktime(&slot);
+    if (candidate <= now) {
+      slot.tm_mday += 1;
+      candidate = mktime(&slot);
+    }
+    if (candidate > 0 && (next == 0 || candidate < next)) next = candidate;
+  }
+  return next;
+}
+
+time_t nextChemicalEligibleEpoch() {
+  if (!deviceClockSynchronized()) return 0;
+  time_t now = time(nullptr);
+  time_t eligible = now;
+  if (lastChemicalDoseEpoch > 0 && eligible < lastChemicalDoseEpoch + 7200)
+    eligible = lastChemicalDoseEpoch + 7200;
+  return eligible;
+}
+
+time_t nextPumpDoseEpoch(const SyringeTime* schedule) {
+  if (!deviceClockSynchronized()) return 0;
+  time_t eligible = nextChemicalEligibleEpoch();
+  if (eligible <= 0) return 0;
+  // If cooldown ends after a slot, report the next real schedule occurrence
+  // after the cooldown. The crossed/blocked slot is skipped, not caught up.
+  return nextScheduleEpoch(schedule, eligible - 1);
+}
+
+bool persistScheduleSettings() {
+  if (!persistentStateReady) return false;
+  bool ok = true;
+  ok &= devicePreferences.putBool("uv_en", uvScheduleEnabled) > 0;
+  ok &= devicePreferences.putUChar("uv_on_h", uvScheduleOnHour) > 0;
+  ok &= devicePreferences.putUChar("uv_on_m", uvScheduleOnMinute) > 0;
+  ok &= devicePreferences.putUChar("uv_off_h", uvScheduleOffHour) > 0;
+  ok &= devicePreferences.putUChar("uv_off_m", uvScheduleOffMinute) > 0;
+  ok &= devicePreferences.putBool("led_en", ledScheduleEnabled) > 0;
+  ok &= devicePreferences.putUChar("led_on_h", ledScheduleOnHour) > 0;
+  ok &= devicePreferences.putUChar("led_on_m", ledScheduleOnMinute) > 0;
+  ok &= devicePreferences.putUChar("led_off_h", ledScheduleOffHour) > 0;
+  ok &= devicePreferences.putUChar("led_off_m", ledScheduleOffMinute) > 0;
+  for (int i = 0; i < 3; i++) {
+    char key[12];
+    snprintf(key, sizeof(key), "feed_h%d", i);
+    ok &= devicePreferences.putUChar(key, feedSchedule[i].hour) > 0;
+    snprintf(key, sizeof(key), "feed_m%d", i);
+    ok &= devicePreferences.putUChar(key, feedSchedule[i].minute) > 0;
+    snprintf(key, sizeof(key), "feed_e%d", i);
+    ok &= devicePreferences.putBool(key, feedSchedule[i].enabled) > 0;
+    snprintf(key, sizeof(key), "a_h%d", i);
+    ok &= devicePreferences.putUChar(key, syringeASchedule[i].hour) > 0;
+    snprintf(key, sizeof(key), "a_m%d", i);
+    ok &= devicePreferences.putUChar(key, syringeASchedule[i].minute) > 0;
+    snprintf(key, sizeof(key), "a_e%d", i);
+    ok &= devicePreferences.putBool(key, syringeASchedule[i].enabled) > 0;
+    snprintf(key, sizeof(key), "b_h%d", i);
+    ok &= devicePreferences.putUChar(key, syringeBSchedule[i].hour) > 0;
+    snprintf(key, sizeof(key), "b_m%d", i);
+    ok &= devicePreferences.putUChar(key, syringeBSchedule[i].minute) > 0;
+    snprintf(key, sizeof(key), "b_e%d", i);
+    ok &= devicePreferences.putBool(key, syringeBSchedule[i].enabled) > 0;
+  }
+  ok &= devicePreferences.putFloat("ph_min", phTargetMin) > 0;
+  ok &= devicePreferences.putFloat("ph_max", phTargetMax) > 0;
+  ok &= devicePreferences.putBool("ph_enabled", phAutoDoseEnabled) > 0;
+  ok &= devicePreferences.putUInt("ph_cd", (uint32_t)phDoseCooldownMs) > 0;
+  ok &= devicePreferences.putBool("settings_v1", true) > 0;
+  scheduleSettingsLoaded = ok;
+  return ok;
+}
+
+bool persistPumpSafetyState() {
+  if (!persistentStateReady) return false;
+  bool ok = true;
+  // Save the global cooldown first: an interrupted write can delay a dose,
+  // but must never make a just-started chemical dose immediately repeatable.
+  ok &= devicePreferences.putLong64("last_chem", (int64_t)lastChemicalDoseEpoch) > 0;
+  ok &= devicePreferences.putFloat("a_remain", syringeARemainingML) > 0;
+  ok &= devicePreferences.putFloat("b_remain", syringeBRemainingML) > 0;
+  ok &= devicePreferences.putBool("a_known", syringeAVolumeKnown) > 0;
+  ok &= devicePreferences.putBool("b_known", syringeBVolumeKnown) > 0;
+  ok &= devicePreferences.putInt("a_count", syringeADoseCount) > 0;
+  ok &= devicePreferences.putInt("b_count", syringeBDoseCount) > 0;
+  ok &= devicePreferences.putString("a_last", syringeALastDispensed) > 0;
+  ok &= devicePreferences.putString("b_last", syringeBLastDispensed) > 0;
+  ok &= devicePreferences.putBool("pump_v1", true) > 0;
+  return ok;
+}
+
+void loadPersistentDeviceState() {
+  persistentStateReady = devicePreferences.begin("aqualogic", false);
+  if (!persistentStateReady) {
+    Serial.println("NVS unavailable; chemical dosing will remain blocked");
+    return;
+  }
+
+  if (devicePreferences.getBool("settings_v1", false)) {
+    uvScheduleEnabled = devicePreferences.getBool("uv_en", false);
+    uvScheduleOnHour = devicePreferences.getUChar("uv_on_h", 8);
+    uvScheduleOnMinute = devicePreferences.getUChar("uv_on_m", 0);
+    uvScheduleOffHour = devicePreferences.getUChar("uv_off_h", 18);
+    uvScheduleOffMinute = devicePreferences.getUChar("uv_off_m", 0);
+    ledScheduleEnabled = devicePreferences.getBool("led_en", false);
+    ledScheduleOnHour = devicePreferences.getUChar("led_on_h", 8);
+    ledScheduleOnMinute = devicePreferences.getUChar("led_on_m", 0);
+    ledScheduleOffHour = devicePreferences.getUChar("led_off_h", 18);
+    ledScheduleOffMinute = devicePreferences.getUChar("led_off_m", 0);
+    for (int i = 0; i < 3; i++) {
+      char key[12];
+      snprintf(key, sizeof(key), "feed_h%d", i);
+      feedSchedule[i].hour = constrain(devicePreferences.getUChar(key, feedSchedule[i].hour), 0, 23);
+      snprintf(key, sizeof(key), "feed_m%d", i);
+      feedSchedule[i].minute = constrain(devicePreferences.getUChar(key, feedSchedule[i].minute), 0, 59);
+      snprintf(key, sizeof(key), "feed_e%d", i);
+      feedSchedule[i].enabled = devicePreferences.getBool(key, false);
+      snprintf(key, sizeof(key), "a_h%d", i);
+      syringeASchedule[i].hour = constrain(devicePreferences.getUChar(key, syringeASchedule[i].hour), 0, 23);
+      snprintf(key, sizeof(key), "a_m%d", i);
+      syringeASchedule[i].minute = constrain(devicePreferences.getUChar(key, syringeASchedule[i].minute), 0, 59);
+      snprintf(key, sizeof(key), "a_e%d", i);
+      syringeASchedule[i].enabled = devicePreferences.getBool(key, false);
+      snprintf(key, sizeof(key), "b_h%d", i);
+      syringeBSchedule[i].hour = constrain(devicePreferences.getUChar(key, syringeBSchedule[i].hour), 0, 23);
+      snprintf(key, sizeof(key), "b_m%d", i);
+      syringeBSchedule[i].minute = constrain(devicePreferences.getUChar(key, syringeBSchedule[i].minute), 0, 59);
+      snprintf(key, sizeof(key), "b_e%d", i);
+      syringeBSchedule[i].enabled = devicePreferences.getBool(key, false);
+      snprintf(key, sizeof(key), "feed_fire%d", i);
+      feedLastFiredDate[i] = devicePreferences.getInt(key, 0);
+      snprintf(key, sizeof(key), "a_fire%d", i);
+      syringeALastFiredDate[i] = devicePreferences.getInt(key, 0);
+      snprintf(key, sizeof(key), "b_fire%d", i);
+      syringeBLastFiredDate[i] = devicePreferences.getInt(key, 0);
+    }
+    phTargetMin = devicePreferences.getFloat("ph_min", 6.5f);
+    phTargetMax = devicePreferences.getFloat("ph_max", 7.5f);
+    phAutoDoseEnabled = devicePreferences.getBool("ph_enabled", false);
+    phDoseCooldownMs = constrain(devicePreferences.getUInt("ph_cd", (uint32_t)phDoseCooldownMs), 10000UL, 3600000UL);
+    scheduleSettingsLoaded = true;
+  }
+
+  if (devicePreferences.getBool("pump_v1", false)) {
+    syringeARemainingML = constrain(devicePreferences.getFloat("a_remain", 0.0f), 0.0f, syringeACapacityML);
+    syringeBRemainingML = constrain(devicePreferences.getFloat("b_remain", 0.0f), 0.0f, syringeBCapacityML);
+    syringeAVolumeKnown = devicePreferences.getBool("a_known", false);
+    syringeBVolumeKnown = devicePreferences.getBool("b_known", false);
+    lastChemicalDoseEpoch = (time_t)devicePreferences.getLong64("last_chem", 0);
+    syringeADoseCount = max(0, devicePreferences.getInt("a_count", 0));
+    syringeBDoseCount = max(0, devicePreferences.getInt("b_count", 0));
+    syringeALastDispensed = devicePreferences.getString("a_last", "Never");
+    syringeBLastDispensed = devicePreferences.getString("b_last", "Never");
+  }
+}
+
+void startNetworkTimeSync() {
+  setenv("TZ", AQUA_TZ, 1);
+  tzset();
+  configTime(0, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+  Serial.println("NTP time configured for Asia/Manila");
+}
+
+void setPumpScheduleEvent(bool pumpA, const String& message) {
+  if (pumpA) syringeALastScheduleEvent = message;
+  else syringeBLastScheduleEvent = message;
+  Serial.println(message);
+}
 
 unsigned long lcdPreviousMillis = 0;
 int           lcdScreen         = 0;
@@ -229,7 +469,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   </div>
 </div>
 
-<div class="section-label">TESTING — WIFI OFFLINE SIMULATION</div>
+<div class="section-label">WI-FI STATUS & LOCAL ACCESS</div>
 <div class="panel">
   <div class="controls">
     <button onclick="forceDisconnect()">⚠ FORCE DISCONNECT</button>
@@ -237,24 +477,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   </div>
   <div class="stat-grid">
     <div class="stat-box">
-      <div class="stat-box-label">CONNECTION STATE</div>
+      <div class="stat-box-label">STA CONNECTION</div>
       <div class="stat-box-value" id="wifi-state">--</div>
     </div>
     <div class="stat-box">
-      <div class="stat-box-label">MANUAL OFFLINE</div>
+      <div class="stat-box-label">MANUAL TEST MODE</div>
       <div class="stat-box-value" id="wifi-manual">OFF</div>
     </div>
     <div class="stat-box">
-      <div class="stat-box-label">AUTO-RECONNECT IN</div>
+      <div class="stat-box-label">TEST TIME REMAINING</div>
       <div class="stat-box-value" id="wifi-countdown">—</div>
     </div>
     <div class="stat-box">
-      <div class="stat-box-label">DEBUG AP</div>
+      <div class="stat-box-label">LOCAL AP / FALLBACK</div>
       <div class="stat-box-value" id="wifi-ap">—</div>
     </div>
   </div>
   <div class="feedback" id="wifi-feedback"></div>
-  <div>Disconnecting will make this page unreachable from your current network. Join WiFi network 'AquaLogic-Debug' to reach the dashboard at 192.168.4.1 and press Reconnect, or wait out the 2-minute safety timeout.</div>
+  <div>Force Disconnect starts the manual 2-minute test and pauses STA retries. During a router WiFi outage, the local AP starts after 12 seconds while STA reconnect attempts continue. Join 'AquaLogic-Debug' and open 192.168.4.1. This fallback does not detect Internet/Railway outages while router WiFi is connected.</div>
 </div>
 
 <!-- ===== FISH FEEDER ===== -->
@@ -542,7 +782,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   </div>
 
   <div class="feedback" id="ph-auto-feedback"></div>
-  <div>Manual dispense always works, even with auto-dosing on.</div>
+  <div>Manual, scheduled and pH-triggered chemical doses share a two-hour minimum cooldown.</div>
 </div>
 
 <!-- ===== SYRINGE PUMP A ===== -->
@@ -565,6 +805,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     <button onclick="dispenseA()">⚡ DISPENSE NOW</button>
     <button onclick="stopSyrA()">■ STOP</button>
     <button onclick="retractA()">◀ RETRACT</button>
+    <button onclick="refillA()">✓ CONFIRM REFILL</button>
   </div>
 
   <div class="stat-grid">
@@ -589,9 +830,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     </div>
   </div>
 
+  <div class="feedback" id="syrA-safety"></div>
+  <div class="feedback" id="syrA-schedule-alert"></div>
+
   <hr>
 
-  <div>AUTO-DOSE SCHEDULE (UP TO 3 TIMES/DAY)</div>
+  <div>FIXED CHEMICAL DOSE SCHEDULE · UP TO 3 TIMES/DAY · ASIA/MANILA TIME</div>
 
   <table>
     <thead>
@@ -629,6 +873,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     <button onclick="dispenseB()">⚡ DISPENSE NOW</button>
     <button onclick="stopSyrB()">■ STOP</button>
     <button onclick="retractB()">◀ RETRACT</button>
+    <button onclick="refillB()">✓ CONFIRM REFILL</button>
   </div>
 
   <div class="stat-grid">
@@ -653,9 +898,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     </div>
   </div>
 
+  <div class="feedback" id="syrB-safety"></div>
+  <div class="feedback" id="syrB-schedule-alert"></div>
+
   <hr>
 
-  <div>AUTO-DOSE SCHEDULE (UP TO 3 TIMES/DAY)</div>
+  <div>FIXED CHEMICAL DOSE SCHEDULE · UP TO 3 TIMES/DAY · ASIA/MANILA TIME</div>
 
   <table>
     <thead>
@@ -849,13 +1097,21 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     try{
       const res=await fetch('/wifi/status');
       const d=await res.json();
-      document.getElementById('wifi-state').textContent=d.mode;
-      document.getElementById('wifi-manual').textContent=d.manual_offline?'ON':'OFF';
+      const staConnected=typeof d.sta_connected==='boolean'?d.sta_connected:!!d.connected;
+      const manualTest=d.manual_offline===true;
+      const reconnecting=typeof d.sta_reconnecting==='boolean'?d.sta_reconnecting:(!staConnected&&!manualTest);
+      const modeLabel=d.mode?' ('+d.mode+')':'';
+      document.getElementById('wifi-state').textContent=
+        staConnected?'Connected'+modeLabel:manualTest?'Paused for manual test':reconnecting?'Reconnecting'+modeLabel:'Disconnected';
+      document.getElementById('wifi-manual').textContent=manualTest?'ACTIVE':'OFF';
       document.getElementById('wifi-countdown').textContent=
         d.manual_offline_remaining_ms>0
           ?fmtMs(d.manual_offline_remaining_ms)
           :'—';
-      document.getElementById('wifi-ap').textContent=d.ap_ssid||'—';
+      const apIp=d.ap_ip&&d.ap_ip!=='0.0.0.0'?' · '+d.ap_ip:'';
+      document.getElementById('wifi-ap').textContent=d.fallback_ap_active
+        ?'Automatic · '+(d.ap_ssid||'Local AP')+apIp
+        :manualTest&&d.ap_ssid?'Manual test · '+d.ap_ssid+apIp:'Off';
     }catch(e){
       console.warn('WiFi status fetch failed',e);
     }
@@ -1379,6 +1635,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         d.capacity_ml.toFixed(1)+
         'mL';
 
+      document.getElementById('syrA-safety').textContent =
+        !d.clock_synced
+          ? 'Asia/Manila clock is not synchronized. Schedules and chemical doses are paused.'
+          : !d.volume_known
+            ? 'Initial syringe fill is unconfirmed. Check the syringe and confirm refill before dosing.'
+            : d.refill_required
+              ? 'Refill required before the next dose.'
+              : 'Next chemical dose eligible: ' + (d.next_eligible_at || 'now') +
+                (d.next_dose_at ? ' · Next scheduled dose: ' + d.next_dose_at : ' · No pump schedule enabled');
+      document.getElementById('syrA-schedule-alert').textContent = d.schedule_event || '';
+
       d.schedule.forEach((s,i)=>{
 
         syrASchedTimes[i].h=s.hour;
@@ -1432,6 +1699,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         d.capacity_ml.toFixed(1)+
         'mL';
 
+      document.getElementById('syrB-safety').textContent =
+        !d.clock_synced
+          ? 'Asia/Manila clock is not synchronized. Schedules and chemical doses are paused.'
+          : !d.volume_known
+            ? 'Initial syringe fill is unconfirmed. Check the syringe and confirm refill before dosing.'
+            : d.refill_required
+              ? 'Refill required before the next dose.'
+              : 'Next chemical dose eligible: ' + (d.next_eligible_at || 'now') +
+                (d.next_dose_at ? ' · Next scheduled dose: ' + d.next_dose_at : ' · No pump schedule enabled');
+      document.getElementById('syrB-schedule-alert').textContent = d.schedule_event || '';
+
       d.schedule.forEach((s,i)=>{
 
         syrBSchedTimes[i].h=s.hour;
@@ -1452,21 +1730,33 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
 
   async function dispenseA(){
-
-    const res=
-      await fetch('/syringeA/dispense');
-
-    const d=
-      await res.json();
-
-    fb(
-      'syrA-feedback',
-      d.dispensed
-        ?'Dispensing now!'
-        :'BLOCKED — not enough volume left! Refill needed.'
-    );
-
+    const status = await (await fetch('/syringeA/status')).json();
+    if (!status.clock_synced) {
+      fb('syrA-feedback', 'BLOCKED — Asia/Manila clock is not synchronized.');
+      return;
+    }
+    if (status.refill_required) {
+      const refillConfirmed = confirm(`Check Syringe A first. ${status.volume_known ? `Estimated remaining volume is ${status.remaining_ml.toFixed(2)} mL.` : 'Its initial fill has not been confirmed.'} The configured dose is ${status.volume_ml.toFixed(2)} mL. Only choose OK after you have physically refilled it to ${status.capacity_ml.toFixed(2)} mL. This confirmation does not move the motor or reset cooldown. Next eligible time: ${status.next_eligible_at || 'not reported'}.`);
+      if (refillConfirmed) {
+        const refill = await (await fetch('/syringeA/refill-confirm')).json();
+        fb('syrA-feedback', refill.refill_confirmed ? 'Refill confirmed. Click DISPENSE NOW again to request a dose.' : `Refill not confirmed — ${refill.reason || 'try again'}`);
+        setTimeout(fetchSyrA,300);
+      }
+      return;
+    }
+    if (!confirm(`Check Syringe A first. Confirm it contains enough liquid for the configured ${status.volume_ml.toFixed(2)} mL dose. Next eligible time: ${status.next_eligible_at || 'now'}. Chemical doses have a shared 2-hour minimum cooldown.`)) return;
+    const res = await fetch('/syringeA/dispense');
+    const d = await res.json();
+    fb('syrA-feedback', d.dispensed ? 'Chemical dose started.' : `BLOCKED — ${d.reason || 'dose not started'}`);
     setTimeout(fetchSyrA,500);
+  }
+
+  async function refillA(){
+    if (!confirm('Physically check and refill Syringe A to its 5.00 mL capacity. This only updates the volume estimate; it does not move the motor or reset the two-hour chemical-dose cooldown.')) return;
+    const res = await fetch('/syringeA/refill-confirm');
+    const d = await res.json();
+    fb('syrA-feedback', d.refill_confirmed ? 'Refill confirmed. Motor did not move; cooldown is unchanged.' : `Refill not confirmed — ${d.reason || 'try again'}`);
+    setTimeout(fetchSyrA,300);
   }
 
   async function stopSyrA(){
@@ -1487,28 +1777,40 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     fb(
       'syrA-feedback',
-      'Full retract — syringe refilled to 5.0mL.'
+      'Retract motor action completed. Volume estimate is unchanged; confirm refill separately.'
     );
 
     setTimeout(fetchSyrA,500);
   }
 
   async function dispenseB(){
-
-    const res=
-      await fetch('/syringeB/dispense');
-
-    const d=
-      await res.json();
-
-    fb(
-      'syrB-feedback',
-      d.dispensed
-        ?'Dispensing now!'
-        :'BLOCKED — not enough volume left! Refill needed.'
-    );
-
+    const status = await (await fetch('/syringeB/status')).json();
+    if (!status.clock_synced) {
+      fb('syrB-feedback', 'BLOCKED — Asia/Manila clock is not synchronized.');
+      return;
+    }
+    if (status.refill_required) {
+      const refillConfirmed = confirm(`Check Syringe B first. ${status.volume_known ? `Estimated remaining volume is ${status.remaining_ml.toFixed(2)} mL.` : 'Its initial fill has not been confirmed.'} The configured dose is ${status.volume_ml.toFixed(2)} mL. Only choose OK after you have physically refilled it to ${status.capacity_ml.toFixed(2)} mL. This confirmation does not move the motor or reset cooldown. Next eligible time: ${status.next_eligible_at || 'not reported'}.`);
+      if (refillConfirmed) {
+        const refill = await (await fetch('/syringeB/refill-confirm')).json();
+        fb('syrB-feedback', refill.refill_confirmed ? 'Refill confirmed. Click DISPENSE NOW again to request a dose.' : `Refill not confirmed — ${refill.reason || 'try again'}`);
+        setTimeout(fetchSyrB,300);
+      }
+      return;
+    }
+    if (!confirm(`Check Syringe B first. Confirm it contains enough liquid for the configured ${status.volume_ml.toFixed(2)} mL dose. Next eligible time: ${status.next_eligible_at || 'now'}. Chemical doses have a shared 2-hour minimum cooldown.`)) return;
+    const res = await fetch('/syringeB/dispense');
+    const d = await res.json();
+    fb('syrB-feedback', d.dispensed ? 'Chemical dose started.' : `BLOCKED — ${d.reason || 'dose not started'}`);
     setTimeout(fetchSyrB,500);
+  }
+
+  async function refillB(){
+    if (!confirm('Physically check and refill Syringe B to its 5.00 mL capacity. This only updates the volume estimate; it does not move the motor or reset the two-hour chemical-dose cooldown.')) return;
+    const res = await fetch('/syringeB/refill-confirm');
+    const d = await res.json();
+    fb('syrB-feedback', d.refill_confirmed ? 'Refill confirmed. Motor did not move; cooldown is unchanged.' : `Refill not confirmed — ${d.reason || 'try again'}`);
+    setTimeout(fetchSyrB,300);
   }
 
   async function stopSyrB(){
@@ -1529,7 +1831,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     fb(
       'syrB-feedback',
-      'Full retract — syringe refilled to 5.0mL.'
+      'Retract motor action completed. Volume estimate is unchanged; confirm refill separately.'
     );
 
     setTimeout(fetchSyrB,500);
@@ -1537,6 +1839,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function saveSyrASchedule(){
 
+    const currentStatus = await (await fetch('/syringeA/status')).json();
     syrASchedTimes.forEach((s,i)=>{
 
       const t=
@@ -1553,15 +1856,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     });
 
+    if (syrASchedTimes.some(s => s.en) && currentStatus.refill_required) {
+      fb('syrA-feedback', 'Check and confirm the syringe is filled before enabling chemical schedule slots.');
+      return;
+    }
+    const selectedTimes = syrASchedTimes.filter(s => s.en).map(s => `${String(s.h).padStart(2, '0')}:${String(s.m).padStart(2, '0')}`).join(', ');
+    if (syrASchedTimes.some(s => s.en) && !confirm(`Enable fixed ${currentStatus.volume_ml.toFixed(2)} mL chemical doses at ${selectedTimes} Asia/Manila time, regardless of current pH? Check the syringe contents. A shared two-hour cooldown applies; blocked occurrences are skipped.`)) return;
+
     const p=
       syrASchedTimes.map(
         (s,i)=>
           `h${i}=${s.h}&m${i}=${s.m}&e${i}=${s.en?1:0}`
       ).join('&');
 
-    await fetch(
-      '/syringeA/schedule?'+p
-    );
+    const response = await fetch('/syringeA/schedule?'+p);
+    if (!response.ok) {
+      fb('syrA-feedback', 'Schedule could not be saved. Check the device and persistent storage.');
+      return;
+    }
 
     fb(
       'syrA-feedback',
@@ -1573,6 +1885,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function saveSyrBSchedule(){
 
+    const currentStatus = await (await fetch('/syringeB/status')).json();
     syrBSchedTimes.forEach((s,i)=>{
 
       const t=
@@ -1589,15 +1902,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     });
 
+    if (syrBSchedTimes.some(s => s.en) && currentStatus.refill_required) {
+      fb('syrB-feedback', 'Check and confirm the syringe is filled before enabling chemical schedule slots.');
+      return;
+    }
+    const selectedTimes = syrBSchedTimes.filter(s => s.en).map(s => `${String(s.h).padStart(2, '0')}:${String(s.m).padStart(2, '0')}`).join(', ');
+    if (syrBSchedTimes.some(s => s.en) && !confirm(`Enable fixed ${currentStatus.volume_ml.toFixed(2)} mL chemical doses at ${selectedTimes} Asia/Manila time, regardless of current pH? Check the syringe contents. A shared two-hour cooldown applies; blocked occurrences are skipped.`)) return;
+
     const p=
       syrBSchedTimes.map(
         (s,i)=>
           `h${i}=${s.h}&m${i}=${s.m}&e${i}=${s.en?1:0}`
       ).join('&');
 
-    await fetch(
-      '/syringeB/schedule?'+p
-    );
+    const response = await fetch('/syringeB/schedule?'+p);
+    if (!response.ok) {
+      fb('syrB-feedback', 'Schedule could not be saved. Check the device and persistent storage.');
+      return;
+    }
 
     fb(
       'syrB-feedback',
@@ -1955,58 +2277,29 @@ void handleFeeder() {
 }
 
 void checkFeederSchedule() {
+  struct tm localTime;
+  if (!getDeviceLocalTime(localTime)) return;
+  int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+  int today = deviceDateKey(localTime);
 
-  unsigned long totalSecs =
-    millis()/1000;
+  for (int i = 0; i < 3; i++) {
+    if (!feedSchedule[i].enabled || feederActive) continue;
+    int slotMin = feedSchedule[i].hour * 60 + feedSchedule[i].minute;
+    if (nowMin != slotMin || feedLastFiredDate[i] == today) continue;
 
-  int nowH =
-    (totalSecs/3600)%24;
-
-  int nowM =
-    (totalSecs%3600)/60;
-
-  int nowMin =
-    nowH*60+nowM;
-
-  if (
-    nowM != lastClockMinute
-  ) {
-
-    lastClockMinute=nowM;
-
-    for (
-      int i=0;
-      i<3;
-      i++
-    )
-      feedSchedule[i].firedToday=false;
-  }
-
-  for (
-    int i=0;
-    i<3;
-    i++
-  ) {
-
-    if (
-      !feedSchedule[i].enabled
-    )
-      continue;
-
-    int slotMin =
-      feedSchedule[i].hour*60+
-      feedSchedule[i].minute;
-
-    if (
-      nowMin==slotMin &&
-      !feedSchedule[i].firedToday &&
-      !feederActive
-    ) {
-
-      feedSchedule[i].firedToday=true;
-
-      triggerFeed();
+    // Record before triggering so a reboot during the scheduled minute cannot
+    // repeat a feed that was already accepted by the device.
+    feedLastFiredDate[i] = today;
+    feedSchedule[i].firedToday = true;
+    if (persistentStateReady) {
+      char key[12];
+      snprintf(key, sizeof(key), "feed_fire%d", i);
+      if (devicePreferences.putInt(key, today) == 0) {
+        Serial.println("Feeder schedule skipped: could not persist occurrence");
+        continue;
+      }
     }
+    triggerFeed();
   }
 }
 
@@ -2016,7 +2309,8 @@ void checkFeederSchedule() {
 
 void startSyringeAMove(
   long steps,
-  bool isDose
+  bool isDose,
+  bool chemicalDose=false
 ) {
 
   if (syringeAActive)
@@ -2041,29 +2335,16 @@ void startSyringeAMove(
   stepperA.move(steps);
 
   if (isDose) {
-
-    unsigned long totalSecs =
-      millis()/1000;
-
-    char buf[12];
-
-    sprintf(
-      buf,
-      "%02d:%02d:%02d",
-      (int)((totalSecs/3600)%24),
-      (int)((totalSecs%3600)/60),
-      (int)(totalSecs%60)
-    );
-
-    syringeALastDispensed=
-      String(buf);
+    syringeALastDispensed = deviceClockSynchronized()
+      ? formatDeviceEpoch(time(nullptr))
+      : "Time not synchronized";
   }
 
-  Serial.print(
-    isDose
-      ? "SYRINGE A DOSE TRIGGERED — volume: "
-      : "SYRINGE A RETRACT — "
-  );
+    Serial.print(
+      isDose
+        ? (chemicalDose ? "SYRINGE A CHEMICAL DOSE — volume: " : "SYRINGE A WATER TEST — volume: ")
+        : "SYRINGE A RETRACT — "
+    );
 
   if (isDose) {
 
@@ -2085,51 +2366,56 @@ void startSyringeAMove(
 // 5mL syringe. Called by manual dispense, scheduled dispense, AND auto-dosing —
 // so all three paths share the same protection. Returns true if the dose fired.
 
-bool triggerSyringeA() {
+bool triggerSyringeA(bool chemicalDose=true) {
+  pumpDoseBlockReason = "";
+  if (!persistentStateReady) pumpDoseBlockReason = "Persistent safety state unavailable";
+  else if (!syringeAVolumeKnown) pumpDoseBlockReason = "Check syringe contents and confirm refill first";
+  else if (syringeARemainingML + 0.001f < syringeADispenseML)
+    pumpDoseBlockReason = "Insufficient volume; refill confirmation required";
+  else if (syringeAActive || syringeBActive) pumpDoseBlockReason = "A pump is already active";
+  else if (chemicalDose && !deviceClockSynchronized()) pumpDoseBlockReason = "Waiting for Asia/Manila NTP time sync";
 
-  if (
-    syringeARemainingML <
-    syringeADispenseML
-  ) {
+  time_t now = time(nullptr);
+  if (pumpDoseBlockReason.length() == 0 && chemicalDose && lastChemicalDoseEpoch > 0 && now < lastChemicalDoseEpoch + 7200)
+    pumpDoseBlockReason = "Two-hour chemical-dose cooldown until " + formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
 
-    Serial.print(
-      "SYRINGE A BLOCKED — LOW VOLUME. Remaining: "
-    );
-
-    Serial.print(
-      syringeARemainingML
-    );
-
-    Serial.println(
-      "mL. Refill needed."
-    );
-
+  if (pumpDoseBlockReason.length() > 0) {
+    Serial.println("SYRINGE A BLOCKED — " + pumpDoseBlockReason);
     return false;
   }
 
-  long steps =
-    (long)(
-      syringeADispenseML *
-      syringeAStepsPerML
-    );
+  float oldRemaining = syringeARemainingML;
+  time_t oldLastChemicalDose = lastChemicalDoseEpoch;
+  int oldDoseCount = syringeADoseCount;
+  String oldLastDispensed = syringeALastDispensed;
+  long steps = (long)(syringeADispenseML * syringeAStepsPerML);
+  startSyringeAMove(steps, true, chemicalDose);
+  if (!syringeAActive) {
+    pumpDoseBlockReason = "Pump could not start";
+    return false;
+  }
+  syringeARemainingML -= syringeADispenseML;
+  if (chemicalDose) {
+    lastChemicalDoseEpoch = now;
+    lastPhDoseMs = millis();
+  }
 
-  startSyringeAMove(
-    steps,
-    true
-  );
-
-  syringeARemainingML -=
-    syringeADispenseML;
-
-  lastPhDoseMs=millis();
-
+  // Persist before loop() services the stepper, making the dose non-repeatable
+  // after a reset or a lost HTTP response.
+  if (!persistPumpSafetyState()) {
+    stopSyringeA();
+    syringeARemainingML = oldRemaining;
+    lastChemicalDoseEpoch = oldLastChemicalDose;
+    syringeADoseCount = oldDoseCount;
+    syringeALastDispensed = oldLastDispensed;
+    pumpDoseBlockReason = "Could not persist pump safety state; dose not started";
+    return false;
+  }
   return true;
 }
 
-// FIXED: full retract stroke — pulls the plunger all the way back
-// (draws a fresh full syringe from the reservoir) instead of only reversing
-// the last dose amount. Also resets the volume tracker to full capacity,
-// since a full retract means the syringe is now full again.
+// Retract remains a motor action. It is not proof that an operator refilled
+// the syringe, so only the explicit refill-confirm route changes tracked volume.
 
 void retractSyringeA() {
 
@@ -2144,13 +2430,7 @@ void retractSyringeA() {
     false
   );
 
-  // Combined refill
-  syringeARemainingML =
-    syringeACapacityML;
-
-  Serial.println(
-    "SYRINGE A FULL RETRACT + REFILL — remaining reset to capacity"
-  );
+  Serial.println("SYRINGE A RETRACT — volume estimate unchanged");
 }
 
 void handleSyringeA() {
@@ -2193,60 +2473,31 @@ void stopSyringeA() {
 }
 
 void checkSyringeASchedule() {
+  struct tm localTime;
+  if (!getDeviceLocalTime(localTime)) return;
+  int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+  int today = deviceDateKey(localTime);
 
-  unsigned long totalSecs =
-    millis()/1000;
+  for (int i = 0; i < 3; i++) {
+    if (!syringeASchedule[i].enabled) continue;
+    int slotMin = syringeASchedule[i].hour * 60 + syringeASchedule[i].minute;
+    if (nowMin != slotMin || syringeALastFiredDate[i] == today) continue;
 
-  int nowH =
-    (totalSecs/3600)%24;
-
-  int nowM =
-    (totalSecs%3600)/60;
-
-  int nowMin =
-    nowH*60+nowM;
-
-  if (
-    nowM !=
-    lastSyringeAClockMinute
-  ) {
-
-    lastSyringeAClockMinute=
-      nowM;
-
-    for (
-      int i=0;
-      i<3;
-      i++
-    )
-      syringeASchedule[i].firedToday=false;
-  }
-
-  for (
-    int i=0;
-    i<3;
-    i++
-  ) {
-
-    if (
-      !syringeASchedule[i].enabled
-    )
+    // Consume this local-date slot before checking the pump. Cooldown, volume,
+    // an active pump, or a storage fault skips this occurrence without catch-up.
+    syringeALastFiredDate[i] = today;
+    char key[12];
+    snprintf(key, sizeof(key), "a_fire%d", i);
+    if (!persistentStateReady || devicePreferences.putInt(key, today) == 0) {
+      setPumpScheduleEvent(true, "Pump A scheduled dose skipped: could not persist occurrence");
       continue;
+    }
 
-    int slotMin =
-      syringeASchedule[i].hour*60+
-      syringeASchedule[i].minute;
-
-    if (
-      nowMin==slotMin &&
-      !syringeASchedule[i].firedToday &&
-      !syringeAActive &&
-      !syringeBActive
-    ) {
-
-      syringeASchedule[i].firedToday=true;
-
-      triggerSyringeA();
+    if (triggerSyringeA(true)) {
+      setPumpScheduleEvent(true, "Pump A scheduled " + String(syringeADispenseML, 2) +
+        " mL dose started at " + formatDeviceEpoch(time(nullptr)));
+    } else {
+      setPumpScheduleEvent(true, "Pump A scheduled dose skipped: " + pumpDoseBlockReason);
     }
   }
 }
@@ -2257,7 +2508,8 @@ void checkSyringeASchedule() {
 
 void startSyringeBMove(
   long steps,
-  bool isDose
+  bool isDose,
+  bool chemicalDose=false
 ) {
 
   if (syringeBActive)
@@ -2282,29 +2534,16 @@ void startSyringeBMove(
   stepperB.move(steps);
 
   if (isDose) {
-
-    unsigned long totalSecs =
-      millis()/1000;
-
-    char buf[12];
-
-    sprintf(
-      buf,
-      "%02d:%02d:%02d",
-      (int)((totalSecs/3600)%24),
-      (int)((totalSecs%3600)/60),
-      (int)(totalSecs%60)
-    );
-
-    syringeBLastDispensed=
-      String(buf);
+    syringeBLastDispensed = deviceClockSynchronized()
+      ? formatDeviceEpoch(time(nullptr))
+      : "Time not synchronized";
   }
 
-  Serial.print(
-    isDose
-      ? "SYRINGE B DOSE TRIGGERED — volume: "
-      : "SYRINGE B RETRACT — "
-  );
+    Serial.print(
+      isDose
+        ? (chemicalDose ? "SYRINGE B CHEMICAL DOSE — volume: " : "SYRINGE B WATER TEST — volume: ")
+        : "SYRINGE B RETRACT — "
+    );
 
   if (isDose) {
 
@@ -2322,50 +2561,55 @@ void startSyringeBMove(
   Serial.println(steps);
 }
 
-// VOLUME LIMITER — mirrors triggerSyringeA().
+// Chemical doses on both pumps share one persisted two-hour cooldown. A
+// water-only maintenance test uses the same volume accounting but not that timer.
+bool triggerSyringeB(bool chemicalDose=true) {
+  pumpDoseBlockReason = "";
+  if (!persistentStateReady) pumpDoseBlockReason = "Persistent safety state unavailable";
+  else if (!syringeBVolumeKnown) pumpDoseBlockReason = "Check syringe contents and confirm refill first";
+  else if (syringeBRemainingML + 0.001f < syringeBDispenseML)
+    pumpDoseBlockReason = "Insufficient volume; refill confirmation required";
+  else if (syringeAActive || syringeBActive) pumpDoseBlockReason = "A pump is already active";
+  else if (chemicalDose && !deviceClockSynchronized()) pumpDoseBlockReason = "Waiting for Asia/Manila NTP time sync";
 
-bool triggerSyringeB() {
+  time_t now = time(nullptr);
+  if (pumpDoseBlockReason.length() == 0 && chemicalDose && lastChemicalDoseEpoch > 0 && now < lastChemicalDoseEpoch + 7200)
+    pumpDoseBlockReason = "Two-hour chemical-dose cooldown until " + formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
 
-  if (
-    syringeBRemainingML <
-    syringeBDispenseML
-  ) {
-
-    Serial.print(
-      "SYRINGE B BLOCKED — LOW VOLUME. Remaining: "
-    );
-
-    Serial.print(
-      syringeBRemainingML
-    );
-
-    Serial.println(
-      "mL. Refill needed."
-    );
-
+  if (pumpDoseBlockReason.length() > 0) {
+    Serial.println("SYRINGE B BLOCKED — " + pumpDoseBlockReason);
     return false;
   }
 
-  long steps =
-    (long)(
-      syringeBDispenseML *
-      syringeBStepsPerML
-    );
+  float oldRemaining = syringeBRemainingML;
+  time_t oldLastChemicalDose = lastChemicalDoseEpoch;
+  int oldDoseCount = syringeBDoseCount;
+  String oldLastDispensed = syringeBLastDispensed;
+  long steps = (long)(syringeBDispenseML * syringeBStepsPerML);
+  startSyringeBMove(steps, true, chemicalDose);
+  if (!syringeBActive) {
+    pumpDoseBlockReason = "Pump could not start";
+    return false;
+  }
+  syringeBRemainingML -= syringeBDispenseML;
+  if (chemicalDose) {
+    lastChemicalDoseEpoch = now;
+    lastPhDoseMs = millis();
+  }
 
-  startSyringeBMove(
-    steps,
-    true
-  );
-
-  syringeBRemainingML -=
-    syringeBDispenseML;
-
-  lastPhDoseMs=millis();
-
+  if (!persistPumpSafetyState()) {
+    stopSyringeB();
+    syringeBRemainingML = oldRemaining;
+    lastChemicalDoseEpoch = oldLastChemicalDose;
+    syringeBDoseCount = oldDoseCount;
+    syringeBLastDispensed = oldLastDispensed;
+    pumpDoseBlockReason = "Could not persist pump safety state; dose not started";
+    return false;
+  }
   return true;
 }
 
-// FIXED: mirrors retractSyringeA() — full-stroke pull-back + refill.
+// A retract is an independent motor action and never claims that a refill took place.
 
 void retractSyringeB() {
 
@@ -2380,13 +2624,7 @@ void retractSyringeB() {
     false
   );
 
-  // Combined refill
-  syringeBRemainingML =
-    syringeBCapacityML;
-
-  Serial.println(
-    "SYRINGE B FULL RETRACT + REFILL — remaining reset to capacity"
-  );
+  Serial.println("SYRINGE B RETRACT — volume estimate unchanged");
 }
 
 void handleSyringeB() {
@@ -2429,60 +2667,29 @@ void stopSyringeB() {
 }
 
 void checkSyringeBSchedule() {
+  struct tm localTime;
+  if (!getDeviceLocalTime(localTime)) return;
+  int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+  int today = deviceDateKey(localTime);
 
-  unsigned long totalSecs =
-    millis()/1000;
+  for (int i = 0; i < 3; i++) {
+    if (!syringeBSchedule[i].enabled) continue;
+    int slotMin = syringeBSchedule[i].hour * 60 + syringeBSchedule[i].minute;
+    if (nowMin != slotMin || syringeBLastFiredDate[i] == today) continue;
 
-  int nowH =
-    (totalSecs/3600)%24;
-
-  int nowM =
-    (totalSecs%3600)/60;
-
-  int nowMin =
-    nowH*60+nowM;
-
-  if (
-    nowM !=
-    lastSyringeBClockMinute
-  ) {
-
-    lastSyringeBClockMinute=
-      nowM;
-
-    for (
-      int i=0;
-      i<3;
-      i++
-    )
-      syringeBSchedule[i].firedToday=false;
-  }
-
-  for (
-    int i=0;
-    i<3;
-    i++
-  ) {
-
-    if (
-      !syringeBSchedule[i].enabled
-    )
+    syringeBLastFiredDate[i] = today;
+    char key[12];
+    snprintf(key, sizeof(key), "b_fire%d", i);
+    if (!persistentStateReady || devicePreferences.putInt(key, today) == 0) {
+      setPumpScheduleEvent(false, "Pump B scheduled dose skipped: could not persist occurrence");
       continue;
+    }
 
-    int slotMin =
-      syringeBSchedule[i].hour*60+
-      syringeBSchedule[i].minute;
-
-    if (
-      nowMin==slotMin &&
-      !syringeBSchedule[i].firedToday &&
-      !syringeBActive &&
-      !syringeAActive
-    ) {
-
-      syringeBSchedule[i].firedToday=true;
-
-      triggerSyringeB();
+    if (triggerSyringeB(true)) {
+      setPumpScheduleEvent(false, "Pump B scheduled " + String(syringeBDispenseML, 2) +
+        " mL dose started at " + formatDeviceEpoch(time(nullptr)));
+    } else {
+      setPumpScheduleEvent(false, "Pump B scheduled dose skipped: " + pumpDoseBlockReason);
     }
   }
 }
@@ -2508,11 +2715,17 @@ void checkPhAutoDose() {
   )
     return;
 
-  if (
-    millis()-lastPhDoseMs <
-    phDoseCooldownMs
-  )
+  if (!deviceClockSynchronized()) {
+    phAutoLastAction = "AUTO DOSING PAUSED — waiting for Asia/Manila time sync";
     return;
+  }
+
+  if (chemicalCooldownRemainingMs() > 0) {
+    phAutoLastAction = "AUTO DOSING WAITING — next eligible " + deviceCooldownRemainingText();
+    return;
+  }
+
+  if (millis() - lastPhDoseMs < phDoseCooldownMs) return;
 
   if (
     phValue <
@@ -2547,13 +2760,7 @@ void checkPhAutoDose() {
 
     } else {
 
-      phAutoLastAction =
-        "AUTO: pH UP BLOCKED — Syringe A low volume ("+
-        String(
-          syringeARemainingML,
-          1
-        )+
-        "mL left)";
+      phAutoLastAction = "AUTO: pH UP BLOCKED — " + pumpDoseBlockReason;
     }
 
     Serial.println(
@@ -2593,13 +2800,7 @@ void checkPhAutoDose() {
 
     } else {
 
-      phAutoLastAction =
-        "AUTO: pH DOWN BLOCKED — Syringe B low volume ("+
-        String(
-          syringeBRemainingML,
-          1
-        )+
-        "mL left)";
+      phAutoLastAction = "AUTO: pH DOWN BLOCKED — " + pumpDoseBlockReason;
     }
 
     Serial.println(
@@ -2852,6 +3053,10 @@ void enterManualOfflineMode() {
     mdnsStarted = false;
   }
 
+  fallbackApActive = false;
+  wifiDisconnectedAt = 0;
+  staReconnectedAt = 0;
+  fallbackApLastStartAt = 0;
   WiFi.disconnect(true);
   WiFi.mode(WIFI_AP);
   bool apStarted = WiFi.softAP(DEBUG_AP_SSID, DEBUG_AP_PASSWORD);
@@ -2863,13 +3068,17 @@ void enterManualOfflineMode() {
   Serial.print("Manual WiFi offline mode; AP ");
   Serial.print(apStarted ? "started at " : "failed: ");
   Serial.println(WiFi.softAPIP());
-  showManualWiFiNotice("DEBUG AP READY", "192.168.4.1");
+  showManualWiFiNotice("LOCAL AP READY", "192.168.4.1");
 }
 
 void exitManualOfflineMode() {
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
   manualOfflineMode = false;
+  fallbackApActive = false;
+  wifiDisconnectedAt = millis();
+  staReconnectedAt = 0;
+  fallbackApLastStartAt = 0;
   pendingManualReconnect = false;
   wifiConnecting = false;
   wifiLastRetryAt = 0;
@@ -2899,27 +3108,61 @@ void serviceManualWiFi() {
 void serviceWiFi() {
   if (manualOfflineMode) return;
 
+  unsigned long now = millis();
   bool connectedNow = WiFi.status() == WL_CONNECTED;
   if (connectedNow) {
     if (!wifiConnected) {
       wifiConnected = true;
       wifiConnecting = false;
+      staReconnectedAt = now;
       Serial.println("WiFi connected: " + WiFi.localIP().toString());
-      if (!mdnsStarted && MDNS.begin("aqualogic")) {
-        MDNS.addService("http", "tcp", 80);
-        mdnsStarted = true;
-        Serial.println("mDNS responder started: http://aqualogic.local");
-      }
+    }
+    wifiDisconnectedAt = 0;
+    if (!mdnsStarted && MDNS.begin("aqualogic")) {
+      MDNS.addService("http", "tcp", 80);
+      mdnsStarted = true;
+      Serial.println("mDNS responder started: http://aqualogic.local");
+    }
+
+    if (fallbackApActive && staReconnectedAt != 0 &&
+        now - staReconnectedAt >= FALLBACK_AP_SHUTDOWN_GRACE_MS) {
+      WiFi.softAPdisconnect(true);
+      WiFi.mode(WIFI_STA);
+      fallbackApActive = false;
+      staReconnectedAt = 0;
+      fallbackApLastStartAt = 0;
+      Serial.println("Automatic fallback AP stopped after stable WiFi recovery");
     }
     return;
   }
 
+  staReconnectedAt = 0;
   if (wifiConnected) {
     wifiConnected = false;
+    wifiDisconnectedAt = now;
+    if (mdnsStarted) {
+      MDNS.end();
+      mdnsStarted = false;
+    }
     Serial.println("WiFi disconnected; offline buffering enabled");
+  } else if (wifiDisconnectedAt == 0) {
+    wifiDisconnectedAt = now;
   }
 
-  unsigned long now = millis();
+  if (!fallbackApActive && now - wifiDisconnectedAt >= FALLBACK_AP_DELAY_MS &&
+      now - fallbackApLastStartAt >= WIFI_RETRY_INTERVAL_MS) {
+    fallbackApLastStartAt = now;
+    WiFi.mode(WIFI_AP_STA);
+    fallbackApActive = WiFi.softAP(DEBUG_AP_SSID, DEBUG_AP_PASSWORD);
+    if (fallbackApActive) {
+      Serial.print("Automatic fallback AP started at ");
+      Serial.println(WiFi.softAPIP());
+    } else {
+      WiFi.mode(WIFI_STA);
+      Serial.println("Automatic fallback AP start failed; will retry");
+    }
+  }
+
   if (wifiConnecting && now - wifiConnectStartedAt < WIFI_CONNECT_TIMEOUT_MS) return;
   if (now - wifiLastRetryAt < WIFI_RETRY_INTERVAL_MS) return;
 
@@ -2933,6 +3176,7 @@ const char* wifiModeName() {
   wifi_mode_t mode = WiFi.getMode();
   if (mode == WIFI_STA) return "STA";
   if (mode == WIFI_AP) return "AP";
+  if (mode == WIFI_AP_STA) return "AP_STA";
   return "OFF";
 }
 
@@ -2954,20 +3198,24 @@ void handleWiFiStatus() {
     remaining = elapsed < MANUAL_OFFLINE_MAX_MS ? MANUAL_OFFLINE_MAX_MS - elapsed : 0;
   }
 
-  String ip = "0.0.0.0";
-  String apSsid = "";
-  if (WiFi.getMode() == WIFI_AP) {
-    ip = WiFi.softAPIP().toString();
-    apSsid = DEBUG_AP_SSID;
-  } else if (WiFi.getMode() == WIFI_STA) {
-    ip = WiFi.localIP().toString();
-  }
+  wifi_mode_t mode = WiFi.getMode();
+  bool staConnected = WiFi.status() == WL_CONNECTED;
+  bool apEnabled = mode == WIFI_AP || (mode == WIFI_AP_STA && fallbackApActive);
+  String staIp = staConnected ? WiFi.localIP().toString() : "0.0.0.0";
+  String apIp = apEnabled ? WiFi.softAPIP().toString() : "0.0.0.0";
+  String ip = staConnected ? staIp : (apEnabled ? apIp : "0.0.0.0");
+  String apSsid = apEnabled ? DEBUG_AP_SSID : "";
 
   String json = "{\"connected\":" + String(wifiConnected ? "true" : "false") +
+    ",\"sta_connected\":" + String(staConnected ? "true" : "false") +
+    ",\"sta_reconnecting\":" + String(!staConnected && !manualOfflineMode ? "true" : "false") +
+    ",\"fallback_ap_active\":" + String(fallbackApActive ? "true" : "false") +
     ",\"manual_offline\":" + String(manualOfflineMode ? "true" : "false") +
     ",\"manual_offline_remaining_ms\":" + String(remaining) +
     ",\"mode\":\"" + wifiModeName() +
     "\",\"ip\":\"" + ip +
+    "\",\"sta_ip\":\"" + staIp +
+    "\",\"ap_ip\":\"" + apIp +
     "\",\"ap_ssid\":\"" + apSsid + "\"}";
   server.send(200, "application/json", json);
 }
@@ -3281,6 +3529,11 @@ void handleFeederSchedule() {
     feedSchedule[i].firedToday=false;
   }
 
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+    return;
+  }
+
   server.send(
     200,
     "application/json",
@@ -3336,8 +3589,21 @@ void handleSyrAStatus() {
       2
     )+",";
 
-  json +=
-    "\"schedule\":[";
+  time_t nextEligible = nextChemicalEligibleEpoch();
+  time_t nextDose = nextPumpDoseEpoch(syringeASchedule);
+  String lastChemical = formatDeviceEpoch(lastChemicalDoseEpoch);
+  String nextEligibleText = formatDeviceEpoch(nextEligible);
+  bool refillRequired = !syringeAVolumeKnown ||
+    syringeARemainingML + 0.001f < syringeADispenseML;
+  json += "\"volume_known\":" + String(syringeAVolumeKnown ? "true" : "false") + ",";
+  json += "\"refill_required\":" + String(refillRequired ? "true" : "false") + ",";
+  json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+  json += "\"last_chemical_dose_at\":\"" + lastChemical + "\",";
+  json += "\"next_eligible_at\":\"" + nextEligibleText + "\",";
+  json += "\"next_dose_at\":\"" + formatDeviceEpoch(nextDose) + "\",";
+  json += "\"schedule_event\":\"" + syringeALastScheduleEvent + "\",";
+
+  json += "\"schedule\":[";
 
   for (
     int i=0;
@@ -3380,29 +3646,46 @@ void handleSyrAStatus() {
 }
 
 void handleSyrADispense() {
+  bool ok = triggerSyringeA(true);
+  if (ok) {
+    server.send(200, "application/json", "{\"dispensed\":true}");
+  } else {
+    String reason = pumpDoseBlockReason;
+    reason.replace("\\", "\\\\");
+    reason.replace("\"", "\\\"");
+    server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason +
+      "\",\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\"}");
+  }
+}
 
-  bool ok=false;
+void handleSyrATestDispense() {
+  bool ok = triggerSyringeA(false);
+  if (ok) {
+    server.send(200, "application/json", "{\"dispensed\":true}");
+  } else {
+    String reason = pumpDoseBlockReason;
+    reason.replace("\\", "\\\\");
+    reason.replace("\"", "\\\"");
+    server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason + "\"}");
+  }
+}
 
-  if (
-    !syringeAActive &&
-    !syringeBActive
-  )
-    ok=
-      triggerSyringeA();
-
-  server.send(
-    200,
-    "application/json",
-    String(
-      "{\"dispensed\":"+
-      String(
-        ok
-          ?"true"
-          :"false"
-      )+
-      "}"
-    )
-  );
+void handleSyrARefillConfirm() {
+  if (syringeAActive || syringeBActive || !persistentStateReady) {
+    server.send(409, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Pump busy or persistent state unavailable\"}");
+    return;
+  }
+  float previousRemaining = syringeARemainingML;
+  bool previousKnown = syringeAVolumeKnown;
+  syringeARemainingML = syringeACapacityML;
+  syringeAVolumeKnown = true;
+  if (!persistPumpSafetyState()) {
+    syringeARemainingML = previousRemaining;
+    syringeAVolumeKnown = previousKnown;
+    server.send(503, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Could not persist refill confirmation\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"refill_confirmed\":true}");
 }
 
 void handleSyrAStop() {
@@ -3471,6 +3754,11 @@ void handleSyrASchedule() {
     syringeASchedule[i].firedToday=false;
   }
 
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+    return;
+  }
+
   server.send(
     200,
     "application/json",
@@ -3526,6 +3814,20 @@ void handleSyrBStatus() {
       2
     )+",";
 
+  time_t nextEligible = nextChemicalEligibleEpoch();
+  time_t nextDose = nextPumpDoseEpoch(syringeBSchedule);
+  String lastChemical = formatDeviceEpoch(lastChemicalDoseEpoch);
+  String nextEligibleText = formatDeviceEpoch(nextEligible);
+  bool refillRequired = !syringeBVolumeKnown ||
+    syringeBRemainingML + 0.001f < syringeBDispenseML;
+  json += "\"volume_known\":" + String(syringeBVolumeKnown ? "true" : "false") + ",";
+  json += "\"refill_required\":" + String(refillRequired ? "true" : "false") + ",";
+  json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+  json += "\"last_chemical_dose_at\":\"" + lastChemical + "\",";
+  json += "\"next_eligible_at\":\"" + nextEligibleText + "\",";
+  json += "\"next_dose_at\":\"" + formatDeviceEpoch(nextDose) + "\",";
+  json += "\"schedule_event\":\"" + syringeBLastScheduleEvent + "\",";
+
   json +=
     "\"schedule\":[";
 
@@ -3570,29 +3872,46 @@ void handleSyrBStatus() {
 }
 
 void handleSyrBDispense() {
+  bool ok = triggerSyringeB(true);
+  if (ok) {
+    server.send(200, "application/json", "{\"dispensed\":true}");
+  } else {
+    String reason = pumpDoseBlockReason;
+    reason.replace("\\", "\\\\");
+    reason.replace("\"", "\\\"");
+    server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason +
+      "\",\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\"}");
+  }
+}
 
-  bool ok=false;
+void handleSyrBTestDispense() {
+  bool ok = triggerSyringeB(false);
+  if (ok) {
+    server.send(200, "application/json", "{\"dispensed\":true}");
+  } else {
+    String reason = pumpDoseBlockReason;
+    reason.replace("\\", "\\\\");
+    reason.replace("\"", "\\\"");
+    server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason + "\"}");
+  }
+}
 
-  if (
-    !syringeBActive &&
-    !syringeAActive
-  )
-    ok=
-      triggerSyringeB();
-
-  server.send(
-    200,
-    "application/json",
-    String(
-      "{\"dispensed\":"+
-      String(
-        ok
-          ?"true"
-          :"false"
-      )+
-      "}"
-    )
-  );
+void handleSyrBRefillConfirm() {
+  if (syringeAActive || syringeBActive || !persistentStateReady) {
+    server.send(409, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Pump busy or persistent state unavailable\"}");
+    return;
+  }
+  float previousRemaining = syringeBRemainingML;
+  bool previousKnown = syringeBVolumeKnown;
+  syringeBRemainingML = syringeBCapacityML;
+  syringeBVolumeKnown = true;
+  if (!persistPumpSafetyState()) {
+    syringeBRemainingML = previousRemaining;
+    syringeBVolumeKnown = previousKnown;
+    server.send(503, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Could not persist refill confirmation\"}");
+    return;
+  }
+  server.send(200, "application/json", "{\"refill_confirmed\":true}");
 }
 
 void handleSyrBStop() {
@@ -3661,6 +3980,11 @@ void handleSyrBSchedule() {
     syringeBSchedule[i].firedToday=false;
   }
 
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+    return;
+  }
+
   server.send(
     200,
     "application/json",
@@ -3673,14 +3997,7 @@ void handleSyrBSchedule() {
 // ========================
 
 void handlePhAutoStatus() {
-
-  unsigned long elapsed=
-    millis()-lastPhDoseMs;
-
-  unsigned long remaining=
-    elapsed<phDoseCooldownMs
-      ?phDoseCooldownMs-elapsed
-      :0;
+  unsigned long remaining = chemicalCooldownRemainingMs();
 
   String json="{";
 
@@ -3717,6 +4034,9 @@ void handlePhAutoStatus() {
     String(
       remaining
     )+",";
+
+  json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+  json += "\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\",";
 
   json +=
     "\"last_action\":\""+
@@ -3770,6 +4090,11 @@ void handlePhAutoConfig() {
         10000UL,
         3600000UL
       );
+
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"config\":\"not_saved\"}");
+    return;
+  }
 
   server.send(
     200,
@@ -4091,6 +4416,15 @@ void handleUvSchedule() {
         "offM"
       ).toInt();
 
+  uvScheduleOnHour = constrain(uvScheduleOnHour, 0, 23);
+  uvScheduleOffHour = constrain(uvScheduleOffHour, 0, 23);
+  uvScheduleOnMinute = constrain(uvScheduleOnMinute, 0, 59);
+  uvScheduleOffMinute = constrain(uvScheduleOffMinute, 0, 59);
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+    return;
+  }
+
   server.send(
     200,
     "application/json",
@@ -4105,12 +4439,9 @@ void checkUvSchedule() {
   )
     return;
 
-  unsigned long totalSecs=
-    millis()/1000;
-
-  int nowMins=
-    ((totalSecs/3600)%24)*60+
-    ((totalSecs%3600)/60);
+  struct tm localTime;
+  if (!getDeviceLocalTime(localTime)) return;
+  int nowMins = localTime.tm_hour * 60 + localTime.tm_min;
 
   int onMins=
     uvScheduleOnHour*60+
@@ -4403,6 +4734,15 @@ void handleLedSchedule() {
         "offM"
       ).toInt();
 
+  ledScheduleOnHour = constrain(ledScheduleOnHour, 0, 23);
+  ledScheduleOffHour = constrain(ledScheduleOffHour, 0, 23);
+  ledScheduleOnMinute = constrain(ledScheduleOnMinute, 0, 59);
+  ledScheduleOffMinute = constrain(ledScheduleOffMinute, 0, 59);
+  if (!persistScheduleSettings()) {
+    server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+    return;
+  }
+
   server.send(
     200,
     "application/json",
@@ -4417,12 +4757,9 @@ void checkLedSchedule() {
   )
     return;
 
-  unsigned long totalSecs=
-    millis()/1000;
-
-  int nowMins=
-    ((totalSecs/3600)%24)*60+
-    ((totalSecs%3600)/60);
+  struct tm localTime;
+  if (!getDeviceLocalTime(localTime)) return;
+  int nowMins = localTime.tm_hour * 60 + localTime.tm_min;
 
   int onMins=
     ledScheduleOnHour*60+
@@ -4483,6 +4820,7 @@ void checkLedSchedule() {
 void setup() {
 
   Serial.begin(115200);
+  loadPersistentDeviceState();
 
   Wire.begin(
     21,
@@ -4596,10 +4934,12 @@ void setup() {
   lcd.print("Connecting WiFi");
   Serial.println("Starting WiFi connection (non-blocking)");
   WiFi.mode(WIFI_STA);
+  startNetworkTimeSync();
   WiFi.begin(ssid, password);
   wifiConnecting = true;
   wifiConnectStartedAt = millis();
   wifiLastRetryAt = millis();
+  wifiDisconnectedAt = millis();
 
   server.on(
     "/",
@@ -4680,6 +5020,16 @@ void setup() {
   );
 
   server.on(
+    "/syringeA/test-dispense",
+    handleSyrATestDispense
+  );
+
+  server.on(
+    "/syringeA/refill-confirm",
+    handleSyrARefillConfirm
+  );
+
+  server.on(
     "/syringeA/stop",
     handleSyrAStop
   );
@@ -4702,6 +5052,16 @@ void setup() {
   server.on(
     "/syringeB/dispense",
     handleSyrBDispense
+  );
+
+  server.on(
+    "/syringeB/test-dispense",
+    handleSyrBTestDispense
+  );
+
+  server.on(
+    "/syringeB/refill-confirm",
+    handleSyrBRefillConfirm
   );
 
   server.on(
