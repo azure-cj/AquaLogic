@@ -709,7 +709,7 @@ export function TankDetail() {
           </div>
         </div>
 
-        <TankThresholdsPanel tankId={id} active={value.lifecycle === 'active'} />
+        <TankThresholdsPanel tankId={id} tankName={value.name} active={value.lifecycle === 'active'} />
       </div>
 
       <div

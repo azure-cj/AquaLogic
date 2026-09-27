@@ -62,8 +62,10 @@ Last reviewed: 2026-09-23
   one-time key rotation. The browser never persists device keys.
 - Global threshold settings are labeled as defaults. The tank workspace shows
   effective values and inherited/override state; administrators can save or
-  reset complete overrides while staff can view them. Tank units stay fixed to
-  the parameter unit. Analytics shows effective bands for one selected tank
+  reset complete overrides while staff can view them. Global saves, tank
+  override saves, and resets require confirmation and show the configuration
+  scope and proposed or resulting limits. Tank units stay fixed to the
+  parameter unit. Analytics shows effective bands for one selected tank
   and hides shared bands with an explicit vary-by-tank explanation when fleet
   or multi-tank histories differ. Public pages receive resulting statuses but
   never numeric threshold values. Species Care remains separate from

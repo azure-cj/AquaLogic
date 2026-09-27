@@ -1,6 +1,7 @@
 import { api } from '@/shared/api/client';
 import type { Threshold } from '@/shared/api/models';
 import {
+  ConfirmDialog,
   ErrorState,
   LoadingState,
   Notice,
@@ -24,6 +25,23 @@ import './styles.css';
 
 const VISIBLE_THRESHOLD_PARAMETERS = new Set(['temperature', 'ph', 'turbidity', 'tds']);
 
+type ThresholdValues = {
+  unit: string;
+  warning_min: number | null;
+  warning_max: number | null;
+  critical_min: number | null;
+  critical_max: number | null;
+  enabled: boolean;
+};
+
+type PendingThresholdSave = {
+  threshold: Threshold;
+  values: ThresholdValues;
+};
+
+const displayBound = (value: number | null, unit: string) =>
+  value == null ? 'Not configured' : `${value} ${unit}`;
+
 export function Thresholds() {
   const client = useQueryClient();
   const query = useQuery({
@@ -33,9 +51,9 @@ export function Thresholds() {
   const [saving, setSaving] = useState('');
   const [error, setError] = useState('');
   const [errorParameter, setErrorParameter] = useState('');
-  const save = async (event: FormEvent<HTMLFormElement>, threshold: Threshold) => {
+  const [pendingSave, setPendingSave] = useState<PendingThresholdSave | null>(null);
+  const save = (event: FormEvent<HTMLFormElement>, threshold: Threshold) => {
     event.preventDefault();
-    setSaving(threshold.parameter);
     setError('');
     setErrorParameter('');
     const form = new FormData(event.currentTarget);
@@ -50,21 +68,33 @@ export function Thresholds() {
     if (bounds.some((value, index) => index > 0 && bounds[index - 1] >= value)) {
       setError('Bounds must be strictly ordered from critical low to critical high.');
       setErrorParameter(threshold.parameter);
-      setSaving('');
       return;
     }
+    setPendingSave({
+      threshold,
+      values: {
+        unit: String(form.get('unit') ?? threshold.unit),
+        warning_min: numberValue('warning_min'),
+        warning_max: numberValue('warning_max'),
+        critical_min: numberValue('critical_min'),
+        critical_max: numberValue('critical_max'),
+        enabled: form.get('enabled') === 'on',
+      },
+    });
+  };
+
+  const confirmSave = async () => {
+    if (!pendingSave) return;
+    const { threshold, values } = pendingSave;
+    setSaving(threshold.parameter);
+    setError('');
+    setErrorParameter('');
     try {
       await api(`/thresholds/${threshold.parameter}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          unit: form.get('unit'),
-          warning_min: numberValue('warning_min'),
-          warning_max: numberValue('warning_max'),
-          critical_min: numberValue('critical_min'),
-          critical_max: numberValue('critical_max'),
-          enabled: form.get('enabled') === 'on',
-        }),
+        body: JSON.stringify(values),
       });
+      setPendingSave(null);
       notify.success(`${threshold.parameter.replaceAll('_', ' ')} thresholds saved.`);
       client.invalidateQueries({ queryKey: ['thresholds'] });
       client.invalidateQueries({ queryKey: ['tank-thresholds'] });
@@ -74,6 +104,7 @@ export function Thresholds() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to save thresholds');
       setErrorParameter(threshold.parameter);
+      setPendingSave(null);
     } finally {
       setSaving('');
     }
@@ -176,6 +207,27 @@ export function Thresholds() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingSave !== null}
+        title={pendingSave ? `Save global ${pendingSave.threshold.parameter.replaceAll('_', ' ')} thresholds?` : 'Save thresholds?'}
+        message="Review the shared defaults below. These values apply to tanks that do not have a custom override; changes apply prospectively."
+        confirmLabel="Save thresholds"
+        tone="primary"
+        busy={Boolean(pendingSave && saving === pendingSave.threshold.parameter)}
+        onConfirm={() => { void confirmSave(); }}
+        onClose={() => { if (!saving) setPendingSave(null); }}
+      >
+        {pendingSave && (
+          <dl className="threshold-confirm-summary">
+            <div><dt>Unit</dt><dd>{pendingSave.values.unit}</dd></div>
+            <div><dt>Critical below</dt><dd>{displayBound(pendingSave.values.critical_min, pendingSave.values.unit)}</dd></div>
+            <div><dt>Warning below</dt><dd>{displayBound(pendingSave.values.warning_min, pendingSave.values.unit)}</dd></div>
+            <div><dt>Warning above</dt><dd>{displayBound(pendingSave.values.warning_max, pendingSave.values.unit)}</dd></div>
+            <div><dt>Critical above</dt><dd>{displayBound(pendingSave.values.critical_max, pendingSave.values.unit)}</dd></div>
+            <div><dt>Status</dt><dd>{pendingSave.values.enabled ? 'Enabled' : 'Disabled'}</dd></div>
+          </dl>
+        )}
+      </ConfirmDialog>
     </section>
   );
 }

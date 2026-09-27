@@ -1,6 +1,7 @@
 import { api } from '@/shared/api/client';
 import type { TankThreshold } from '@/shared/api/models';
 import {
+  ConfirmDialog,
   ErrorState,
   FormField,
   LoadingState,
@@ -22,11 +23,22 @@ const VISIBLE_PARAMETERS = [
 const displayBound = (value: number | null, unit: string) =>
   value == null ? 'Not configured' : `${value} ${unit}`;
 
+type ThresholdValues = Pick<
+  TankThreshold,
+  'critical_min' | 'warning_min' | 'warning_max' | 'critical_max' | 'enabled'
+>;
+
+type PendingConfirmation =
+  | { kind: 'save'; parameter: string; label: string; unit: string; values: ThresholdValues }
+  | { kind: 'reset'; parameter: string; label: string; unit: string };
+
 export function TankThresholdsPanel({
   tankId,
+  tankName,
   active,
 }: {
   tankId: number;
+  tankName: string;
   active: boolean;
 }) {
   const client = useQueryClient();
@@ -39,9 +51,11 @@ export function TankThresholdsPanel({
   const [editing, setEditing] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
 
-  const save = async (event: FormEvent<HTMLFormElement>, parameter: string) => {
+  const save = (event: FormEvent<HTMLFormElement>, parameter: string, label: string) => {
     event.preventDefault();
+    setError('');
     const form = new FormData(event.currentTarget);
     const numberValue = (name: string) =>
       form.get(name) === '' ? null : Number(form.get(name));
@@ -61,43 +75,51 @@ export function TankThresholdsPanel({
       return;
     }
 
-    setBusy(parameter);
-    setError('');
-    try {
-      await api(`/tanks/${tankId}/thresholds/${parameter}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          critical_min: numberValue('critical_min'),
-          warning_min: numberValue('warning_min'),
-          warning_max: numberValue('warning_max'),
-          critical_max: numberValue('critical_max'),
-          enabled: form.get('enabled') === 'on',
-        }),
-      });
-      setEditing('');
-      await client.invalidateQueries({ queryKey: ['tank-thresholds', tankId] });
-      client.invalidateQueries({ queryKey: ['tank-operations', tankId] });
-      client.invalidateQueries({ queryKey: ['fleet'] });
-      client.invalidateQueries({ queryKey: ['analytics'] });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save these limits. Please try again.');
-    } finally {
-      setBusy('');
-    }
+    setConfirmation({
+      kind: 'save',
+      parameter,
+      label,
+      unit: query.data?.find((item) => item.parameter === parameter)?.unit ?? '',
+      values: {
+        critical_min: numberValue('critical_min'),
+        warning_min: numberValue('warning_min'),
+        warning_max: numberValue('warning_max'),
+        critical_max: numberValue('critical_max'),
+        enabled: form.get('enabled') === 'on',
+      },
+    });
   };
 
-  const reset = async (parameter: string) => {
-    setBusy(parameter);
+  const requestReset = (parameter: string, label: string, unit: string) => {
+    setError('');
+    setConfirmation({ kind: 'reset', parameter, label, unit });
+  };
+
+  const confirmChange = async () => {
+    if (!confirmation) return;
+    const pending = confirmation;
+    setBusy(pending.parameter);
     setError('');
     try {
-      await api(`/tanks/${tankId}/thresholds/${parameter}`, { method: 'DELETE' });
+      if (pending.kind === 'save') {
+        await api(`/tanks/${tankId}/thresholds/${pending.parameter}`, {
+          method: 'PUT',
+          body: JSON.stringify(pending.values),
+        });
+      } else {
+        await api(`/tanks/${tankId}/thresholds/${pending.parameter}`, { method: 'DELETE' });
+      }
       setEditing('');
+      setConfirmation(null);
       await client.invalidateQueries({ queryKey: ['tank-thresholds', tankId] });
       client.invalidateQueries({ queryKey: ['tank-operations', tankId] });
       client.invalidateQueries({ queryKey: ['fleet'] });
       client.invalidateQueries({ queryKey: ['analytics'] });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not restore the standard limits. Please try again.');
+      setConfirmation(null);
+      setError(caught instanceof Error ? caught.message : pending.kind === 'save'
+        ? 'Could not save these limits. Please try again.'
+        : 'Could not restore the standard limits. Please try again.');
     } finally {
       setBusy('');
     }
@@ -145,7 +167,7 @@ export function TankThresholdsPanel({
                 </header>
 
                 {isEditing && isAdmin && active ? (
-                  <form className="tank-threshold-form" onSubmit={(event) => save(event, parameter)}>
+                  <form className="tank-threshold-form" onSubmit={(event) => save(event, parameter, label)}>
                     <p>These values set all limits for this measure. Leave a boundary blank if it does not apply; units stay fixed at {threshold.unit}.</p>
                     <div className="tank-threshold-fields">
                       <FormField label="Critical below" suffix={threshold.unit}>
@@ -189,7 +211,7 @@ export function TankThresholdsPanel({
                     className="text-link tank-threshold-reset"
                     type="button"
                     disabled={busy === parameter}
-                    onClick={() => reset(parameter)}
+                    onClick={() => requestReset(parameter, label, threshold.unit)}
                   >
                     {busy === parameter ? 'Restoring…' : 'Use standard limits'}
                   </button>
@@ -199,6 +221,40 @@ export function TankThresholdsPanel({
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.kind === 'reset'
+          ? `Use standard ${confirmation.label} limits for ${tankName}?`
+          : `Save ${confirmation?.label ?? 'tank'} limits for ${tankName}?`}
+        message={confirmation?.kind === 'reset'
+          ? 'This removes this tank’s custom limits for this measure and restores the current global defaults.'
+          : `Review the proposed limits for ${tankName}. They override shared defaults for this tank only and apply prospectively.`}
+        confirmLabel={confirmation?.kind === 'reset' ? 'Use standard limits' : 'Save custom limits'}
+        tone="primary"
+        busy={Boolean(confirmation && busy === confirmation.parameter)}
+        onConfirm={() => { void confirmChange(); }}
+        onClose={() => { if (!busy) setConfirmation(null); }}
+      >
+        {confirmation?.kind === 'save' && (
+          <dl className="threshold-confirm-summary">
+            <div><dt>Tank</dt><dd>{tankName}</dd></div>
+            <div><dt>Measure</dt><dd>{confirmation.label}</dd></div>
+            <div><dt>Critical below</dt><dd>{displayBound(confirmation.values.critical_min, confirmation.unit)}</dd></div>
+            <div><dt>Warning below</dt><dd>{displayBound(confirmation.values.warning_min, confirmation.unit)}</dd></div>
+            <div><dt>Warning above</dt><dd>{displayBound(confirmation.values.warning_max, confirmation.unit)}</dd></div>
+            <div><dt>Critical above</dt><dd>{displayBound(confirmation.values.critical_max, confirmation.unit)}</dd></div>
+            <div><dt>Status</dt><dd>{confirmation.values.enabled ? 'Enabled' : 'Disabled'}</dd></div>
+          </dl>
+        )}
+        {confirmation?.kind === 'reset' && (
+          <dl className="threshold-confirm-summary">
+            <div><dt>Tank</dt><dd>{tankName}</dd></div>
+            <div><dt>Measure</dt><dd>{confirmation.label}</dd></div>
+            <div><dt>Current unit</dt><dd>{confirmation.unit}</dd></div>
+            <div><dt>Result</dt><dd>Use current global defaults</dd></div>
+          </dl>
+        )}
+      </ConfirmDialog>
     </Panel>
   );
 }

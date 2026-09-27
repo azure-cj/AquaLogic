@@ -19,6 +19,9 @@
 .tank-threshold-actions .button { min-height: 36px; font-size: .76rem; }
 .tank-threshold-reset { display: inline-block; margin-top: .8rem; padding: 0; border: 0; background: none; font-size: .75rem; cursor: pointer; }
 .tank-threshold-reset:disabled { opacity: .55; cursor: wait; }
+.threshold-confirm-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem .9rem; margin: .8rem 0 0; padding: .75rem; border: 1px solid var(--line, #dce6e8); border-radius: 10px; background: var(--surface-muted, #f7fafa); }
+.threshold-confirm-summary dt { color: var(--muted, #61767c); font-size: .72rem; }
+.threshold-confirm-summary dd { margin: .12rem 0 0; color: var(--ink, #18343b); font-size: .8rem; font-weight: 700; overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   .tank-threshold-list { grid-template-columns: 1fr; }
 }
@@ -26,4 +29,5 @@
   .tank-threshold-list { padding: .8rem; }
   .tank-threshold-item > header { align-items: flex-start; }
   .tank-threshold-item > header .button { padding-inline: .5rem; }
+  .threshold-confirm-summary { grid-template-columns: 1fr; }
 }
