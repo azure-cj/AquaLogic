@@ -397,8 +397,8 @@ void loadPersistentDeviceState() {
     syringeAVolumeKnown = devicePreferences.getBool("a_known", false);
     syringeBVolumeKnown = devicePreferences.getBool("b_known", false);
     lastChemicalDoseEpoch = (time_t)devicePreferences.getLong64("last_chem", 0);
-    syringeADoseCount = max(0, devicePreferences.getInt("a_count", 0));
-    syringeBDoseCount = max(0, devicePreferences.getInt("b_count", 0));
+    syringeADoseCount = max((int32_t)0, devicePreferences.getInt("a_count", 0));
+    syringeBDoseCount = max((int32_t)0, devicePreferences.getInt("b_count", 0));
     syringeALastDispensed = devicePreferences.getString("a_last", "Never");
     syringeBLastDispensed = devicePreferences.getString("b_last", "Never");
   }
