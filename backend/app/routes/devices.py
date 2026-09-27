@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from app.models import (
     ActuatorState,
     ActuatorStateHistory,
     RegisteredDevice,
+    SensorReading,
     Tank,
     User,
 )
@@ -487,20 +488,58 @@ def rotate_device_key(
     )
 
 
-@router.post("/device-ingestion/readings", response_model=SensorReadingRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/device-ingestion/readings",
+    response_model=SensorReadingRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_200_OK: {"model": SensorReadingRead}},
+)
 def ingest_device_reading(
     payload: DeviceReadingCreate,
     request: Request,
+    response: Response,
     x_device_key: str = Header(...),
     db: Session = Depends(get_db),
 ):
     device = _authenticate_device(x_device_key, request, db)
-    values = payload.model_dump(exclude={"observed_at"})
+    sample_id = str(payload.sample_id) if payload.sample_id is not None else None
+    if sample_id is not None:
+        existing = db.scalar(
+            select(SensorReading).where(
+                SensorReading.device_id == device.id,
+                SensorReading.sample_id == sample_id,
+            )
+        )
+        if existing is not None:
+            # A retry after a lost response confirms the first insert. Keep all
+            # original reading values and timestamps unchanged.
+            db.commit()
+            response.status_code = status.HTTP_200_OK
+            return existing
+
+    values = payload.model_dump(exclude={"observed_at", "sample_id"})
+    if sample_id is not None:
+        values["sample_id"] = sample_id
     values.update({"dissolved_oxygen": None, "ammonia": None, "is_mock": False})
     if payload.observed_at is not None:
         observed_at = payload.observed_at
         values["timestamp"] = observed_at.replace(tzinfo=timezone.utc) if observed_at.tzinfo is None else observed_at
-    reading = ingest_reading(db, device.tank_id, values, device_id=device.id)
+    try:
+        reading = ingest_reading(db, device.tank_id, values, device_id=device.id)
+    except IntegrityError:
+        db.rollback()
+        if sample_id is None:
+            raise
+        existing = db.scalar(
+            select(SensorReading).where(
+                SensorReading.device_id == device.id,
+                SensorReading.sample_id == sample_id,
+            )
+        )
+        if existing is None:
+            raise
+        response.status_code = status.HTTP_200_OK
+        return existing
     audit_event(
         db,
         request,

@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-09-26
+Last reviewed: 2026-09-27
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -123,7 +123,7 @@ activity API is used by the mobile M3 detail view.
 | GET | `/devices/{device_id}` | Admin-only sanitized device detail |
 | PATCH | `/devices/{device_id}` | Admin-only activation or deactivation through `{ "is_active": boolean }` |
 | POST | `/devices/{device_id}/rotate-key` | Admin-only one-time replacement key; invalidates the previous key |
-| POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS and maps them to the provisioned tank |
+| POST | `/device-ingestion/readings` | Device key only; accepts temperature, pH, turbidity, TDS, optional `observed_at`, and optional UUID `sample_id`; maps to the provisioned tank |
 | POST | `/tanks/{tank_id}/actuators/commands` | Admin-only; queue one validated UV, LED, feeder, or guarded pump-maintenance command for the tank's registered bridge device |
 | POST | `/tanks/{tank_id}/actuators/commands/{command_id}/clear-uncertainty` | Admin-only; record physical verification for an `outcome_unknown` command without rewriting its historical status |
 | GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, feeder, and pump state |
@@ -242,6 +242,10 @@ use a hosted species-photo URL through the existing `photo_url` field.
   ingestion is audit logged. The v1 payload accepts only `temperature`, `ph`,
   `turbidity`, `tds`, and optional `observed_at`; dissolved oxygen and ammonia
   persist as unavailable nulls and cannot create normal statuses or alerts.
+  Optional UUID `sample_id` makes retries idempotent per registered device;
+  database uniqueness returns the existing reading with HTTP 200 and does not
+  mutate its original values. Omitting `sample_id` retains the existing
+  create-on-ingestion behavior and HTTP 201 response.
   Accepted installed ranges are temperature `-10..60`, pH `0..14`, turbidity
   `0..3000`, and TDS `0..5000`. Reading responses include nullable `device_id`
   and server-generated `received_at`; manual readings have no source device.

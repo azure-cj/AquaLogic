@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -93,6 +94,7 @@ class DeviceReadingCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     observed_at: datetime | None = None
+    sample_id: UUID | None = None
     temperature: float = Field(ge=TEMPERATURE_MIN, le=TEMPERATURE_MAX, allow_inf_nan=False)
     ph: float = Field(ge=PH_MIN, le=PH_MAX, allow_inf_nan=False)
     turbidity: float = Field(ge=TURBIDITY_MIN, le=TURBIDITY_MAX, allow_inf_nan=False)

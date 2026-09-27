@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -6,6 +6,9 @@ from app.database import Base
 
 class SensorReading(Base):
     __tablename__ = "sensor_readings"
+    __table_args__ = (
+        UniqueConstraint("device_id", "sample_id", name="uq_sensor_readings_device_sample_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     device_id: Mapped[str | None] = mapped_column(
@@ -14,6 +17,7 @@ class SensorReading(Base):
         nullable=True,
         index=True,
     )
+    sample_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     tank_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("tanks.id", ondelete="CASCADE"),

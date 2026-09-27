@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-09-26
+Last reviewed: 2026-09-27
 
 ## Read first
 
@@ -43,9 +43,9 @@ Last reviewed: 2026-09-26
   retirement actuator checks, and SQLite/PostgreSQL mutation-lock ordering;
   this service also maintains the explicit monitoring-expectation boundary.
 - `backend/app/routes/devices.py`: one-time admin provisioning, sanitized
-  administrator device lifecycle management, device-key bridge ingestion, with
-  server-side tank mapping, actuator command claiming, final reporting, and
-  actuator-state reporting.
+  administrator device lifecycle management, device-key bridge ingestion with
+  optional UUID `sample_id` idempotency and server-side tank mapping, actuator
+  command claiming, final reporting, and actuator-state reporting.
 - `backend/app/routes/management.py` and `backend/app/routes/security.py`:
   administrator account lifecycle summaries, sanitized session management,
   and filtered security audit access.
@@ -103,6 +103,9 @@ Last reviewed: 2026-09-26
   backfill.
 - `backend/alembic/versions/0014_tank_threshold_overrides.py`: optional
   complete tank overrides and append-only override/reset history.
+- `backend/alembic/versions/0019_sensor_reading_sample_id.py`: nullable
+  device-scoped sensor-ingestion sample IDs with a database-enforced unique
+  constraint; callers that omit the field keep the existing insert behavior.
 - `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.

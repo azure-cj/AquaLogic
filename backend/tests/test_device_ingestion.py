@@ -1,6 +1,11 @@
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.exc import IntegrityError
 
 from app.models import RegisteredDevice, SensorReading, User
 from app.security import get_password_hash, hash_opaque_token
@@ -69,6 +74,66 @@ def test_observation_timestamp_is_normalized_to_utc(client, auth_headers):
     assert response.status_code == 201
     assert response.json()["timestamp"].startswith("2026-08-21T04:00:00")
     assert response.json()["timestamp"].endswith(("+00:00", "Z"))
+
+
+def test_sample_id_retry_is_device_scoped_idempotent_and_does_not_mutate_reading(
+    client, auth_headers, db_session
+):
+    tank = create_tank(client, auth_headers, "Idempotent ingestion tank")
+    device = register(client, auth_headers, tank["id"], "idempotent-device")
+    sample_id = str(uuid4())
+    original_timestamp = "2026-09-27T10:15:00+00:00"
+    first_payload = {
+        **bridge_payload(),
+        "sample_id": sample_id,
+        "observed_at": original_timestamp,
+    }
+    first = client.post(
+        "/device-ingestion/readings",
+        headers={"X-Device-Key": device["device_key"]},
+        json=first_payload,
+    )
+    assert first.status_code == 201
+
+    retry_payload = {
+        **bridge_payload(),
+        "temperature": 40,
+        "sample_id": sample_id,
+        "observed_at": "2026-09-27T11:30:00+00:00",
+    }
+    retried = client.post(
+        "/device-ingestion/readings",
+        headers={"X-Device-Key": device["device_key"]},
+        json=retry_payload,
+    )
+    assert retried.status_code == 200
+    assert retried.json()["id"] == first.json()["id"]
+    assert retried.json()["temperature"] == first.json()["temperature"]
+    assert retried.json()["timestamp"] == first.json()["timestamp"]
+    assert db_session.query(SensorReading).filter_by(device_id=device["device_id"], sample_id=sample_id).count() == 1
+
+    unique_constraints = {
+        constraint.name: tuple(column.name for column in constraint.columns)
+        for constraint in SensorReading.__table__.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert unique_constraints["uq_sensor_readings_device_sample_id"] == ("device_id", "sample_id")
+
+    duplicate_row = SensorReading(
+        device_id=device["device_id"],
+        sample_id=sample_id,
+        tank_id=tank["id"],
+        temperature=20,
+        ph=7,
+        turbidity=1,
+        dissolved_oxygen=None,
+        tds=100,
+        ammonia=None,
+    )
+    db_session.add(duplicate_row)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
 
 
 def test_manual_readings_have_no_device_provenance(client, auth_headers):
