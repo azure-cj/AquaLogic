@@ -203,12 +203,13 @@ no manual resolution action or external notification.
   actuator work, and the administrator must follow the hardware checklist.
 - A queued actuator command must expire before execution, and a device must
   claim it before any physical call. Final command reports are idempotent.
-- Actuator actions are limited to UV, normal LED, feeder, and the explicit
-  manual-test-only `pump_a`/`pump_b` contracts; pump schedules, pH auto-dose,
-  and sensor-driven dosing are not domain actions.
-- Normal actuator commands use a 120-second default expiry with a 300-second
-  maximum; pump maintenance commands use a 20-second default with a
-  30-second maximum. Ambiguous physical requests are not automatically retried.
+- Actuator actions include UV, normal LED, feeder, and guarded `pump_a`/`pump_b`
+  maintenance and device-resident schedule contracts; pH auto-dose and
+  sensor-driven dosing remain device-local rather than backend commands.
+- Normal actuator commands and pump schedule/refill configuration use a
+  120-second default expiry with a 300-second maximum. Pump motion commands use
+  a 20-second default with a 30-second maximum. Ambiguous physical requests are
+  not automatically retried.
 - Every successful threshold update appends a revision in the same transaction;
   revisions are never edited in place. Tank reset history records a fallback
   event, after which effective history follows the global revision timeline.

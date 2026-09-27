@@ -198,11 +198,11 @@ dashboard can distinguish the current filtered view from overall command
 activity. A stale/offline bridge exposes last-known state and does not claim
 that the physical actuator is off. Pump commands are rejected rather than
 queued while the fixed bridge is offline, and backend authorization remains
-admin-only. Normal commands default to 120-second expiry with a 300-second
-maximum; pump commands default to 20 seconds with a 30-second maximum. Hardware
-requests are never automatically retried after an ambiguous result; confirmed
-pre-dispatch failures remain `failed`, while post-dispatch ambiguity becomes
-`outcome_unknown`. A claimed
+admin-only. Normal commands and pump schedule/refill configuration default to
+120-second expiry with a 300-second maximum; pump motion commands default to
+20 seconds with a 30-second maximum. Hardware requests are never automatically
+retried after an ambiguous result; confirmed pre-dispatch failures remain
+`failed`, while post-dispatch ambiguity becomes `outcome_unknown`. A claimed
 command that passes the 180-second post-claim confirmation window becomes
 terminal `outcome_unknown`; reconciliation is shared and idempotent across
 create, read, pending, claim, and report entry points. Same-device/same-pump

@@ -90,8 +90,11 @@ the earlier dispense did not occur.
 
 ## Failure and retry behavior
 
-- Pump commands default to a 20-second queue expiry and cannot exceed 30
-  seconds before bridge claim.
+- Pump motion commands default to a 20-second queue expiry and cannot exceed
+  30 seconds before bridge claim. Schedule and motor-free refill configuration
+  commands default to 120 seconds and cannot exceed 300 seconds, allowing the
+  bridge's sensor-first polling cycle to claim configuration work without
+  relaxing the expiry for pump motion.
 - Pump commands are rejected with `409` while the bridge is offline.
 - A confirmed pre-dispatch or explicit non-ambiguous rejection is `failed`. A
   post-dispatch timeout, lost/malformed response, completion timeout, or

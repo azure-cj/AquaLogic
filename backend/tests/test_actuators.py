@@ -405,6 +405,36 @@ def test_pump_schedule_validation_and_water_test_refill_actions(client, auth_hea
     )
     assert scheduled.status_code == 201
     assert scheduled.json()["payload"] == {"slots": slots}
+    schedule_expiry = (
+        datetime.fromisoformat(scheduled.json()["expires_at"])
+        - datetime.fromisoformat(scheduled.json()["requested_at"])
+    ).total_seconds()
+    assert 119 <= schedule_expiry <= 121
+
+    maximum_schedule = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {
+            "actuator": "pump_a",
+            "action": "schedule",
+            "payload": {"slots": slots},
+            "expires_in_seconds": 300,
+        },
+    )
+    assert maximum_schedule.status_code == 201
+    too_long_schedule = queue(
+        client,
+        auth_headers,
+        tank["id"],
+        {
+            "actuator": "pump_a",
+            "action": "schedule",
+            "payload": {"slots": slots},
+            "expires_in_seconds": 301,
+        },
+    )
+    assert too_long_schedule.status_code == 422
 
     test_command = queue(
         client,
@@ -414,6 +444,11 @@ def test_pump_schedule_validation_and_water_test_refill_actions(client, auth_hea
     )
     assert test_command.status_code == 201
     assert test_command.json()["action"] == "test_dispense"
+    physical_expiry = (
+        datetime.fromisoformat(test_command.json()["expires_at"])
+        - datetime.fromisoformat(test_command.json()["requested_at"])
+    ).total_seconds()
+    assert 19 <= physical_expiry <= 21
 
     refill = queue(
         client,
@@ -423,6 +458,11 @@ def test_pump_schedule_validation_and_water_test_refill_actions(client, auth_hea
     )
     assert refill.status_code == 201
     assert refill.json()["action"] == "refill_confirm"
+    refill_expiry = (
+        datetime.fromisoformat(refill.json()["expires_at"])
+        - datetime.fromisoformat(refill.json()["requested_at"])
+    ).total_seconds()
+    assert 119 <= refill_expiry <= 121
 
     invalid = queue(
         client,

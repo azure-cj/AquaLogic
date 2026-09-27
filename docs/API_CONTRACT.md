@@ -273,14 +273,16 @@ use a hosted species-photo URL through the existing `photo_url` field.
   non-ambiguous hardware rejection; it is not a generic timeout bucket.
 
 - Normal UV, LED, and feeder commands default to a 120-second queue expiry and
-  accept at most 300 seconds. Pump maintenance commands default to 20 seconds
-  and may not exceed 30 seconds. A queued command must be claimed by the
-  registered bridge before any physical request; expired commands are never
-  delivered. There is no automatic hardware retry or retry endpoint. An
-  operator must inspect the equipment before creating a new command. The server
-  confirmation window is 180 seconds from claim, independent of queue expiry;
-  it covers the bridge's permitted 120-second pump completion wait, bounded
-  request/report time, and scheduling/network margin.
+  accept at most 300 seconds. Pump motion commands default to 20 seconds and
+  may not exceed 30 seconds; pump schedule and motor-free refill configuration
+  commands default to 120 seconds and may not exceed 300 seconds. A queued
+  command must be claimed by the registered bridge before any physical
+  request; expired commands are never delivered. There is no automatic hardware
+  retry or retry endpoint. An operator must inspect the equipment before
+  creating a new command. The server confirmation window is 180 seconds from
+  claim, independent of queue expiry; it covers the bridge's permitted
+  120-second pump completion wait, bounded request/report time, and
+  scheduling/network margin.
 
 - `GET /tanks/{tank_id}/actuators/history` accepts `page` (default `1`),
   `page_size` (default `10`, maximum `50`), and optional exact-match
@@ -325,23 +327,24 @@ use a hosted species-photo URL through the existing `photo_url` field.
   `off`, `timer`, `schedule`), and feeder (`feed_now`, `config`, `schedule`)
   actions. Light timers are bounded to 1–86,400,000 ms; schedule values use
   `HH:MM`; feeder configuration is angle 0–180 and duration 500–60,000 ms with
-  exactly three schedule slots. Pump `pump_a` and `pump_b` manual-test actions
-  are limited to `dispense`, `stop`, and `retract`; dispense has an empty
-  payload because the received firmware owns the configured `volume_ml` and
-  exposes no volume-setting endpoint. The bridge waits for the configured
-  volume move to finish and applies a bounded local safety timeout. Pump
-  commands default to a 20-second queue expiry and may not exceed 30 seconds
-  before the bridge claims them. Pump queue requests are rejected with `409`
-  while the fixed bridge is offline, so they are never silently left in the
-  queue. Pump schedules, pH auto-dose, and sensor-driven dosing remain out of
-  scope.
+  exactly three schedule slots. Pump `pump_a` and `pump_b` support guarded
+  dispense, water-only test, refill confirmation, stop, retract, and
+  device-resident schedule actions. Dispense has an empty payload because the
+  firmware owns its configured `volume_ml`; the bridge waits for the configured
+  motion to finish and applies a bounded safety timeout. Motion commands retain
+  a 20-second default and 30-second maximum queue expiry. Schedule and
+  motor-free refill configuration use a 120-second default and 300-second
+  maximum so normal bridge polling does not expire them before dispatch. Pump
+  commands are rejected with `409` while the fixed bridge is offline; expired
+  commands are not silently reported as applied. Pump schedules use fixed
+  device-resident doses; pH auto-dose remains optional and device-local.
 
-- UV, LED, and feeder schedules are device-resident configuration. AquaLogic
-  validates and queues one schedule command, the bridge forwards it once, and
-  the ESP32 stores and executes it locally. A successful schedule command means
-  the device accepted the configuration request; it does not confirm every
-  future scheduled event. The current `HH:MM` contract has no timezone,
-  daylight-saving, or device-clock synchronization fields.
+- UV, LED, feeder, and pump schedules are device-resident configuration.
+  AquaLogic validates and queues one schedule command, the bridge forwards it
+  once, and the ESP32 stores and executes it locally. A successful schedule
+  command means the device accepted the configuration request; it does not
+  confirm every future scheduled event. Pump schedules use fixed mL doses,
+  Asia/Manila device time, and the shared cooldown/refill safeguards.
 
 - The received firmware's private pump routes are `/syringeA/status`,
   `/syringeA/dispense`, `/syringeA/stop`, `/syringeA/retract`, and the matching

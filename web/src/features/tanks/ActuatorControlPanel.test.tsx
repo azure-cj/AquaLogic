@@ -241,6 +241,7 @@ describe('admin actuator controls', () => {
     expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
     expect(call?.[1]?.body).toContain('"action":"schedule"');
     expect(call?.[1]?.body).toContain('"slots":[{"enabled":true,"time":"08:00"}');
+    expect(call?.[1]?.body).toContain('\"expires_in_seconds\":120');
   });
 
   it('shows remaining volume and cooldown state, then confirms physical refill without motor movement', async () => {
@@ -281,6 +282,7 @@ describe('admin actuator controls', () => {
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(call?.[1]?.body).toContain('"action":"refill_confirm"');
     expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
+    expect(call?.[1]?.body).toContain('\"expires_in_seconds\":120');
   });
 
   it('shows a blocked scheduled dose inline and as an alert when status changes', async () => {

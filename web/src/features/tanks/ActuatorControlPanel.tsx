@@ -56,7 +56,7 @@ const defaultPumpSchedule: FeederScheduleSlot[] = [
 
 const HISTORY_PAGE_SIZE = 10;
 const PUMP_COMMAND_EXPIRY_SECONDS = 20;
-const PUMP_CONFIGURATION_EXPIRY_SECONDS = PUMP_COMMAND_EXPIRY_SECONDS;
+const PUMP_CONFIGURATION_EXPIRY_SECONDS = 120;
 
 type HistoryActuatorFilter = 'all' | ActuatorName;
 type HistoryStatusFilter = 'all' | ActuatorCommandStatus;

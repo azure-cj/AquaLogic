@@ -11,9 +11,12 @@ FEEDER_DURATION_MIN_MS = 500
 FEEDER_DURATION_MAX_MS = 60_000
 PUMP_COMMAND_EXPIRY_DEFAULT_SECONDS = 20
 PUMP_COMMAND_EXPIRY_MAX_SECONDS = 30
+PUMP_CONFIGURATION_ACTIONS = {"schedule", "refill_confirm"}
+PUMP_CONFIGURATION_EXPIRY_DEFAULT_SECONDS = 120
 FEEDER_SCHEDULE_SLOTS = 3
 COMMAND_EXPIRY_DEFAULT_SECONDS = 120
 COMMAND_EXPIRY_MAX_SECONDS = 300
+PUMP_CONFIGURATION_EXPIRY_MAX_SECONDS = COMMAND_EXPIRY_MAX_SECONDS
 TIME_PATTERN = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
 
 ActuatorName = Literal["uv", "led", "feeder", "pump_a", "pump_b"]
@@ -119,13 +122,22 @@ class ActuatorCommandCreate(BaseModel):
             raise ValueError(f"Action {self.action!r} is not allowed for {self.actuator}")
 
         if self.expires_in_seconds is None:
-            self.expires_in_seconds = (
-                PUMP_COMMAND_EXPIRY_DEFAULT_SECONDS
-                if self.actuator in {"pump_a", "pump_b"}
-                else COMMAND_EXPIRY_DEFAULT_SECONDS
+            if self.actuator in {"pump_a", "pump_b"}:
+                self.expires_in_seconds = (
+                    PUMP_CONFIGURATION_EXPIRY_DEFAULT_SECONDS
+                    if self.action in PUMP_CONFIGURATION_ACTIONS
+                    else PUMP_COMMAND_EXPIRY_DEFAULT_SECONDS
+                )
+            else:
+                self.expires_in_seconds = COMMAND_EXPIRY_DEFAULT_SECONDS
+        elif self.actuator in {"pump_a", "pump_b"}:
+            max_expiry = (
+                PUMP_CONFIGURATION_EXPIRY_MAX_SECONDS
+                if self.action in PUMP_CONFIGURATION_ACTIONS
+                else PUMP_COMMAND_EXPIRY_MAX_SECONDS
             )
-        elif self.actuator in {"pump_a", "pump_b"} and self.expires_in_seconds > PUMP_COMMAND_EXPIRY_MAX_SECONDS:
-            raise ValueError(f"Pump commands must expire within {PUMP_COMMAND_EXPIRY_MAX_SECONDS} seconds")
+            if self.expires_in_seconds > max_expiry:
+                raise ValueError(f"Pump {self.action} commands must expire within {max_expiry} seconds")
 
         if self.action in {"on", "off", "feed_now"}:
             if self.payload:

@@ -22,8 +22,10 @@ The backend stores these states:
 | `outcome_unknown` | Outcome unknown | The command was claimed, but no trustworthy terminal result arrived before the post-claim confirmation deadline; physical execution may have occurred |
 
 Normal UV, LED, and feeder commands default to a 120-second expiry and may be
-configured up to 300 seconds. Pump commands default to 20 seconds and may not
-exceed 30 seconds before bridge claim.
+configured up to 300 seconds. Pump schedule and motor-free refill configuration
+commands also default to 120 seconds and may be configured up to 300 seconds.
+Pump motion commands default to 20 seconds and may not exceed 30 seconds before
+bridge claim.
 
 ## Lifecycle rules
 

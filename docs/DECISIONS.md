@@ -1050,6 +1050,22 @@ skipped-occurrence behavior requires collaborator hardware validation with
 water. Existing ESP32 buffering/backlog, bridge SQLite outbox, and backend
 actuator-command audit semantics remain separate and unchanged.
 
+## 2026-09-28 — Give pump configuration commands time to reach the bridge
+
+**Decision:** Use a 120-second default and 300-second maximum queue expiry for
+pump schedule and motor-free refill configuration. Keep pump motion commands
+at a 20-second default and 30-second maximum.
+
+**Reason:** The bridge polls actuator work after sensor and ESP32-backlog work,
+on a normal 15-second cycle. A 20-second expiry was short enough for valid pump
+schedule updates to expire before the bridge retrieved them, which command
+history correctly showed as `Expired` and `Never sent`.
+
+**Consequences:** Schedule/refill configuration remains bounded and expires if
+the bridge does not recover within the configured window. Physical pump actions
+retain their shorter safety expiry; the bridge does not automatically retry
+expired or ambiguous motion commands.
+
 ## Adding a decision
 
 Use this format:

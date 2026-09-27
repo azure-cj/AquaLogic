@@ -1,7 +1,7 @@
 # Feeding Schedules
 
 Status: Implemented device-resident schedules using synchronized local time
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 ## Purpose
 
@@ -49,6 +49,10 @@ schedule state.
 ## Failure behavior
 
 - A schedule update may remain queued while the bridge is unavailable.
+- Pump schedule configuration defaults to a 120-second queue expiry and may be
+  configured up to 300 seconds. This allows for the bridge's 15-second polling
+  interval plus sensor/backlog work before command retrieval. Pump motion
+  commands keep their 20-second default and 30-second maximum.
 - If it reaches its expiry before the bridge claims it, it is marked expired and
   is never delivered.
 - The application does not silently claim that a failed update replaced the

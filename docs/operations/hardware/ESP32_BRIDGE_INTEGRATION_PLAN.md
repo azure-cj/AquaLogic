@@ -2,7 +2,7 @@
 
 Status: v1 UV/LED/feeder controls plus Pump A/B manual-test bridge implemented
 for temporary hardware testing
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-28
 
 ## Goal and boundary
 
@@ -109,11 +109,13 @@ report is rejected without overwriting that terminal state. A same-device,
 same-pump dispense remains locked while an earlier dispense is executing or
 uncleared unknown; Stop remains available, and an administrator must record
 physical verification before clearing the software lock.
-Queued light/feeder commands expire after 120 seconds by default; pump commands
-expire after 20 seconds by default and never exceed 30 seconds. No command
-appears in a pending response after expiry. The backend only allows the device mapped to the
-target tank to claim a command. Claim and final reporting are idempotent;
-already-final commands cannot be physically reissued.
+Queued light/feeder commands expire after 120 seconds by default. Pump motion
+commands expire after 20 seconds by default and never exceed 30 seconds; pump
+schedule and motor-free refill configuration expire after 120 seconds by
+default and never exceed 300 seconds. No command appears in a pending response
+after expiry. The backend only allows the device mapped to the target tank to
+claim a command. Claim and final reporting are idempotent; already-final
+commands cannot be physically reissued.
 
 History is newest-first and paginated. `page_size` defaults to 10 and is capped
 at 50; optional exact-match `actuator` and lifecycle `status` filters narrow the
@@ -129,8 +131,8 @@ string: light timers are 1–86,400,000 ms, schedule times are `HH:MM`, feeder
 angles are 0–180, feeder durations are 500–60,000 ms, and the feeder has exactly
 three schedule slots. Pump dispense payloads are empty because the current
 firmware owns the configured volume; the bridge completion timeout is bounded
-to the tester configuration, pump commands expire within 30 seconds, and pump
-queue requests require a fresh bridge heartbeat.
+to the tester configuration, pump motion commands expire within 30 seconds,
+and pump queue requests require a fresh bridge heartbeat.
 
 ## Bridge implementation
 
