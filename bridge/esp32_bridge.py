@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ipaddress
 import json
 import logging
 import math
 import re
+import sqlite3
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -37,6 +40,10 @@ BACKLOG_MAX_PER_CYCLE = 500
 BACKLOG_ESTIMATION_FLAG = "time_estimated"
 BACKLOG_ESTIMATION_METHOD = "even_spread"
 BACKLOG_ESTIMATION_MARKER_KEYS = (BACKLOG_ESTIMATION_FLAG, "estimation_method")
+OUTBOX_DEFAULT_DRAIN_BATCH_SIZE = 5
+OUTBOX_DEFAULT_MAX_RECORDS = 10_000
+OUTBOX_MAX_DRAIN_BATCH_SIZE = 100
+BACKLOG_SAMPLE_NAMESPACE = uuid.NAMESPACE_URL
 
 # Timestamp of the last live reading forwarded while the backlog was empty. The
 # ESP32 has no real-time clock, so backfilled records cannot know their true
@@ -53,6 +60,156 @@ class BridgeError(ValueError):
 
 class AmbiguousPhysicalOutcome(BridgeError):
     """The physical endpoint may have received or started the request."""
+
+
+class SensorOutbox:
+    """Durable, bridge-owned queue for live readings only."""
+
+    def __init__(self, path: str | Path, max_records: int = OUTBOX_DEFAULT_MAX_RECORDS):
+        self.path = Path(path)
+        self.max_records = max_records
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._db: sqlite3.Connection | None = None
+        try:
+            self._db = sqlite3.connect(self.path, timeout=5)
+            self._db.row_factory = sqlite3.Row
+            self._db.execute("PRAGMA journal_mode = WAL")
+            self._db.execute("PRAGMA synchronous = FULL")
+            self._db.execute("PRAGMA busy_timeout = 5000")
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sensor_outbox (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sample_id TEXT NOT NULL UNIQUE,
+                        payload_json TEXT NOT NULL,
+                        source TEXT NOT NULL CHECK (source = 'live'),
+                        captured_at TEXT NOT NULL,
+                        queued_at TEXT NOT NULL,
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
+                        last_attempt_at TEXT,
+                        last_error TEXT
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sensor_outbox_metadata (
+                        key TEXT PRIMARY KEY,
+                        value INTEGER NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO sensor_outbox_metadata (key, value) VALUES ('total_dropped', 0)"
+                )
+                connection.execute("PRAGMA user_version = 1")
+        except sqlite3.Error as error:
+            self.close()
+            raise BridgeError(f"Could not initialize persistent sensor outbox: {type(error).__name__}") from error
+
+    @contextlib.contextmanager
+    def _connection(self):
+        connection = self._db
+        if connection is None:
+            raise BridgeError("Persistent sensor outbox is closed")
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+
+    def close(self) -> None:
+        if self._db is not None:
+            self._db.close()
+            self._db = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def pending_count(self) -> int:
+        with self._connection() as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM sensor_outbox").fetchone()[0])
+
+    def enqueue_live(self, payload: dict[str, Any]) -> bool:
+        sample_id = payload.get("sample_id")
+        captured_at = payload.get("observed_at")
+        if not isinstance(sample_id, str) or not isinstance(captured_at, str):
+            raise BridgeError("Live sensor payload is missing its sample ID or capture timestamp")
+        serialized = json.dumps(payload, separators=(",", ":"), allow_nan=False)
+        queued_at = datetime.now(timezone.utc).isoformat()
+        with self._connection() as connection:
+            existing = connection.execute(
+                "SELECT 1 FROM sensor_outbox WHERE sample_id = ?", (sample_id,)
+            ).fetchone()
+            if existing:
+                return True
+            count = int(connection.execute("SELECT COUNT(*) FROM sensor_outbox").fetchone()[0])
+            if count >= self.max_records:
+                connection.execute(
+                    "UPDATE sensor_outbox_metadata SET value = value + 1 WHERE key = 'total_dropped'"
+                )
+                return False
+            connection.execute(
+                """INSERT INTO sensor_outbox
+                   (sample_id, payload_json, source, captured_at, queued_at)
+                   VALUES (?, ?, 'live', ?, ?)""",
+                (sample_id, serialized, captured_at, queued_at),
+            )
+        return True
+
+    def oldest(self, limit: int) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM sensor_outbox ORDER BY id ASC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_attempt(self, sample_id: str) -> None:
+        with self._connection() as connection:
+            connection.execute(
+                """UPDATE sensor_outbox
+                   SET attempt_count = attempt_count + 1, last_attempt_at = ?
+                   WHERE sample_id = ?""",
+                (datetime.now(timezone.utc).isoformat(), sample_id),
+            )
+
+    def mark_failure(self, sample_id: str, error: str) -> tuple[int, bool]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT attempt_count, last_error FROM sensor_outbox WHERE sample_id = ?",
+                (sample_id,),
+            ).fetchone()
+            if row is None:
+                return 0, True
+            changed = row["last_error"] != error
+            connection.execute(
+                "UPDATE sensor_outbox SET last_error = ? WHERE sample_id = ?",
+                (error, sample_id),
+            )
+            return int(row["attempt_count"]), changed
+
+    def mark_delivered(self, sample_id: str) -> None:
+        with self._connection() as connection:
+            connection.execute("DELETE FROM sensor_outbox WHERE sample_id = ?", (sample_id,))
+
+    def oldest_queued_times(self) -> tuple[str | None, str | None]:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT MIN(queued_at), MAX(queued_at) FROM sensor_outbox"
+            ).fetchone()
+        return row[0], row[1]
+
+    def total_dropped(self) -> int:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM sensor_outbox_metadata WHERE key = 'total_dropped'"
+            ).fetchone()
+        return int(row[0]) if row else 0
 
 
 def safe_error(error: BaseException) -> str:
@@ -383,7 +540,12 @@ def fetch_json(url: str, timeout: float, headers: dict[str, str] | None = None) 
             raise BridgeError("Remote endpoint returned invalid JSON") from error
 
 
-def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float) -> object:
+def _post_json_with_status(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout: float,
+) -> tuple[object, int]:
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = Request(
         url,
@@ -395,13 +557,17 @@ def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeo
         if response.status not in (200, 201):
             raise BridgeError(f"AquaLogic returned HTTP {response.status}")
         try:
-            return json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8")), int(response.status)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise BridgeError("AquaLogic returned invalid JSON") from error
 
 
-def post_reading(url: str, device_key: str, payload: dict[str, float], timeout: float) -> None:
-    response = _post_json(
+def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float) -> object:
+    return _post_json_with_status(url, headers, payload, timeout)[0]
+
+
+def post_reading(url: str, device_key: str, payload: dict[str, Any], timeout: float) -> bool:
+    response, status_code = _post_json_with_status(
         url.rstrip("/") + "/device-ingestion/readings",
         {"X-Device-Key": device_key},
         payload,
@@ -409,6 +575,21 @@ def post_reading(url: str, device_key: str, payload: dict[str, float], timeout: 
     )
     if not isinstance(response, dict) or not isinstance(response.get("id"), int):
         raise BridgeError("AquaLogic returned an invalid sensor-ingestion response")
+    return status_code == 200
+
+
+def _device_identity(config: dict) -> str:
+    configured = config.get("device_id")
+    if isinstance(configured, str) and configured.strip():
+        return configured.strip()
+    hostname = urlsplit(config["esp32_data_url"]).hostname
+    return f"esp32:{(hostname or 'unknown').lower()}"
+
+
+def esp32_backlog_sample_id(config: dict, seq: int) -> str:
+    """Return a restart-stable UUID for one firmware-owned backlog sequence."""
+    name = f"aqualogic:{_device_identity(config)}:esp32-backlog:{seq}"
+    return str(uuid.uuid5(BACKLOG_SAMPLE_NAMESPACE, name))
 
 
 def _backend_url(config: dict, path: str) -> str:
@@ -772,6 +953,8 @@ def load_config(path: Path) -> dict:
     config.setdefault("actuator_enabled", True)
     config.setdefault("pump_manual_test_enabled", False)
     config.setdefault("pump_completion_timeout_seconds", PUMP_COMPLETION_TIMEOUT_DEFAULT_SECONDS)
+    config.setdefault("outbox_drain_batch_size", OUTBOX_DEFAULT_DRAIN_BATCH_SIZE)
+    config.setdefault("outbox_max_records", OUTBOX_DEFAULT_MAX_RECORDS)
     numeric_keys = ("poll_interval_seconds", "timeout_seconds")
     if any(isinstance(config[key], bool) or not isinstance(config[key], (int, float)) or config[key] <= 0 for key in numeric_keys):
         raise BridgeError("Polling interval and timeout must be positive")
@@ -789,6 +972,27 @@ def load_config(path: Path) -> dict:
             f"pump_completion_timeout_seconds must be between {PUMP_COMPLETION_TIMEOUT_MIN_SECONDS} and "
             f"{PUMP_COMPLETION_TIMEOUT_MAX_SECONDS}"
         )
+    batch_size = config["outbox_drain_batch_size"]
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or not 1 <= batch_size <= OUTBOX_MAX_DRAIN_BATCH_SIZE:
+        raise BridgeError(f"outbox_drain_batch_size must be an integer from 1 to {OUTBOX_MAX_DRAIN_BATCH_SIZE}")
+    max_records = config["outbox_max_records"]
+    if isinstance(max_records, bool) or not isinstance(max_records, int) or max_records < 1:
+        raise BridgeError("outbox_max_records must be a positive integer")
+    device_id = config.get("device_id")
+    if device_id is not None and (
+        not isinstance(device_id, str) or not device_id.strip() or len(device_id.strip()) > 64
+    ):
+        raise BridgeError("device_id must be a non-empty registered device ID of at most 64 characters")
+    outbox_path = config.get("outbox_db_path", "bridge-state.sqlite3")
+    if not isinstance(outbox_path, str) or not outbox_path.strip() or outbox_path.strip() == ":memory:":
+        raise BridgeError("outbox_db_path must be a persistent file path")
+    config_path = path.expanduser().resolve()
+    resolved_outbox_path = Path(outbox_path.strip()).expanduser()
+    if not resolved_outbox_path.is_absolute():
+        resolved_outbox_path = config_path.parent / resolved_outbox_path
+    config["outbox_db_path"] = str(resolved_outbox_path.resolve())
+    if device_id is not None:
+        config["device_id"] = device_id.strip()
     _validate_private_esp32_url(config["esp32_data_url"])
     _validate_backend_url(config["aqualogic_backend_url"])
     return config
@@ -822,10 +1026,94 @@ def _validate_backend_url(url: str) -> None:
             raise BridgeError("Remote AquaLogic backend URLs must use HTTPS")
 
 
-def poll_sensor_once(config: dict) -> None:
+def poll_sensor_once(config: dict, outbox: SensorOutbox | None = None) -> None:
     payload = translate_esp32_payload(fetch_json(config["esp32_data_url"], float(config["timeout_seconds"])))
-    post_reading(config["aqualogic_backend_url"], config["device_key"], payload, float(config["timeout_seconds"]))
-    LOG.info("Forwarded temperature=%s°C pH=%s turbidity=%sNTU TDS=%sppm", payload["temperature"], payload["ph"], payload["turbidity"], payload["tds"])
+    payload["sample_id"] = str(uuid.uuid4())
+    queue = outbox or SensorOutbox(
+        config.get("outbox_db_path", Path(__file__).with_name("bridge-state.sqlite3")),
+        int(config.get("outbox_max_records", OUTBOX_DEFAULT_MAX_RECORDS)),
+    )
+    if not queue.enqueue_live(payload):
+        pending = queue.pending_count()
+        dropped = queue.total_dropped()
+        LOG.error(
+            "Bridge outbox is full (%d/%d pending); live sample %s was not queued or uploaded; total dropped=%d",
+            pending,
+            queue.max_records,
+            payload["sample_id"],
+            dropped,
+        )
+        return
+    LOG.info("Queued live sensor sample %s", payload["sample_id"])
+
+
+def _outbox_retry_wait_seconds(row: dict[str, Any], poll_interval: float, now: datetime) -> float:
+    attempts = int(row.get("attempt_count", 0))
+    last_attempt = row.get("last_attempt_at")
+    if attempts <= 0 or not isinstance(last_attempt, str):
+        return 0.0
+    try:
+        attempted_at = datetime.fromisoformat(last_attempt)
+    except ValueError:
+        return 0.0
+    if attempted_at.tzinfo is None:
+        attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+    retry_after = min(poll_interval * (2 ** min(attempts, 4)), 300)
+    return max(0.0, retry_after - (now - attempted_at).total_seconds())
+
+
+def drain_outbox(config: dict, outbox: SensorOutbox) -> int:
+    """Upload a bounded oldest-first batch of bridge-owned live readings."""
+    batch_size = int(config.get("outbox_drain_batch_size", OUTBOX_DEFAULT_DRAIN_BATCH_SIZE))
+    batch = outbox.oldest(batch_size)
+    if not batch:
+        return 0
+    pending = outbox.pending_count()
+    delivered = 0
+    for index, row in enumerate(batch, start=1):
+        sample_id = row["sample_id"]
+        retry_wait = _outbox_retry_wait_seconds(
+            row,
+            float(config.get("poll_interval_seconds", 15)),
+            datetime.now(timezone.utc),
+        )
+        if retry_wait > 0:
+            break
+        try:
+            payload = json.loads(row["payload_json"])
+            if not isinstance(payload, dict) or payload.get("sample_id") != sample_id:
+                raise BridgeError("Persistent outbox contains an invalid sensor payload")
+            outbox.mark_attempt(sample_id)
+            already_stored = post_reading(
+                config["aqualogic_backend_url"],
+                config["device_key"],
+                payload,
+                float(config["timeout_seconds"]),
+            )
+        except (BridgeError, HTTPError, URLError, TimeoutError, OSError, sqlite3.Error) as error:
+            safe = safe_error(error)
+            attempts, changed = outbox.mark_failure(sample_id, safe)
+            if changed or attempts == 1 or attempts % 10 == 0:
+                LOG.error(
+                    "Railway upload failed for bridge sample %s (attempt %d); %d readings remain pending (%s)",
+                    sample_id,
+                    attempts,
+                    outbox.pending_count(),
+                    safe,
+                )
+            break
+        outbox.mark_delivered(sample_id)
+        delivered += 1
+        if already_stored:
+            LOG.info("Idempotent replay already stored %s", sample_id)
+        else:
+            LOG.info("Delivered queued sample %s", sample_id)
+        if index < len(batch) and delivered < pending:
+            LOG.info("Replaying bridge outbox: %d/%d", delivered, pending)
+    remaining = outbox.pending_count()
+    if remaining == 0 and pending > 0:
+        LOG.info("Outbox empty")
+    return delivered
 
 
 def _backlog_estimate_window(config: dict, count: dict[str, int], now: datetime) -> datetime:
@@ -904,6 +1192,7 @@ def drain_backlog(config: dict) -> int:
             seq = int(seq)
             estimated_at = _estimate_observed_at(seq, count["oldest_seq"], count["newest_seq"], window_start, now)
             payload = translate_esp32_payload(record, observed_at=estimated_at)
+            payload["sample_id"] = esp32_backlog_sample_id(config, seq)
             payload[BACKLOG_ESTIMATION_FLAG] = True
             payload["estimation_method"] = BACKLOG_ESTIMATION_METHOD
             validated.append((payload, seq))
@@ -914,12 +1203,14 @@ def drain_backlog(config: dict) -> int:
                 # the estimation markers never cross the wire; persisting them is
                 # the backend follow-up recorded in docs/DECISIONS.md.
                 wire_payload = {key: value for key, value in payload.items() if key not in BACKLOG_ESTIMATION_MARKER_KEYS}
-                post_reading(
+                already_stored = post_reading(
                     config["aqualogic_backend_url"],
                     config["device_key"],
                     wire_payload,
                     float(config["timeout_seconds"]),
                 )
+                if already_stored:
+                    LOG.info("Idempotent replay already stored ESP32 backlog seq %d (%s)", seq, wire_payload["sample_id"])
                 forwarded += 1
                 confirmed_upto = seq
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
@@ -941,11 +1232,16 @@ def drain_backlog(config: dict) -> int:
     return forwarded
 
 
-def run_once(config: dict) -> None:
+def run_once(config: dict, outbox: SensorOutbox | None = None) -> None:
+    if outbox is None:
+        outbox = SensorOutbox(
+            config.get("outbox_db_path", Path(__file__).with_name("bridge-state.sqlite3")),
+            int(config.get("outbox_max_records", OUTBOX_DEFAULT_MAX_RECORDS)),
+        )
     failures: list[BaseException] = []
     try:
-        poll_sensor_once(config)
-    except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
+        poll_sensor_once(config, outbox)
+    except (BridgeError, HTTPError, URLError, TimeoutError, OSError, sqlite3.Error) as error:
         failures.append(error)
         LOG.warning("Sensor poll failed (%s)", safe_error(error))
     else:
@@ -961,13 +1257,22 @@ def run_once(config: dict) -> None:
         try:
             process_pending_actuator_commands(config)
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
-            failures.append(error)
+            # A Railway command-poll outage must not slow local ESP32 sampling;
+            # command work is retried on the next normal cycle.
             LOG.warning("Actuator backend poll failed (%s)", safe_error(error))
         try:
             refresh_actuator_states(config)
         except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
-            failures.append(error)
+            # Keep bridge sensor polling cadence independent from cloud state
+            # reporting availability.
             LOG.warning("Actuator state poll failed (%s)", safe_error(error))
+
+    # Replay is deliberately last so the extra bounded cloud requests do not
+    # delay this cycle's actuator command and state work.
+    try:
+        drain_outbox(config, outbox)
+    except (BridgeError, HTTPError, URLError, TimeoutError, OSError, sqlite3.Error) as error:
+        LOG.error("Bridge outbox drain failed; pending records are retained (%s)", safe_error(error))
 
     if failures:
         raise failures[0]
@@ -977,19 +1282,33 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="bridge-config.json", type=Path)
     parser.add_argument("--once", action="store_true", help="Poll and submit exactly one sensor reading and actuator cycle")
+    parser.add_argument("--queue-status", action="store_true", help="Show persistent bridge outbox status and exit")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         config = load_config(args.config)
-    except BridgeError as error:
+        outbox = SensorOutbox(config["outbox_db_path"], config["outbox_max_records"])
+    except (BridgeError, sqlite3.Error, OSError) as error:
         LOG.error("Configuration error: %s", safe_error(error))
         return 2
+    pending = outbox.pending_count()
+    if pending:
+        LOG.warning("Bridge outbox initialized with %d pending readings", pending)
+    else:
+        LOG.info("Bridge outbox initialized; no pending readings")
+    if args.queue_status:
+        oldest, newest = outbox.oldest_queued_times()
+        print(f"Pending records: {pending}")
+        print(f"Oldest queued: {oldest or 'none'}")
+        print(f"Newest queued: {newest or 'none'}")
+        print(f"Total dropped at capacity: {outbox.total_dropped()}")
+        return 0
     failures = 0
     while True:
         try:
-            run_once(config)
+            run_once(config, outbox)
             failures = 0
-        except (BridgeError, HTTPError, URLError, TimeoutError, OSError) as error:
+        except (BridgeError, HTTPError, URLError, TimeoutError, OSError, sqlite3.Error) as error:
             failures += 1
             LOG.warning("Bridge cycle failed (%s)", safe_error(error))
         if args.once:

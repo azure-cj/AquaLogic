@@ -321,6 +321,45 @@ an Alembic migration, wire it through `ingest_device_reading` in
 sending the markers from the bridge. Confirmed upstream in
 `bridge/esp32_bridge.py:815-924` and `bridge/tests/test_esp32_bridge.py`.
 
+## 2026-09-27 — Persist bridge live readings before Railway upload
+
+**Decision:** The Python bridge owns a local SQLite `sensor_outbox` for live
+samples successfully read from ESP32 `/data`. The bridge commits the exact
+backend payload, capture time, UUID sample ID, and retry metadata before the
+first Railway POST, then replays a bounded oldest-first batch after actuator
+work. The default database is `bridge-state.sqlite3` beside the bridge config;
+relative custom paths resolve from that config directory. The default cap is
+10,000 queued live samples and the default replay batch is five. Capacity
+overflow keeps existing rows, increments the persistent drop count, rejects
+the new upload rather than bypassing write-ahead persistence, and logs at error
+level. Failed rows use persisted exponential retry metadata, beginning at twice
+the poll interval and capped at 300 seconds; a cloud upload failure does not
+back off local ESP32 polling.
+
+**Idempotency:** Backend device-reading ingestion accepts optional UUID
+`sample_id` and enforces `(device_id, sample_id)` uniqueness in the database.
+Replays return the existing row successfully without changing its values.
+Live samples use UUIDv4 generated before insertion. ESP32 LittleFS backlog rows
+are not copied to SQLite; they use UUIDv5 IDs derived from the registered device
+identity and ESP32 sequence, and the existing ACK path runs only after backend
+acceptance or idempotent confirmation.
+
+**Reason:** Router/ESP32 Wi-Fi loss and Internet/Railway loss are separate
+failure domains. ESP32 LittleFS protects records created while local Wi-Fi is
+unavailable. The bridge outbox protects live samples already obtained while
+the local link remains up. Railway PostgreSQL remains the central history.
+Combining the local queues would create duplicate ownership and weaken the
+existing device ACK contract.
+
+**Consequences:** The bridge can recover pending uploads after process/laptop
+restart without reconstructing payloads from current sensor state. The local
+database and SQLite sidecar files are Git-ignored and contain no device key or
+backend secret. The bridge does not solve an unreachable ESP32, cloud failure
+before a poll is obtained, or general internet buffering by the firmware. The
+backend route remains backward-compatible for callers without `sample_id`.
+Confirmed in `bridge/esp32_bridge.py`, `backend/app/routes/devices.py`, and
+their tests; migration `0019_sensor_reading_sample_id` adds the database rule.
+
 ## 2026-09-15 — Use a translating overlay for mobile bottom navigation
 
 **Decision:** Keep the authenticated mobile shell's four destinations—Home,

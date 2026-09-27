@@ -34,16 +34,16 @@ def test_rejects_invalid_esp32_values(payload):
         bridge.translate_esp32_payload(payload)
 
 
-def test_unreachable_esp32_does_not_submit():
-    config = {"esp32_data_url": "http://esp32.invalid/data", "aqualogic_backend_url": "https://api.example", "device_key": "test", "timeout_seconds": 1}
+def test_unreachable_esp32_does_not_submit(tmp_path):
+    config = {"esp32_data_url": "http://esp32.invalid/data", "aqualogic_backend_url": "https://api.example", "device_key": "test", "timeout_seconds": 1, "outbox_db_path": str(tmp_path / "outbox.sqlite3")}
     with patch.object(bridge, "fetch_json", side_effect=bridge.URLError("offline")), patch.object(bridge, "post_reading") as submit:
         with pytest.raises(bridge.URLError):
             bridge.run_once(config)
     submit.assert_not_called()
 
 
-def test_backlog_drain_runs_only_after_a_successful_live_poll():
-    config = {"esp32_data_url": "http://esp32.invalid/data", "aqualogic_backend_url": "https://api.example", "device_key": "test", "timeout_seconds": 1, "actuator_enabled": False}
+def test_backlog_drain_runs_only_after_a_successful_live_poll(tmp_path):
+    config = {"esp32_data_url": "http://esp32.invalid/data", "aqualogic_backend_url": "https://api.example", "device_key": "test", "timeout_seconds": 1, "actuator_enabled": False, "outbox_db_path": str(tmp_path / "outbox.sqlite3")}
     with patch.object(bridge, "poll_sensor_once", side_effect=bridge.URLError("offline")), \
         patch.object(bridge, "drain_backlog") as drain:
         with pytest.raises(bridge.URLError):
@@ -52,6 +52,27 @@ def test_backlog_drain_runs_only_after_a_successful_live_poll():
     with patch.object(bridge, "poll_sensor_once"), patch.object(bridge, "drain_backlog") as drain:
         bridge.run_once(config)
     drain.assert_called_once_with(config)
+
+
+def test_actuator_work_runs_before_outbox_replay(tmp_path):
+    config = {
+        "esp32_data_url": "http://esp32.local/data",
+        "aqualogic_backend_url": "https://api.example",
+        "device_key": "key",
+        "timeout_seconds": 1,
+        "actuator_enabled": True,
+        "outbox_db_path": str(tmp_path / "outbox.sqlite3"),
+    }
+    outbox = bridge.SensorOutbox(config["outbox_db_path"])
+    calls = []
+    with patch.object(bridge, "poll_sensor_once", side_effect=lambda *_args: calls.append("sensor")), \
+        patch.object(bridge, "drain_backlog", side_effect=lambda *_args: calls.append("esp32 backlog")), \
+        patch.object(bridge, "process_pending_actuator_commands", side_effect=lambda *_args: calls.append("actuators")), \
+        patch.object(bridge, "refresh_actuator_states", side_effect=lambda *_args: calls.append("actuator state")), \
+        patch.object(bridge, "drain_outbox", side_effect=lambda *_args: calls.append("bridge outbox")):
+        bridge.run_once(config, outbox)
+    assert calls.index("actuators") < calls.index("bridge outbox")
+    assert calls.index("actuator state") < calls.index("bridge outbox")
 
 
 def test_invalid_esp32_json_is_reported():
@@ -92,6 +113,158 @@ def test_pump_completion_timeout_is_bounded(tmp_path):
     }))
     with pytest.raises(bridge.BridgeError, match="pump_completion_timeout_seconds"):
         bridge.load_config(path)
+
+
+def test_outbox_config_defaults_to_config_directory_and_optional_device_id(tmp_path):
+    path = tmp_path / "config" / "bridge-config.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({
+        "esp32_data_url": "http://esp32.local/data",
+        "aqualogic_backend_url": "https://api.example",
+        "device_key": "not-printed",
+    }))
+    config = bridge.load_config(path)
+    assert config["outbox_db_path"] == str(path.parent / "bridge-state.sqlite3")
+    assert config["outbox_drain_batch_size"] == bridge.OUTBOX_DEFAULT_DRAIN_BATCH_SIZE
+    assert config["outbox_max_records"] == bridge.OUTBOX_DEFAULT_MAX_RECORDS
+    assert bridge._device_identity(config) == "esp32:esp32.local"
+
+
+def _outbox_config(tmp_path, **values):
+    return {
+        "esp32_data_url": "http://192.168.1.50/data",
+        "aqualogic_backend_url": "https://api.example/api",
+        "device_key": "secret-test-key",
+        "timeout_seconds": 1,
+        "outbox_db_path": str(tmp_path / "bridge-state.sqlite3"),
+        "outbox_drain_batch_size": 5,
+        "outbox_max_records": 100,
+        "device_id": "esp32-test-01",
+        **values,
+    }
+
+
+def _live_fixture(temperature=26.75):
+    payload = json.loads(FIXTURE.read_text())
+    payload["temp_c"] = temperature
+    return payload
+
+
+def test_live_sample_is_persisted_before_first_cloud_post(tmp_path):
+    config = _outbox_config(tmp_path)
+    outbox = bridge.SensorOutbox(config["outbox_db_path"], config["outbox_max_records"])
+    captured = _live_fixture()
+    with patch.object(bridge, "fetch_json", return_value=captured), patch.object(bridge, "post_reading") as post:
+        bridge.poll_sensor_once(config, outbox)
+        post.assert_not_called()
+        queued = outbox.oldest(1)[0]
+
+        def confirm_already_written(_url, _key, payload, _timeout):
+            assert outbox.pending_count() == 1
+            assert json.loads(queued["payload_json"]) == payload
+            assert payload["sample_id"] == queued["sample_id"]
+            return False
+
+        post.side_effect = confirm_already_written
+        assert bridge.drain_outbox(config, outbox) == 1
+    assert outbox.pending_count() == 0
+    assert queued["source"] == "live"
+    assert queued["captured_at"] == json.loads(queued["payload_json"])["observed_at"]
+    assert config["device_key"].encode() not in outbox.path.read_bytes()
+
+
+def test_railway_outage_retains_multiple_live_samples_in_order(tmp_path, caplog):
+    config = _outbox_config(tmp_path)
+    outbox = bridge.SensorOutbox(config["outbox_db_path"], config["outbox_max_records"])
+    with patch.object(bridge, "fetch_json", side_effect=[_live_fixture(25), _live_fixture(26), _live_fixture(27)]):
+        for _ in range(3):
+            bridge.poll_sensor_once(config, outbox)
+    rows = outbox.oldest(10)
+    assert [json.loads(row["payload_json"])["temperature"] for row in rows] == [25.0, 26.0, 27.0]
+    assert len({row["sample_id"] for row in rows}) == 3
+
+    with caplog.at_level("ERROR", logger="aqualogic.bridge"), patch.object(
+        bridge, "post_reading", side_effect=bridge.URLError("Railway unavailable")
+    ) as post:
+        assert bridge.drain_outbox(config, outbox) == 0
+    assert post.call_count == 1
+    assert outbox.pending_count() == 3
+    failed = outbox.oldest(1)[0]
+    assert failed["attempt_count"] == 1
+    assert failed["last_attempt_at"]
+    assert failed["last_error"] == "network error"
+    assert failed["sample_id"] in caplog.text
+
+
+def test_outbox_survives_bridge_restart_and_replays_oldest_first(tmp_path):
+    config = _outbox_config(tmp_path)
+    first_process = bridge.SensorOutbox(config["outbox_db_path"], config["outbox_max_records"])
+    with patch.object(bridge, "fetch_json", side_effect=[_live_fixture(25), _live_fixture(26), _live_fixture(27)]):
+        for _ in range(3):
+            bridge.poll_sensor_once(config, first_process)
+    expected_rows = first_process.oldest(10)
+    old_observed_at = [json.loads(row["payload_json"])["observed_at"] for row in expected_rows]
+
+    restarted = bridge.SensorOutbox(config["outbox_db_path"], config["outbox_max_records"])
+    assert restarted.pending_count() == 3
+    delivered_payloads = []
+    with patch.object(bridge, "post_reading", side_effect=lambda _url, _key, payload, _timeout: delivered_payloads.append(payload.copy()) or False) as post:
+        assert bridge.drain_outbox(config, restarted) == 3
+    assert post.call_count == 3
+    assert [payload["temperature"] for payload in delivered_payloads] == [25.0, 26.0, 27.0]
+    assert [payload["observed_at"] for payload in delivered_payloads] == old_observed_at
+    assert [payload["sample_id"] for payload in delivered_payloads] == [row["sample_id"] for row in expected_rows]
+    assert restarted.pending_count() == 0
+
+
+def test_outbox_capacity_keeps_oldest_and_reports_new_sample_drop(tmp_path):
+    config = _outbox_config(tmp_path, outbox_max_records=2)
+    outbox = bridge.SensorOutbox(config["outbox_db_path"], 2)
+    with patch.object(bridge, "fetch_json", side_effect=[_live_fixture(25), _live_fixture(26), _live_fixture(27)]):
+        for _ in range(3):
+            bridge.poll_sensor_once(config, outbox)
+    assert outbox.pending_count() == 2
+    assert [json.loads(row["payload_json"])["temperature"] for row in outbox.oldest(10)] == [25.0, 26.0]
+    assert outbox.total_dropped() == 1
+
+
+def test_outbox_failure_uses_bounded_exponential_retry_wait():
+    now = datetime.now(timezone.utc)
+    row = {"attempt_count": 1, "last_attempt_at": now.isoformat()}
+    assert bridge._outbox_retry_wait_seconds(row, 15, now) == 30
+    row["attempt_count"] = 8
+    assert bridge._outbox_retry_wait_seconds(row, 60, now) == 300
+
+
+@pytest.mark.parametrize("status_code, expected", [(200, True), (201, False)])
+def test_post_reading_accepts_created_and_idempotent_http_responses(status_code, expected):
+    with patch.object(bridge, "_post_json_with_status", return_value=({"id": 12}, status_code)):
+        assert bridge.post_reading("https://api.example/api", "device-key", {"sample_id": "id"}, 1) is expected
+
+
+def test_deterministic_backlog_sample_id_and_ack_after_idempotent_confirmation():
+    config = drain_config()
+    config["device_id"] = "esp32-test-01"
+    ids = []
+    post_results = [bridge.URLError("response lost after commit"), True]
+
+    def post(_url, _key, payload, _timeout):
+        ids.append(payload["sample_id"])
+        result = post_results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    count = {"pending": 1, "dropped": 0, "oldest_seq": 42, "newest_seq": 42}
+    with patch.object(bridge, "fetch_backlog_count", return_value=count), \
+        patch.object(bridge, "fetch_backlog_batch", return_value=[backlog_record(42)]), \
+        patch.object(bridge, "post_reading", side_effect=post), \
+        patch.object(bridge, "_ack_backlog") as ack:
+        assert bridge.drain_backlog(config) == 0
+        ack.assert_not_called()
+        assert bridge.drain_backlog(config) == 1
+    assert ids[0] == ids[1] == bridge.esp32_backlog_sample_id(config, 42)
+    ack.assert_called_once_with(config, 42)
 
 
 def command(actuator, action, payload):
@@ -576,7 +749,7 @@ def test_drain_forwards_and_acks_each_batch():
     assert [call.args[0] for call in fetch.call_args_list] == [config, config]
     assert submit.call_count == 3
     assert [set(x.args[2]) for x in submit.call_args_list] == [
-        {"temperature", "ph", "turbidity", "tds", "observed_at"}] * 3
+        {"temperature", "ph", "turbidity", "tds", "observed_at", "sample_id"}] * 3
     assert [x.args[2]["temperature"] for x in submit.call_args_list] == [26.0, 26.0, 26.0]
     assert [call.args for call in ack.call_args_list] == [(config, 2), (config, 3)]
 
@@ -678,7 +851,7 @@ def test_drain_marks_estimates_but_strips_markers_at_the_wire(caplog):
         bridge.drain_backlog(config)
     assert "time_estimated=true" in caplog.text
     assert "even_spread" in caplog.text
-    assert all(set(x.args[2]) == {"temperature", "ph", "turbidity", "tds", "observed_at"} for x in submit.call_args_list)
+    assert all(set(x.args[2]) == {"temperature", "ph", "turbidity", "tds", "observed_at", "sample_id"} for x in submit.call_args_list)
 
 
 def test_drain_falls_back_to_poll_interval_window_without_anchor():

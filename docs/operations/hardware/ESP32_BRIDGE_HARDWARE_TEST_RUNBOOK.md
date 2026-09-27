@@ -1,7 +1,7 @@
 # ESP32 bridge hardware-test runbook
 
 Status: Temporary local-first sensor and actuator test procedure
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-27
 
 ## Safety and scope
 
@@ -100,8 +100,12 @@ Fill placeholders only with the local test values:
   "esp32_data_url": "http://<ESP32_LOCAL_IP>/data",
   "aqualogic_backend_url": "https://<DASHBOARD_TUNNEL>/api",
   "device_key": "<ONE_TIME_PROVISIONED_DEVICE_KEY>",
+  "device_id": "<REGISTERED_ESP32_DEVICE_ID>",
   "poll_interval_seconds": 15,
   "timeout_seconds": 5,
+  "outbox_db_path": "bridge-state.sqlite3",
+  "outbox_drain_batch_size": 5,
+  "outbox_max_records": 10000,
   "actuator_enabled": true,
   "pump_manual_test_enabled": false,
   "pump_completion_timeout_seconds": 30
@@ -124,7 +128,49 @@ The bridge validates and forwards sensor readings, polls pending commands,
 calls only the allowlisted local routes, and reports state/results. It does not
 print the device key or Wi-Fi configuration.
 
-## Offline backlog draining
+## Two offline persistence layers
+
+These layers protect different failure domains and are not merged:
+
+| Failure domain | Owner | Persistence |
+| --- | --- | --- |
+| ESP32 loses local router/bridge Wi-Fi | ESP32 | LittleFS firmware backlog, fetched and ACKed through the existing `/data/backlog*` routes |
+| Bridge can still poll ESP32, but Internet/Railway is unavailable | Python bridge | Local SQLite outbox for live `/data` samples |
+| Backend accepts a reading | Railway | Central PostgreSQL sensor history |
+
+The bridge inserts every successfully polled live payload into SQLite before
+attempting cloud upload. It retains the exact payload and capture timestamp;
+retries reuse the same UUID. SQLite lives at `outbox_db_path`; a relative path
+is resolved from the directory containing the bridge configuration. If omitted,
+`bridge-state.sqlite3` in that directory is used. The database contains only
+sensor payloads and queue metadata, never the device key, password, or backend
+secret. The database/WAL/SHM files are Git-ignored.
+
+The default replay batch is five oldest-first records per cycle, after the
+bridge has handled actuator work for that cycle. A failed oldest row remains
+queued and backs off exponentially from twice the configured polling interval,
+capped at 300 seconds; live ESP32 polling continues on its normal cadence. The
+default capacity is 10,000 pending live readings (about 41 hours at the 15-second
+default polling interval). At capacity, existing rows are retained, a drop
+counter is incremented, each rejected live sample is logged at error level,
+and that sample is not uploaded directly. Check queue state without starting a
+poll cycle:
+
+```powershell
+python bridge\esp32_bridge.py --config bridge\bridge-config.json --queue-status
+```
+
+`device_id` should match the ID returned when provisioning the ESP32. It is
+used to derive deterministic UUIDv5 IDs for firmware backlog sequences. If
+omitted, the bridge uses the configured ESP32 host as its stable source
+identity; setting the registered ID is preferred if the ESP32 URL may change.
+
+The SQLite outbox only protects samples successfully read by the bridge while
+local ESP32 connectivity remains. It does not cover an unreachable ESP32 or
+an outage before a live sample is read; the firmware's LittleFS backlog remains
+the separate owner of readings created while the ESP32 is disconnected.
+
+### ESP32 LittleFS backlog draining
 
 The firmware buffers readings to flash while it is offline from the bridge. On
 each successful live `/data` poll, the bridge checks
@@ -135,7 +181,10 @@ readings, and only then acks them on the device
 (`POST /data/backlog/ack?upto=<seq>`). Drain is capped at 500 records per poll
 cycle; a forward failure acks only the already-confirmed prefix, logs, and
 retries next cycle — unacked records are never lost and confirmed records are
-never re-sent. Drain failures never crash the bridge or slow the live poll.
+never re-sent. Backlog sample IDs are deterministic from the configured device
+identity and ESP32 sequence; a repeated record after a lost backend response is
+confirmed idempotently before its sequence is acked. ESP32 backlog rows are not
+copied into the bridge SQLite outbox.
 
 To verify: during an offline period, confirm the ESP32 is recording a backlog
 (`GET http://<esp32-ip>/data/backlog/count` shows `pending > 0`), then let the

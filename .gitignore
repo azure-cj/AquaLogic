@@ -12,6 +12,12 @@ backend/*.db
 backend/media/
 backend/backups/
 bridge/bridge-config.json
+bridge/bridge-state.sqlite3*
+
+# Local SQLite databases and journal/WAL sidecars
+*.db
+*.db-*
+*.sqlite*
 
 # Flutter/Dart
 mobile_app/.dart_tool/

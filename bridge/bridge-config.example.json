@@ -2,8 +2,12 @@
   "esp32_data_url": "http://ESP32_LOCAL_IP/data",
   "aqualogic_backend_url": "https://YOUR-BACKEND-TUNNEL.example",
   "device_key": "PASTE-THE-ONE-TIME-PROVISIONED-DEVICE-KEY-HERE",
+  "device_id": "REGISTERED_ESP32_DEVICE_ID",
   "poll_interval_seconds": 15,
   "timeout_seconds": 5,
+  "outbox_db_path": "bridge-state.sqlite3",
+  "outbox_drain_batch_size": 5,
+  "outbox_max_records": 10000,
   "actuator_enabled": true,
   "pump_manual_test_enabled": false,
   "pump_completion_timeout_seconds": 30

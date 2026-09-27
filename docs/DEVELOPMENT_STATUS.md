@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-09-26
+Last reviewed: 2026-09-27
 
 ## Completed and working locally
 
@@ -52,6 +52,14 @@ Last reviewed: 2026-09-26
   interval, since the ESP32 has no real-time clock. Estimates are flagged
   `time_estimated=true` in logs/docs only; persisting the flag is a backend
   follow-up (see `DECISIONS.md`).
+- M2 bridge store-and-forward is implemented: each live `/data` sample is
+  persisted before Railway upload in an ignored, bridge-local SQLite outbox;
+  bounded oldest-first replay retains capture timestamps and UUIDs through
+  restart. Backend ingestion accepts optional UUID `sample_id` values and
+  enforces `(device_id, sample_id)` uniqueness. ESP32 LittleFS backlog records
+  remain device-owned and receive deterministic IDs for retry safety without
+  changing their JSON or ACK contract. See the hardware bridge runbook and
+  decision record for the two outage layers, capacity behavior, and config.
 - v1 admin-only actuator bridge controls are implemented for UV, normal LED, and
   fish feeder, plus a guarded Pump A/B manual-test phase. Pump commands use
   expiring server records, fixed device/tank mapping, firmware-configured mL
@@ -666,6 +674,22 @@ and swiped-away app states.
   advisory's React Server Components mode, but the package has no patched 7.x
   release; keep this deployment exception under review until upstream ships a
   compatible fix.
+
+## Validation checkpoint — 2026-09-27 (M2 bridge store-and-forward)
+
+- Bridge suite: `python -m pytest bridge/tests -q` passed with 73 tests,
+  including write-ahead persistence, cloud outage retention, oldest-first
+  recovery, restart survival, bounded capacity, retry backoff, deterministic
+  backlog IDs, ACK safety, and actuator ordering.
+- Backend suite: `python -m pytest -q` passed with 216 tests, including the new
+  device-ingestion idempotency coverage. A focused rerun of ingestion and
+  migration-capacity tests passed with 10 tests.
+- A fresh temporary SQLite database upgraded successfully through Alembic head
+  `0019_sensor_reading_sample_id`; Python compilation and `git diff --check`
+  passed.
+- Live Railway response-loss and laptop-reboot checks still require the
+  configured operational bridge and backend. The software tests do not claim
+  an end-to-end cloud deployment test.
 
 ## Validation checkpoint — 2026-09-25 (M4 Alerts/Monitoring)
 

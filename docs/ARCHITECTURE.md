@@ -1,7 +1,7 @@
 # AquaLogic Architecture
 
 Status: Current implementation architecture
-Last reviewed: 2026-09-26
+Last reviewed: 2026-09-27
 
 ## System overview
 
@@ -184,6 +184,22 @@ volume-setting route, so the dashboard displays the firmware-reported volume
 and does not accept a fake millisecond dose value. Dissolved oxygen and
 ammonia remain nullable/unavailable, are skipped by threshold evaluation, and
   have no actuator or command path.
+
+Sensor outage persistence has two separate owners and failure domains:
+
+1. ESP32 LittleFS owns readings created while the ESP32 cannot reach its local
+   router/bridge network. The bridge fetches `/data/backlog` and acknowledges a
+   contiguous confirmed prefix only after backend acceptance.
+2. The bridge's local SQLite outbox owns live readings already obtained from
+   `/data` while local ESP32 connectivity remains, but Internet/Railway upload
+   is unavailable. It persists each exact payload before upload and retries
+   oldest first with a stable sample ID.
+3. Railway PostgreSQL remains the central permanent history after ingestion.
+
+The two local queues are not merged: the bridge SQLite outbox never stores
+ESP32-owned backlog records, and the ESP32 backlog format/ACK contract does not
+change. This bridge queue does not help when the bridge cannot reach the ESP32
+or when local samples are never obtained.
 
    Same-device, same-pump dispense creation is serialized on the registered
    device row: PostgreSQL uses a row lock and SQLite development uses its
