@@ -5,9 +5,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ActuatorControlPanel, StaffActuatorNotice } from './ActuatorControlPanel';
+import {
+  ActuatorControlPanel,
+  StaffActuatorNotice,
+  formatCooldownClearsAt,
+  formatLastDispensed,
+  formatNextScheduledDose,
+  formatPumpScheduleEvent,
+  formatPumpTimestamp,
+} from './ActuatorControlPanel';
 
 vi.mock('@/shared/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/api/client')>();
@@ -134,6 +142,8 @@ function renderPanel(variant: 'full' | 'summary' = 'full') {
 }
 
 describe('admin actuator controls', () => {
+  afterEach(() => vi.useRealTimers());
+
   beforeEach(() => {
     vi.mocked(api).mockReset();
     vi.mocked(api).mockImplementation((path: string, init?: RequestInit) => {
@@ -155,9 +165,52 @@ describe('admin actuator controls', () => {
     });
   });
 
+  it('formats pump timestamps in Manila time and handles missing or sentinel values', () => {
+    vi.setSystemTime(new Date('2026-09-30T10:00:00Z'));
+    expect(formatPumpTimestamp('2026-09-30T21:27:05+08:00')).toBe('Today, 9:27 PM');
+    expect(formatPumpTimestamp('2026-10-01T08:00:00+08:00')).toBe('Oct 1, 2026, 8:00 AM');
+    vi.setSystemTime(new Date('2026-09-30T18:00:00Z'));
+    expect(formatPumpTimestamp('2026-10-01T02:27:05+08:00')).toBe('Today, 2:27 AM');
+    expect(formatPumpTimestamp('Never')).toBe('Time unavailable');
+    expect(formatPumpTimestamp('2026-02-30T08:00:00+08:00')).toBe('Time unavailable');
+    expect(formatLastDispensed('Never')).toBe('No dispense yet');
+    expect(formatLastDispensed('Time not synchronized')).toBe('Device time not synced');
+    expect(formatLastDispensed('12:34:56')).toBe('12:34 PM (date unavailable)');
+    expect(formatLastDispensed(null)).toBe('No dispense yet');
+    expect(formatLastDispensed('')).toBe('No dispense yet');
+    expect(formatLastDispensed('not a timestamp')).toBe('Time unavailable');
+  });
+
+  it('distinguishes cooldown availability from schedule and device-time availability', () => {
+    vi.setSystemTime(new Date('2026-09-30T10:00:00Z'));
+    expect(formatCooldownClearsAt('2026-09-30T17:00:00+08:00', true)).toBe('Now');
+    expect(formatCooldownClearsAt('2026-10-01T08:00:00+08:00', true)).toBe('Oct 1, 2026, 8:00 AM');
+    expect(formatCooldownClearsAt('Never', true)).toBe('Unavailable');
+    expect(formatCooldownClearsAt(null, false)).toBe('Unavailable until device time syncs');
+    const enabledSchedule = [{ enabled: true, time: '08:00' }];
+    const disabledSchedule = [{ enabled: false, time: '08:00' }];
+    expect(formatNextScheduledDose('2026-09-30T21:27:05+08:00', true, enabledSchedule)).toBe('Today, 9:27 PM');
+    expect(formatNextScheduledDose('2026-09-30T21:27:05+08:00', false, enabledSchedule)).toBe('Unavailable until device time syncs');
+    expect(formatNextScheduledDose('2026-09-30T21:27:05+08:00', false, disabledSchedule)).toBe('No enabled dose time');
+    expect(formatNextScheduledDose('2026-09-30T21:27:05+08:00', true, disabledSchedule)).toBe('No enabled dose time');
+  });
+
+  it('translates known schedule events and preserves unknown device details', () => {
+    expect(formatPumpScheduleEvent('Pump A scheduled dose skipped: Two-hour chemical-dose cooldown until 2026-09-30T21:00:00+08:00').message)
+      .toBe('Scheduled dose skipped because the two-hour minimum interval has not passed.');
+    expect(formatPumpScheduleEvent('Pump A scheduled dose skipped: could not persist occurrence').message)
+      .toBe('Scheduled dose skipped because the system could not confirm it was safe to run.');
+    const unknown = 'Unexpected pump event detail';
+    expect(formatPumpScheduleEvent(unknown)).toEqual({
+      message: 'A pump schedule update needs attention. Review the pump status before continuing.',
+      detail: unknown,
+    });
+  });
+
   it('shows equipment freshness and the scoped UV, LED, and feeder controls', async () => {
     renderPanel();
     expect(await screen.findByText('Equipment status')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh equipment status' })).toBeInTheDocument();
     expect(screen.getByText('Up to date')).toBeInTheDocument();
     expect(screen.queryByText('esp32-control-01')).not.toBeInTheDocument();
     expect(screen.getByText('Online')).toBeInTheDocument();
@@ -166,6 +219,22 @@ describe('admin actuator controls', () => {
     expect(screen.getByRole('heading', { name: 'Fish feeder' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Syringe Pump A' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Syringe Pump B' })).toBeInTheDocument();
+    expect(screen.getAllByText('Idle')).toHaveLength(2);
+    expect(screen.getAllByText('No dispense yet')).toHaveLength(2);
+    expect(screen.getAllByText('Synced · Asia/Manila')).toHaveLength(2);
+    expect(screen.getAllByText('No enabled dose time')).toHaveLength(2);
+    expect(screen.getAllByText('Dispense count')).toHaveLength(2);
+    expect(screen.getAllByText('Last dispense')).toHaveLength(2);
+    expect(screen.getAllByText('Estimated remaining volume')).toHaveLength(2);
+    expect(screen.getAllByText('Fill check')).toHaveLength(2);
+    expect(screen.getAllByText('Schedule time')).toHaveLength(2);
+    expect(screen.getAllByText('Cooldown clears')).toHaveLength(2);
+    expect(screen.getAllByText('Next scheduled dose')).toHaveLength(2);
+    expect(screen.getAllByText('Chemical dosing schedule')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Save dosing schedule' })).toHaveLength(2);
+    expect(screen.getByText('Maintenance testing uses water only or an empty syringe — never chemicals.')).toBeInTheDocument();
+    expect(screen.getByText('A test dispense physically runs the pump for one preset cycle. Stay beside the equipment and be ready to press Stop.')).toBeInTheDocument();
+    expect(screen.getByText('Scheduled doses run at the configured times, not in response to pH. Both pumps share a two-hour minimum interval.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Feed now' })).toBeInTheDocument();
     expect(screen.getByText('Up to 3 daily times')).toBeInTheDocument();
   });
@@ -173,11 +242,45 @@ describe('admin actuator controls', () => {
   it('keeps the tank-page snapshot compact and defers history to the full route', async () => {
     renderPanel('summary');
 
-    expect(await screen.findByRole('heading', { name: 'Actuator snapshot' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Equipment snapshot' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Syringe pumps' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Full controls$/ })).toHaveAttribute('href', '/admin/tanks/1/actuators');
     expect(screen.queryByRole('heading', { name: 'Command history' })).not.toBeInTheDocument();
     expect(vi.mocked(api).mock.calls.some(([path]) => path.includes('/actuators/history'))).toBe(false);
+  });
+
+  it('does not present an enabled schedule as missing while the device clock is unsynced', async () => {
+    const unsyncedStatus = {
+      ...status,
+      actuators: status.actuators.map((item) => item.actuator === 'pump_a'
+        ? { ...item, state: {
+          ...item.state,
+          clock_synced: false,
+          schedule: [
+            { enabled: true, time: '08:00' },
+            { enabled: false, time: '12:00' },
+            { enabled: false, time: '18:00' },
+          ],
+          next_dose_at: null,
+        } }
+        : item),
+    };
+    vi.mocked(api).mockImplementation((path: string) => {
+      if (path === '/tanks/1/actuators/status') return Promise.resolve(unsyncedStatus);
+      if (path === '/tanks/1/actuators/history?page=1&page_size=10') {
+        return Promise.resolve({ items: [], page: 1, page_size: 10, total: 0, total_pages: 0, has_previous: false, has_next: false, summary: emptySummary });
+      }
+      return Promise.reject(new Error(`Unexpected path ${path}`));
+    });
+
+    renderPanel();
+    const pumpCard = (await screen.findByRole('heading', { name: 'Syringe Pump A' })).closest('article');
+    expect(pumpCard).not.toBeNull();
+    const pump = within(pumpCard!);
+    expect(pump.getByText('Not synced — dosing paused')).toBeInTheDocument();
+    expect(pump.getAllByText('Unavailable until device time syncs')).toHaveLength(2);
+    expect(pump.queryByText('Not scheduled')).not.toBeInTheDocument();
+    expect(pump.queryByText('No enabled dose time')).not.toBeInTheDocument();
   });
 
   it('requires confirmation and queues a feed-now command for the registered device', async () => {
@@ -194,20 +297,23 @@ describe('admin actuator controls', () => {
     expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();
   });
 
-  it('requires confirmation for a water-only pump test and retract', async () => {
+  it('requires confirmation for a water-only test dispense and retract', async () => {
     const user = userEvent.setup();
     renderPanel();
-    expect((await screen.findAllByText('Configured-volume dispense')).length).toBe(2);
+    expect((await screen.findAllByText('Preset volume per dispense')).length).toBe(4);
     expect(screen.getAllByText('1.00 mL')).toHaveLength(4);
-    await user.click(screen.getByRole('button', { name: 'Syringe Pump A water-only test' }));
+    await user.click(screen.getByRole('button', { name: 'Syringe Pump A water-only test dispense' }));
     let dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('water-only test');
-    expect(dialog).toHaveTextContent('configured 1.00 mL');
+    expect(dialog).toHaveTextContent('physically runs the pump for one preset dispense cycle');
+    expect(dialog).toHaveTextContent('1.00 mL setting');
+    expect(dialog).toHaveTextContent('water or an empty syringe only — never chemicals');
+    expect(dialog).toHaveTextContent('estimated remaining volume may update');
     expect(dialog).toHaveTextContent('does not start the chemical-dose cooldown');
     expect(dialog).toHaveTextContent('Tank: Tank 1');
-    expect(dialog).toHaveTextContent('esp32-control-01 (online)');
-    await user.click(within(dialog).getByRole('button', { name: 'Run water-only test' }));
-    await screen.findByText('Syringe Pump A water-only test request queued. The system will update its status after processing.');
+    expect(dialog).toHaveTextContent('Equipment: Online');
+    expect(dialog).not.toHaveTextContent('esp32-control-01');
+    await user.click(within(dialog).getByRole('button', { name: 'Test dispense' }));
+    await screen.findByText('Syringe Pump A water-only test dispense request queued. The system will update its status after processing.');
 
     await user.click(screen.getByRole('button', { name: 'Syringe Pump A retract' }));
     dialog = screen.getByRole('alertdialog');
@@ -220,23 +326,25 @@ describe('admin actuator controls', () => {
     expect(calls.some(([, init]) => init?.body?.toString().includes('"action":"retract"'))).toBe(true);
   });
 
-  it('confirms a fixed-volume chemical pump schedule before queuing it', async () => {
+  it('confirms a chemical dosing schedule before queuing it', async () => {
     const user = userEvent.setup();
     renderPanel();
     const pumpCard = (await screen.findByRole('heading', { name: 'Syringe Pump A' })).closest('article');
     expect(pumpCard).not.toBeNull();
     const pump = within(pumpCard!);
-    await user.click(pump.getByRole('checkbox', { name: 'Slot 1' }));
-    await user.click(pump.getByRole('button', { name: 'Save chemical schedule' }));
+    await user.click(pump.getByRole('checkbox', { name: 'Dose time 1' }));
+    await user.click(pump.getByRole('button', { name: 'Save dosing schedule' }));
 
     const dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('fixed 1.00 mL doses');
+    expect(dialog).toHaveTextContent('preset 1.00 mL dispense setting');
     expect(dialog).toHaveTextContent('08:00 Asia/Manila time');
-    expect(dialog).toHaveTextContent('shared two-hour cooldown');
+    expect(dialog).toHaveTextContent('Both pumps share a two-hour minimum interval');
+    expect(dialog).toHaveTextContent('not in response to pH');
+    expect(dialog).toHaveTextContent('is skipped and is not made up later');
     expect(vi.mocked(api).mock.calls.some(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST')).toBe(false);
 
-    await user.click(within(dialog).getByRole('button', { name: 'Enable chemical schedule' }));
-    await screen.findByText('Syringe Pump A schedule request queued. The system will update its status after processing.');
+    await user.click(within(dialog).getByRole('button', { name: 'Enable chemical dosing schedule' }));
+    await screen.findByText('Syringe Pump A dosing schedule request queued. The system will update its status after processing.');
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
     expect(call?.[1]?.body).toContain('"action":"schedule"');
@@ -266,17 +374,17 @@ describe('admin actuator controls', () => {
     expect(pumpCard).not.toBeNull();
     const pump = within(pumpCard!);
     expect(pump.getByText('0.00 / 5.00 mL')).toBeInTheDocument();
-    expect(pump.getByText('Required')).toBeInTheDocument();
-    expect(pump.getByText('2026-08-15T14:00:00+08:00')).toBeInTheDocument();
-    expect(pump.getByText('2026-08-15T12:00:00+08:00')).toBeInTheDocument();
-    expect(pump.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
+    expect(pump.getByText('Check and confirm')).toBeInTheDocument();
+    expect(pump.getByText('Now')).toBeInTheDocument();
+    expect(pump.getByText('No enabled dose time')).toBeInTheDocument();
+    expect(pump.getByRole('button', { name: 'Syringe Pump A water-only test dispense' })).toBeDisabled();
 
     await user.click(pump.getByRole('button', { name: 'Syringe Pump A confirm refill' }));
     const dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('Physically check and refill Syringe Pump A to 5.00 mL');
+    expect(dialog).toHaveTextContent('Physically check the syringe and refill it to 5.00 mL if needed');
     expect(dialog).toHaveTextContent('does not move the motor');
     expect(dialog).toHaveTextContent('does not move the motor or reset the two-hour cooldown');
-    expect(dialog).toHaveTextContent('2026-08-15T14:00:00+08:00');
+    expect(dialog).toHaveTextContent('Cooldown clears: Now');
     await user.click(within(dialog).getByRole('button', { name: 'Confirm refill' }));
     await screen.findByText('Syringe Pump A refill confirmation request queued. The system will update its status after processing.');
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
@@ -285,7 +393,7 @@ describe('admin actuator controls', () => {
     expect(call?.[1]?.body).toContain('\"expires_in_seconds\":120');
   });
 
-  it('shows a blocked scheduled dose inline and as an alert when status changes', async () => {
+  it('translates a blocked scheduled dose inline and in its alert when status changes', async () => {
     const user = userEvent.setup();
     const blockedMessage = 'Scheduled dose skipped: shared two-hour cooldown is active.';
     let statusReads = 0;
@@ -313,8 +421,9 @@ describe('admin actuator controls', () => {
     await user.click(await screen.findByRole('button', { name: 'Feed now' }));
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Feed now' }));
     await screen.findAllByText('Manual feed request queued. The system will update its status after processing.');
-    expect(await screen.findAllByText(blockedMessage)).not.toHaveLength(0);
-    await waitFor(() => expect(document.querySelector('[data-sonner-toast]')).toHaveTextContent(blockedMessage));
+    const operatorMessage = 'Scheduled dose skipped because the two-hour minimum interval has not passed.';
+    expect(await screen.findAllByText(operatorMessage)).not.toHaveLength(0);
+    await waitFor(() => expect(document.querySelector('[data-sonner-toast]')).toHaveTextContent(operatorMessage));
   });
 
   it('paginates command history without losing the page context', async () => {
@@ -391,7 +500,7 @@ describe('admin actuator controls', () => {
     await user.click(screen.getByRole('button', { name: 'View details' }));
     expect(screen.getByText('Command ID')).toBeInTheDocument();
     expect(screen.getByText('Equipment result')).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter history by actuator' }), 'uv');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter history by equipment' }), 'uv');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter history by status' }), 'succeeded');
     await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => path === '/tanks/1/actuators/history?page=1&page_size=10&actuator=uv&status=succeeded')).toBe(true));
   });
@@ -481,7 +590,7 @@ describe('admin actuator controls', () => {
     renderPanel();
     expect(await screen.findByText('Equipment connection is offline or stale')).toBeInTheDocument();
     expect(screen.getByText('Light and feeder requests may expire while waiting. Pump maintenance checks are available only when the connection is online.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test dispense' })).toBeDisabled();
   });
 
   it('locks only the uncertain pump dispense and gates administrator physical verification', async () => {
@@ -530,17 +639,17 @@ describe('admin actuator controls', () => {
     });
 
     renderPanel();
-    expect(await screen.findByText('Outcome unknown — physical verification required.')).toBeInTheDocument();
-    expect(screen.getByText('The earlier dispense may have reached the equipment. Verify the pump locally before another dispense. Stop remains available; this verification clears only the software lock.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test' })).toBeDisabled();
+    expect(await screen.findByText('The previous dispense may have happened. Check the pump in person before another dispense.')).toBeInTheDocument();
+    expect(screen.getByText('Stop remains available while the equipment connection is online. Recording this check only clears the software lock; it does not prove how much was previously dispensed.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Syringe Pump A water-only test dispense' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Syringe Pump A stop' })).toBeEnabled();
     expect(screen.getAllByText('Outcome unknown').length).toBeGreaterThanOrEqual(2);
 
-    await user.click(screen.getByRole('button', { name: 'Record physical verification' }));
+    await user.click(screen.getByRole('button', { name: 'Record pump check' }));
     const dialog = screen.getByRole('alertdialog');
-    expect(dialog).toHaveTextContent('does not prove the exact historical dose');
-    await user.click(within(dialog).getByRole('button', { name: 'Record verification' }));
-    await screen.findByText('Physical verification recorded. The historical command remains Outcome unknown; the software pump lock is cleared.');
+    expect(dialog).toHaveTextContent('does not prove how much liquid was previously dispensed');
+    await user.click(within(dialog).getByRole('button', { name: 'Record pump check' }));
+    await screen.findByText('Pump check recorded. The historical command remains Outcome unknown; the software lock is cleared, and the amount previously dispensed is still unknown.');
   });
 
   it('renders a non-usable staff notice without fetching actuator APIs', () => {

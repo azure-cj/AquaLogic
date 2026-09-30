@@ -71,7 +71,8 @@ describe('dedicated actuator control page', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'Actuator control center' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tank equipment controls' })).toBeInTheDocument();
+    expect(screen.getByText('Manage this tank’s lights, feeder, pump maintenance, and dosing schedules.')).toBeInTheDocument();
     expect(await screen.findByTestId('actuator-panel')).toHaveTextContent('Panel for tank 7 · full');
     expect(screen.getByText(/Tank operations · Quarantine tank/)).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/tanks/7');
@@ -82,7 +83,7 @@ describe('dedicated actuator control page', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'Actuator controls' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Equipment controls' })).toBeInTheDocument();
     expect(screen.getByText('Administrator access required')).toBeInTheDocument();
     expect(api).not.toHaveBeenCalled();
   });
