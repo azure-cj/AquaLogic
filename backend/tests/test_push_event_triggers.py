@@ -131,6 +131,8 @@ def test_alert_creation_enqueues_once_per_alert_identity(client, auth_headers, d
     assert len(events) == 1
     assert events[0].event_key == f"water_quality_alert:{alert.id}:created"
     assert events[0].source_id == str(alert.id)
+    assert "Alert event lifecycle" in events[0].body
+    assert "Temperature" in events[0].body
     assert _delivery_count(db_session, events[0].id) == 1
 
     # Escalation and later abnormal readings update this Alert identity only.
@@ -205,6 +207,8 @@ def test_new_monitoring_outage_enqueues_once_and_snapshots_recipients(
     events = _events(db_session, "monitoring_incident")
     assert len(events) == 1
     assert events[0].event_key == f"monitoring_incident:{incident.id}:opened"
+    assert tank.name in events[0].body
+    assert "stopped reporting" in events[0].body
     assert _delivery_count(db_session, events[0].id) == 1
 
     repeated = detect_monitoring_incidents(
@@ -237,6 +241,8 @@ def test_reporting_recovery_enqueues_once_only_after_successful_transition(
     events = _events(db_session, "monitoring_recovered")
     assert len(events) == 1
     assert events[0].event_key == f"monitoring_incident:{incident.id}:recovered"
+    assert tank.name in events[0].body
+    assert "resumed reporting" in events[0].body
     assert _delivery_count(db_session, events[0].id) == 1
 
     assert (

@@ -1,6 +1,6 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -149,6 +149,7 @@ describe('dedicated tank workspace', () => {
 
   it('shows operational and Species Care status as separate concepts', async () => {
     renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Monitor' }));
 
     expect(
       await screen.findByRole('heading', { name: 'Species Care' }),
@@ -162,8 +163,9 @@ describe('dedicated tank workspace', () => {
     expect(screen.getByText('Current 25.0 °C')).toBeInTheDocument();
     expect(screen.queryByText('Dissolved oxygen')).not.toBeInTheDocument();
     expect(screen.getByText('Operational water status')).toBeInTheDocument();
-    expect(screen.getByText('Operational status')).toBeInTheDocument();
-    expect(screen.getByText(/global monitoring thresholds/)).toBeInTheDocument();
+    expect(screen.getByText('Species Care status')).toBeInTheDocument();
+    expect(screen.getByText('Live care evaluation')).toBeInTheDocument();
+    expect(screen.getByText('Operational alerts')).toBeInTheDocument();
     expect(screen.getByText(/does not assess fish-to-fish compatibility/)).toBeInTheDocument();
     expect(screen.getByText('Current readings')).toBeInTheDocument();
   });
@@ -185,6 +187,25 @@ describe('dedicated tank workspace', () => {
     expect(screen.getByText('Last known temperature')).toBeInTheDocument();
     expect(screen.getByText('Last known pH')).toBeInTheDocument();
     expect(screen.queryByText('Current readings')).not.toBeInTheDocument();
+  });
+
+  it('labels a null sensor value unavailable instead of implying the sensor is absent', async () => {
+    operationsResult = {
+      ...operations,
+      latest_reading: { ...operations.latest_reading, temperature: null },
+      parameter_statuses: { ...operations.parameter_statuses, temperature: 'unavailable' },
+    };
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Monitor' }));
+
+    expect(await screen.findByText('Current readings')).toBeInTheDocument();
+    const readingsPanel = screen.getByText('Current readings').closest('.panel');
+    expect(readingsPanel).not.toBeNull();
+    const temperatureRow = within(readingsPanel as HTMLElement).getByText('Temperature').closest('.reading-item');
+    expect(temperatureRow?.querySelector('strong')).toHaveTextContent('Unavailable');
+    expect(temperatureRow).toHaveTextContent('Unavailable');
+    expect(temperatureRow).not.toHaveTextContent('Not installed');
   });
 
   it('opens retirement confirmation and completes retirement', async () => {

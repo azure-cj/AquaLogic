@@ -1,4 +1,4 @@
-import { api, clearSession } from '@/shared/api/client';
+import { ApiError, api, clearSession } from '@/shared/api/client';
 import { prefetchAdminRoute } from '@/app/route-loaders';
 import type { Alert } from '@/shared/api/models';
 import {
@@ -129,7 +129,23 @@ export function AdminShell() {
       </main>
     );
   }
-  if (me.isError) return <Navigate to="/admin/login" replace />;
+  if (me.isError) {
+    if (me.error instanceof ApiError && me.error.status === 401) {
+      return <Navigate to="/admin/login" replace />;
+    }
+    return (
+      <main className="session-check">
+        <Brand />
+        <div className="state-block state-error" role="alert">
+          <strong>Could not verify your session</strong>
+          <p>Check your connection and try again. Your saved sign-in session has been kept.</p>
+          <button className="button button-secondary" type="button" onClick={() => void me.refetch()}>
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
   if (me.data!.must_change_password) return <Navigate to="/admin/change-password" replace />;
 
   const admin = me.data!.role === 'admin';

@@ -644,7 +644,7 @@ export function TankDetail() {
                   {measurements.map(([key, label, unit, decimals]) => (
                     <div className="reading-item" key={key}>
                       <small>{isLastKnown && reading[key] !== null ? `Last known ${label === 'pH' ? 'pH' : label.toLowerCase()}` : label}</small>
-                      <strong>{reading[key] === null ? 'Not installed' : formatReading(reading[key], unit, decimals)}</strong>
+                      <strong>{reading[key] === null ? 'Unavailable' : formatReading(reading[key], unit, decimals)}</strong>
                       <StatusBadge value={operations.data!.parameter_statuses[key]} />
                     </div>
                   ))}

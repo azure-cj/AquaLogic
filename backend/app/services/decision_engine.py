@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Alert, AlertSeverity, SensorReading, ThresholdConfig, ThresholdRevision
+from app.models import Alert, AlertSeverity, SensorReading, Tank, ThresholdConfig, ThresholdRevision
 from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
@@ -120,6 +120,8 @@ def ingest_reading(
                 )
                 db.add(alert)
                 db.flush()
+                tank = db.get(Tank, tank_id)
+                tank_name = tank.name if tank is not None else f"Tank {tank_id}"
                 enqueue_push_notification(
                     db,
                     event_type="water_quality_alert",
@@ -127,8 +129,8 @@ def ingest_reading(
                     tank_id=tank_id,
                     title="Water-quality alert",
                     body=(
-                        f"A new {severity.value} water-quality alert needs attention. "
-                        "Open AquaLogic for details."
+                        f"{tank_name}: {parameter.replace('_', ' ').title()} has a new "
+                        f"{severity.value} water-quality alert. Open AquaLogic for details."
                     ),
                     now=reading.received_at,
                 )

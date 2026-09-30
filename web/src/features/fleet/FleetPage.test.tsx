@@ -1,6 +1,6 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,5 +71,58 @@ describe('fleet reporting clarity', () => {
     expect(screen.getByText('Water suitable')).toBeInTheDocument();
     expect(screen.getByText('Species Care (water)')).toBeInTheDocument();
     expect(screen.getAllByText('Monitoring outage recorded').length).toBeGreaterThan(0);
+  });
+
+  it('filters Needs action to include warnings, critical tanks, and offline tanks', async () => {
+    const withStatuses = [
+      fleet[0],
+      { ...fleet[0], id: 2, public_id: 'tank-warning', name: 'Warning tank', status: 'warning' as const },
+      { ...fleet[0], id: 3, public_id: 'tank-critical', name: 'Critical tank', status: 'critical' as const },
+      { ...fleet[0], id: 4, public_id: 'tank-normal', name: 'Normal tank', status: 'normal' as const },
+    ];
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') return withStatuses;
+      if (path === '/alerts/history?resolved=false') return [];
+      return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
+    });
+
+    renderPage();
+    const needsAction = await screen.findByRole('button', { name: /Needs action · 3/ });
+    fireEvent.click(needsAction);
+
+    expect(needsAction).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('link', { name: /Display tank/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /Warning tank/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /Critical tank/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /Normal tank/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps cached fleet data visible after a refresh failure', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') throw new TypeError('Failed to fetch');
+      if (path === '/alerts/history?resolved=false') return [];
+      return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(['fleet'], fleet);
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <Fleet />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Fleet refresh failed/)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Display tank/ }).length).toBeGreaterThan(0);
+  });
+
+  it('does not show zero fleet counts before the first response', () => {
+    vi.mocked(api).mockImplementation(() => new Promise(() => {}));
+    renderPage();
+    expect(screen.getByRole('button', { name: /Total tanks/ })).toHaveTextContent('—');
   });
 });

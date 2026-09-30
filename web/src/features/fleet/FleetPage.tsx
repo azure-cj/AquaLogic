@@ -7,6 +7,7 @@ import {
   ErrorState,
   FleetStatus,
   LoadingState,
+  Notice,
   PageHeader,
   Panel,
   StatusBadge,
@@ -43,7 +44,7 @@ function StatCard({
   onClick,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   detail: string;
   status?: FleetStatus;
   active: boolean;
@@ -176,7 +177,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
 }
 
 export function Fleet() {
-  const [filter, setFilter] = useState<'all' | FleetStatus>('all');
+  const [filter, setFilter] = useState<'all' | FleetStatus | 'needsAction'>('all');
   const [uptimeRange, setUptimeRange] =
     useState<Exclude<AnalyticsRange, 'custom'>>('24h');
   const fleet = useQuery({
@@ -197,7 +198,11 @@ export function Fleet() {
 
   const tanks = fleet.data ?? [];
   const counts = fleetCounts(tanks);
-  const filtered = filter === 'all' ? tanks : tanks.filter((tank) => tank.status === filter);
+  const filtered = filter === 'all'
+    ? tanks
+    : filter === 'needsAction'
+      ? tanks.filter((tank) => tank.status !== 'normal')
+      : tanks.filter((tank) => tank.status === filter);
   const uptimeValues = analytics.data?.uptime ?? [];
   const averageUptime = analytics.data?.uptime_comparison.current ?? 0;
   const uptimeChange = analytics.data?.uptime_comparison.change ?? 0;
@@ -262,17 +267,20 @@ export function Fleet() {
         title="Fleet command center"
         description="Monitor tank health, species care, alerts, and reporting across the fleet."
       />
+      {fleet.isError && fleet.data && (
+        <Notice tone="warning">Fleet refresh failed. Showing the last successfully loaded data.</Notice>
+      )}
       <div className="stats-grid">
         <StatCard
           label="Total tanks"
-          value={counts.total}
+          value={fleet.data ? counts.total : '—'}
           detail="Registered fleet"
           active={filter === 'all'}
           onClick={() => setFilter('all')}
         />
         <StatCard
           label="Normal"
-          value={counts.normal}
+          value={fleet.data ? counts.normal : '—'}
           detail="Within configured range"
           status="normal"
           active={filter === 'normal'}
@@ -280,7 +288,7 @@ export function Fleet() {
         />
         <StatCard
           label="Warning"
-          value={counts.warning}
+          value={fleet.data ? counts.warning : '—'}
           detail="Needs attention soon"
           status="warning"
           active={filter === 'warning'}
@@ -288,7 +296,7 @@ export function Fleet() {
         />
         <StatCard
           label="Critical"
-          value={counts.critical}
+          value={fleet.data ? counts.critical : '—'}
           detail="Immediate action required"
           status="critical"
           active={filter === 'critical'}
@@ -296,7 +304,7 @@ export function Fleet() {
         />
         <StatCard
           label="Offline"
-          value={counts.offline}
+          value={fleet.data ? counts.offline : '—'}
           detail="No recent report"
           status="offline"
           active={filter === 'offline'}
@@ -314,17 +322,18 @@ export function Fleet() {
                 All tanks
               </button>
               <button
-                className={filter !== 'all' ? 'active' : ''}
-                onClick={() => filter === 'all' && setFilter('warning')}
+                className={filter === 'needsAction' ? 'active' : ''}
+                aria-pressed={filter === 'needsAction'}
+                onClick={() => setFilter((current) => current === 'needsAction' ? 'all' : 'needsAction')}
               >
                 Needs action · {counts.warning + counts.critical + counts.offline}
               </button>
             </div>
           }
         >
-          {fleet.isLoading ? (
+          {!fleet.data && fleet.isLoading ? (
             <LoadingState label="Loading fleet status…" />
-          ) : fleet.isError ? (
+          ) : !fleet.data && fleet.isError ? (
             <ErrorState message="Fleet data could not be loaded." retry={() => fleet.refetch()} />
           ) : (
             <FleetTable tanks={filtered} />
@@ -333,16 +342,23 @@ export function Fleet() {
         <div className="fleet-rail">
           <Panel
             title="Recent alerts"
-            description={`${alerts.data?.length ?? 0} unresolved across the fleet`}
+            description={alerts.data
+              ? `${alerts.data.length} unresolved across the fleet`
+              : alerts.isError
+                ? 'Unresolved alert count unavailable'
+                : 'Loading unresolved alert count…'}
             action={
               <Link className="text-link" to="/admin/alerts">
                 View all <ChevronRight size={15} />
               </Link>
             }
           >
-            {alerts.isLoading ? (
+            {alerts.isError && alerts.data && (
+              <Notice tone="warning">Alert refresh failed. Showing the last successfully loaded alerts.</Notice>
+            )}
+            {!alerts.data && alerts.isLoading ? (
               <LoadingState label="Loading alerts…" />
-            ) : alerts.isError ? (
+            ) : !alerts.data && alerts.isError ? (
               <ErrorState message="Alerts are temporarily unavailable." />
             ) : recentAlerts.length ? (
               <div className="alert-feed">
@@ -387,9 +403,12 @@ export function Fleet() {
               </label>
             }
           >
-            {analytics.isLoading ? (
+            {analytics.isError && analytics.data && (
+              <Notice tone="warning">Uptime refresh failed. Showing the last successfully loaded summary.</Notice>
+            )}
+            {!analytics.data && analytics.isLoading ? (
               <LoadingState label="Calculating uptime…" />
-            ) : analytics.isError ? (
+            ) : !analytics.data && analytics.isError ? (
               <ErrorState message="Uptime data is temporarily unavailable." />
             ) : (
               <div className="uptime-card-body">

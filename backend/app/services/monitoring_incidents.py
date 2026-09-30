@@ -84,13 +84,15 @@ def resolve_active_monitoring_incident(
     db.flush()
     db.refresh(incident)
     if reason == "reporting_recovered":
+        tank = db.get(Tank, incident.tank_id)
+        tank_name = tank.name if tank is not None else f"Tank {incident.tank_id}"
         enqueue_push_notification(
             db,
             event_type="monitoring_recovered",
             source_id=incident.id,
             tank_id=incident.tank_id,
             title="Monitoring restored",
-            body="A tank has resumed reporting. Open AquaLogic for details.",
+            body=f"{tank_name} has resumed reporting. View Monitoring history in AquaLogic.",
             now=resolved_value,
         )
     return incident
@@ -226,7 +228,7 @@ def detect_monitoring_incidents(
                         source_id=incident.id,
                         tank_id=tank.id,
                         title="Monitoring outage",
-                        body="A tank has stopped reporting. Open AquaLogic for details.",
+                        body=f"{tank.name} has stopped reporting. Open Monitoring in AquaLogic for outage history.",
                         now=now,
                     )
                 created += 1

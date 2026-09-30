@@ -80,6 +80,7 @@ describe('Thresholds', () => {
 
     const heading = await screen.findByRole('heading', { name: 'temperature' });
     fireEvent.submit(heading.closest('form')!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save thresholds' }));
 
     expect(await screen.findByText('temperature thresholds saved.')).toBeInTheDocument();
     expect(document.querySelector('[data-sonner-toast]')).toBeInTheDocument();

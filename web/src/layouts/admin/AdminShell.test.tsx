@@ -1,4 +1,5 @@
 import AdminShell from './AdminShell';
+import { ApiError } from '@/shared/api/client';
 import { ThemeProvider } from '@/shared/theme/ThemeProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -12,6 +13,8 @@ const mocked = vi.hoisted(() => ({
   me: {
     isLoading: false,
     isError: true,
+    error: undefined as unknown,
+    refetch: vi.fn(),
     data: undefined as
       | undefined
       | {
@@ -64,12 +67,27 @@ describe('admin shell guards and navigation', () => {
     mocked.prefetch.mockClear();
     mocked.me.isLoading = false;
     mocked.me.isError = true;
+    mocked.me.error = undefined;
+    mocked.me.refetch.mockClear();
     mocked.me.data = undefined;
   });
 
-  it('redirects failed sessions to login', async () => {
+  it('redirects explicitly unauthorized sessions to login', async () => {
+    mocked.me.error = new ApiError('Unauthorized', 401);
     renderShell();
     expect(await screen.findByText('Login destination')).toBeInTheDocument();
+  });
+
+  it('keeps the saved session after a temporary validation failure and offers retry', async () => {
+    const user = userEvent.setup();
+    mocked.me.error = new TypeError('Failed to fetch');
+    renderShell();
+
+    expect(await screen.findByText('Could not verify your session')).toBeInTheDocument();
+    expect(screen.getByText(/Your saved sign-in session has been kept/)).toBeInTheDocument();
+    expect(screen.queryByText('Login destination')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(mocked.me.refetch).toHaveBeenCalledOnce();
   });
 
   it('redirects forced password changes before showing admin content', async () => {
