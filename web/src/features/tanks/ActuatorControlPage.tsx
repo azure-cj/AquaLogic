@@ -27,7 +27,7 @@ export function ActuatorControlPage() {
   if (!validId) {
     return (
       <section className="actuator-control-page">
-        <ErrorState message="This tank actuator route is not valid." />
+        <ErrorState message="This tank equipment page is not valid." />
       </section>
     );
   }
@@ -53,8 +53,8 @@ export function ActuatorControlPage() {
       <section className="actuator-control-page">
         <PageHeader
           eyebrow="Tank operations"
-          title="Actuator controls"
-          description="The focused actuator workspace is restricted to administrators."
+          title="Equipment controls"
+          description="The tank equipment workspace is restricted to administrators."
           actions={backAction}
         />
         <StaffActuatorNotice />
@@ -66,21 +66,21 @@ export function ActuatorControlPage() {
     <section className="actuator-control-page">
       <PageHeader
         eyebrow={`Tank operations · ${tank.data?.name ?? `Tank ${id}`}`}
-        title="Actuator control center"
-        description="Manage this tank’s lights, feeder, schedules, and advanced maintenance checks from one focused workspace."
+        title="Tank equipment controls"
+        description="Manage this tank’s lights, feeder, pump maintenance, and dosing schedules."
         actions={backAction}
       />
       {tank.isLoading ? (
         <div className="panel actuator-page-loading">
-          <LoadingState label="Loading tank actuator workspace…" />
+          <LoadingState label="Loading tank equipment controls…" />
         </div>
       ) : tank.isError || !tank.data ? (
-        <ErrorState message="The registered tank could not be loaded, so actuator controls are unavailable." retry={() => tank.refetch()} />
+        <ErrorState message="The registered tank could not be loaded, so equipment controls are unavailable." retry={() => tank.refetch()} />
       ) : (
         <>
           <div className="actuator-control-page-context" role="note">
-            <strong>Protected tank workspace</strong>
-            <span>Review connection status, manage schedules, and follow command activity. Every request remains associated with this tank through AquaLogic.</span>
+            <strong>Tank equipment</strong>
+            <span>Manage this tank’s equipment, check its connection, and review recent activity.</span>
           </div>
           <ActuatorControlPanel tankId={id} tankName={tank.data.name} variant="full" />
         </>
