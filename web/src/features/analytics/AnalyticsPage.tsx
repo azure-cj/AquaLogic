@@ -189,7 +189,7 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length || label == null) return null;
   return (
-    <div className="analytics-tooltip">
+    <div className="analytics-tooltip analytics-trend-tooltip">
       <strong>{formatAnalyticsDate(label)}</strong>
       {payload
         .filter((item) => item.value != null)
@@ -355,7 +355,12 @@ function TrendChart({
           width={58}
           tickFormatter={(value) => Number(value).toFixed(1)}
         />
-        <Tooltip content={<ChartTooltip unit={selected.unit} />} />
+        <Tooltip
+          content={<ChartTooltip unit={selected.unit} />}
+          cursor={{ stroke: '#58747d', strokeWidth: 1.25, strokeDasharray: '3 3' }}
+          offset={6}
+          isAnimationActive={false}
+        />
         <ThresholdOverlays
           segments={data.threshold_segments}
           metric={metric}
@@ -370,6 +375,7 @@ function TrendChart({
             strokeWidth={1.5}
             strokeDasharray="6 5"
             dot={false}
+            activeDot={{ r: 7, stroke: 'var(--surface)', strokeWidth: 2 }}
             connectNulls={false}
           />
         )}
@@ -382,7 +388,7 @@ function TrendChart({
           strokeDasharray={data.tank_series.length ? '7 4' : undefined}
           fill={data.tank_series.length ? 'transparent' : `url(#metric-fill-${metric})`}
           connectNulls={false}
-          activeDot={{ r: 5 }}
+          activeDot={{ r: 7, stroke: 'var(--surface)', strokeWidth: 2 }}
         />
         {data.tank_series.map((tank, index) => (
           <Line
@@ -393,6 +399,7 @@ function TrendChart({
             stroke={tankColors[index]}
             strokeWidth={2}
             dot={false}
+            activeDot={{ r: 7, stroke: 'var(--surface)', strokeWidth: 2 }}
             connectNulls={false}
           />
         ))}

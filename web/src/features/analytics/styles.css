@@ -354,6 +354,48 @@
   font-size: 0.67rem;
 }
 
+.analytics-trend-tooltip {
+  position: relative;
+}
+
+.analytics-trend-tooltip::after {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--border);
+  background: inherit;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.recharts-tooltip-wrapper-left.recharts-tooltip-wrapper-bottom .analytics-trend-tooltip::after {
+  top: -5px;
+  right: -5px;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.recharts-tooltip-wrapper-left.recharts-tooltip-wrapper-top .analytics-trend-tooltip::after {
+  right: -5px;
+  bottom: -5px;
+  border-top: 0;
+  border-left: 0;
+}
+
+.recharts-tooltip-wrapper-right.recharts-tooltip-wrapper-bottom .analytics-trend-tooltip::after {
+  top: -5px;
+  left: -5px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.recharts-tooltip-wrapper-right.recharts-tooltip-wrapper-top .analytics-trend-tooltip::after {
+  bottom: -5px;
+  left: -5px;
+  border-top: 0;
+  border-right: 0;
+}
+
 .analytics-tooltip > span {
   display: flex;
   align-items: center;
