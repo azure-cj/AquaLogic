@@ -120,7 +120,7 @@ function AlertMarker({
   );
 }
 
-type ChartRow = {
+export type ChartRow = {
   timestamp: number;
   fleet: number | null;
   previous: number | null;
@@ -129,7 +129,7 @@ type ChartRow = {
   [key: `tank-${number}`]: number | null;
 };
 
-function chartRows(data: AnalyticsResponse, metric: MetricKey): ChartRow[] {
+export function chartRows(data: AnalyticsResponse, metric: MetricKey): ChartRow[] {
   return data.fleet_series.map((point, index) => {
     const row: ChartRow = {
       timestamp: new Date(point.timestamp).getTime(),
@@ -176,7 +176,7 @@ function chartDomain(
   return [minimum - padding, maximum + padding] as [number, number];
 }
 
-function ChartTooltip({
+export function ChartTooltip({
   active,
   payload,
   label,

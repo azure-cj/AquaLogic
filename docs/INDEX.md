@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-09-26
+Last reviewed: 2026-10-01
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -61,9 +61,9 @@ link back here rather than duplicate a competing project status.
   and tank species assignments, including the implemented public projection and
   deferred compatibility scope.
 - [`deep-spec/phase-04-operations/`](deep-spec/phase-04-operations/):
-  fleet overview, tank workspace, alert history, operational analytics, and
-  privacy-safe public tank pages, including the approved receipt-time analytics
-  hardening target.
+  fleet overview, tank workspace, alert history, split-time analytics
+  (observation time for water-quality history and receipt time for reporting
+  health), and privacy-safe public tank pages.
 - [`deep-spec/phase-05-equipment-control/`](deep-spec/phase-05-equipment-control/):
   registered equipment connections, UV/LED/feeder controls, device-resident
   schedules, guarded pump maintenance, command lifecycle, and actuator audit

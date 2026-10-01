@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-import AnalyticsPage from './AnalyticsPage';
+import AnalyticsPage, { ChartTooltip, chartRows } from './AnalyticsPage';
 import type { AnalyticsResponse, MetricKey } from './types';
 import { analyticsCsv, thresholdZones } from './utils';
 
@@ -124,6 +124,51 @@ function renderPage(path = '/admin/analytics') {
 }
 
 describe('fleet analytics', () => {
+  it('shows API bucket time and sample count without regrouping chart points', () => {
+    const data = response();
+    const bucketTimestamp = '2026-10-01T04:54:00Z';
+    data.fleet_series = [
+      {
+        timestamp: bucketTimestamp,
+        values: values(),
+        sample_count: 95,
+        contributor_count: 1,
+      },
+      {
+        timestamp: '2026-10-01T05:09:00Z',
+        values: values({ temperature: 26 }),
+        sample_count: 2,
+        contributor_count: 1,
+      },
+    ];
+
+    const rows = chartRows(data, 'temperature');
+    expect(rows).toHaveLength(data.fleet_series.length);
+    expect(rows.map((row) => row.timestamp)).toEqual(
+      data.fleet_series.map((point) => new Date(point.timestamp).getTime()),
+    );
+    expect(rows[0]).toMatchObject({ samples: 95, contributors: 1 });
+
+    render(
+      <ChartTooltip
+        active
+        payload={[
+          {
+            name: 'Fleet average',
+            value: rows[0].fleet,
+            color: '#168b8d',
+            payload: rows[0],
+          },
+        ]}
+        label={rows[0].timestamp}
+        unit="°C"
+      />,
+    );
+
+    expect(screen.getByText('Oct 1, 2026, 12:54 PM')).toBeInTheDocument();
+    expect(screen.getByText(/1 contributing tank\(s\).*95 samples/)).toBeInTheDocument();
+  });
+
   it('uses URL state and renders diagnostic uptime rows', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/tanks') return [{ id: 1, name: 'Tank A' }];
