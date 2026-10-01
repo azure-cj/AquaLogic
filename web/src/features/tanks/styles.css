@@ -588,9 +588,9 @@
 .pump-test-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; padding-top: 1rem; }
 .pump-test-heading h3 { margin: 0; color: var(--text); font-size: .98rem; }
 .pump-test-heading p:not(.actuator-kicker) { max-width: 700px; margin: .25rem 0 0; color: var(--muted); font-size: .74rem; line-height: 1.45; }
-.pump-safety-warning { display: flex; align-items: flex-start; gap: .55rem; padding: .75rem .8rem; border: 1px solid #efc98f; border-radius: 10px; background: #fff8e7; color: #805b12; }
-.pump-safety-warning svg { flex: 0 0 auto; margin-top: .05rem; }
-.pump-safety-warning span { display: grid; gap: .22rem; }
+.pump-safety-warning { padding: .65rem .8rem; border: 1px solid #efc98f; border-radius: 10px; background: #fff8e7; color: #805b12; }
+.pump-safety-warning summary { cursor: pointer; font-size: .75rem; font-weight: 700; line-height: 1.4; }
+.pump-safety-copy { display: grid; gap: .22rem; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
 .pump-safety-warning strong { font-size: .75rem; }
 .pump-safety-warning small { font-size: .68rem; line-height: 1.45; }
 .pump-safety-warning code { padding: .08rem .25rem; border-radius: 4px; background: rgba(128, 91, 18, .1); font-family: var(--font-admin-mono); font-size: .66rem; }
