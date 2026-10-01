@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_staff
 from app.models import Alert, Tank, User
-from app.schemas.alert import AlertRead
+from app.schemas.alert import AlertHistoryPage, AlertRead
 from app.services.auth_security import audit_event
 from app.services.tank_lifecycle import require_active_tank, tank_or_404
 
@@ -69,23 +69,51 @@ def resolve_alert(
     return alert
 
 
-@router.get("/alerts/history", response_model=list[AlertRead])
+@router.get("/alerts/history", response_model=AlertHistoryPage | list[AlertRead])
 def alert_history(
     tank_id: int | None = None,
     severity: str | None = None,
     parameter: str | None = None,
+    parameters: list[str] | None = Query(default=None),
     resolved: bool | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
-) -> list[Alert]:
+) -> AlertHistoryPage | list[Alert]:
     _ = current_user
     stmt = select(Alert)
     if tank_id is not None: stmt = stmt.where(Alert.tank_id == tank_id)
     if severity is not None: stmt = stmt.where(Alert.severity == severity)
     if parameter is not None: stmt = stmt.where(Alert.parameter == parameter)
+    if parameters is not None: stmt = stmt.where(Alert.parameter.in_(parameters))
     if resolved is not None: stmt = stmt.where(Alert.is_resolved.is_(resolved))
     if created_after is not None: stmt = stmt.where(Alert.created_at >= created_after)
     if created_before is not None: stmt = stmt.where(Alert.created_at <= created_before)
-    return list(db.scalars(stmt.order_by(Alert.created_at.desc())).all())
+
+    ordered_statement = stmt.order_by(Alert.created_at.desc(), Alert.id.desc())
+    if page is None and page_size is None:
+        return list(db.scalars(ordered_statement).all())
+
+    page = page or 1
+    page_size = page_size or 25
+    total = int(db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0)
+    items = list(
+        db.scalars(
+            ordered_statement
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    total_pages = (total + page_size - 1) // page_size
+    return AlertHistoryPage(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+        has_previous=page > 1,
+        has_next=page < total_pages,
+    )

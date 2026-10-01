@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-09-23
+Last reviewed: 2026-10-01
 
 ## Read first
 
@@ -233,6 +233,13 @@ outcome, and date range; bridge telemetry is also grouped in the default feed.
 Staff never receive the administrator-only audit feed. Signed-in device cards
 show both activity and expiry context so an operator can distinguish a recently
 used session from one nearing expiry.
+
+The `/admin/alerts` water-quality history view uses server-side pagination with
+25 rows per page and preserves filters plus the current page in the URL. The
+backend returns page totals and stable newest-first ordering when `page` or
+`page_size` is supplied. Calls that omit both parameters retain the legacy list
+response used by the mobile client. The web request filters deferred metrics on
+the server before counting and paging.
 
 ## Common checks
 

@@ -1,10 +1,27 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-09-27
+Last reviewed: 2026-10-01
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-10-01 — Add opt-in pagination to alert history
+
+**Decision:** Let alert-history callers request stable newest-first pages using
+`page` and `page_size`, returning totals and navigation metadata. Keep the
+existing array response when both pagination parameters are omitted. The web
+history page and its fleet feeds request pages explicitly; the mobile client
+continues using the compatible legacy response.
+
+**Reason:** The browser should fetch only the alert rows it displays as history
+grows, while this shared endpoint already has a mobile caller that consumes the
+unpaginated contract.
+
+**Consequences:** The paginated response is bounded to 100 rows per request and
+uses `created_at DESC, id DESC` for deterministic navigation. Web filtering for
+deferred parameters happens before counting and pagination. Legacy callers can
+continue reading the full history until they adopt the paginated contract.
 
 ## 2026-09-26 — Keep M6.1 push handling behind a client-only service
 

@@ -69,6 +69,63 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
     assert len(custom.json()["fleet_series"]) == 8
 
 
+def test_alert_history_paginates_filtered_results_in_stable_newest_first_order(
+    client, auth_headers, db_session
+):
+    tank = _tank(client, auth_headers, "Paginated alert tank")
+    base = datetime.now(timezone.utc).replace(microsecond=0)
+    db_session.add_all(
+        [
+            Alert(
+                tank_id=tank["id"],
+                parameter="temperature",
+                severity=AlertSeverity.warning,
+                message="Older temperature alert",
+                created_at=base - timedelta(minutes=2),
+            ),
+            Alert(
+                tank_id=tank["id"],
+                parameter="ph",
+                severity=AlertSeverity.critical,
+                message="pH excluded by filter",
+                created_at=base,
+            ),
+            Alert(
+                tank_id=tank["id"],
+                parameter="temperature",
+                severity=AlertSeverity.critical,
+                message="Newer temperature alert",
+                created_at=base - timedelta(minutes=1),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    first_page = client.get(
+        "/alerts/history?parameters=temperature&page=1&page_size=1",
+        headers=auth_headers,
+    )
+    second_page = client.get(
+        "/alerts/history?parameters=temperature&page=2&page_size=1",
+        headers=auth_headers,
+    )
+
+    assert first_page.status_code == 200
+    first_payload = first_page.json()
+    assert len(first_payload["items"]) == 1
+    assert first_payload["page"] == 1
+    assert first_payload["page_size"] == 1
+    assert first_payload["total"] == 2
+    assert first_payload["total_pages"] == 2
+    assert first_payload["has_previous"] is False
+    assert first_payload["has_next"] is True
+    assert first_payload["items"][0]["message"] == "Newer temperature alert"
+    assert second_page.status_code == 200
+    assert second_page.json()["items"][0]["message"] == "Older temperature alert"
+    assert second_page.json()["has_previous"] is True
+    assert second_page.json()["has_next"] is False
+
+
 def test_analytics_allows_deferred_device_metrics(client, auth_headers, db_session):
     tank = _tank(client, auth_headers, "Bridge analytics tank")
     db_session.add(

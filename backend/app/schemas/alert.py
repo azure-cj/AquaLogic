@@ -25,3 +25,13 @@ class AlertRead(BaseModel):
     @classmethod
     def normalize_timestamps(cls, value: datetime | None) -> datetime | None:
         return make_timestamp_explicit_utc(value)
+
+
+class AlertHistoryPage(BaseModel):
+    items: list[AlertRead]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    has_previous: bool
+    has_next: bool

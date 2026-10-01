@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-09-27
+Last reviewed: 2026-10-01
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -113,7 +113,7 @@ activity API is used by the mobile M3 detail view.
 | GET | `/tanks/{tank_id}/sensors/history` | Read bounded sensor history |
 | POST | `/tanks/{tank_id}/sensors` | Admin-only manual sensor submission |
 | GET | `/alerts` | List active or all alerts |
-| GET | `/alerts/history` | Filter alert history |
+| GET | `/alerts/history` | Filter alert history; paginated when `page` or `page_size` is supplied |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
 | PUT | `/alerts/{alert_id}/resolve` | Legacy route used by the UI's **Mark handled** action; closes the alert record without confirming water recovery |
 | GET | `/monitoring-incidents` | Staff/admin paginated monitoring-outage history; defaults to active and supports tank, state, and start-time filters |
@@ -128,6 +128,17 @@ activity API is used by the mobile M3 detail view.
 | POST | `/tanks/{tank_id}/actuators/commands/{command_id}/clear-uncertainty` | Admin-only; record physical verification for an `outcome_unknown` command without rewriting its historical status |
 | GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, feeder, and pump state |
 | GET | `/tanks/{tank_id}/actuators/history` | Admin-only; read paginated command audit history with actor, timestamps, status, result, and error |
+
+`GET /alerts/history` accepts tank, severity, parameter, resolved-state, and
+creation-time filters. It also accepts repeated `parameters` values to select
+multiple alert parameters. Supplying `page` and/or `page_size` returns an
+`AlertHistoryPage` object with `items`, `page`, `page_size`, `total`,
+`total_pages`, `has_previous`, and `has_next`. Pages are ordered newest first by
+`created_at` and then `id`; the page defaults to 1 and page size defaults to 25,
+with a maximum of 100. Omitting both pagination parameters preserves the legacy
+array response for existing clients. The web history page sends its supported
+parameter set as repeated `parameters` values so deferred metrics do not make
+pages sparse or counts inaccurate.
 
 Retirement is administrator-only and one-way (`active -> retired`). It records
 `retired_at`, the retiring administrator, and an optional bounded note, forces
