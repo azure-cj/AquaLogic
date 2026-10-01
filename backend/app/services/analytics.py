@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -195,33 +195,59 @@ def build_fleet_analytics(
     previous_stats = {parameter: _empty_stat() for parameter in PARAMETERS}
     current_intervals: dict[int, set[int]] = defaultdict(set)
     previous_intervals: dict[int, set[int]] = defaultdict(set)
-    tank_bucket_presence: dict[int, set[int]] = defaultdict(set)
+    reporting_bucket_presence: dict[int, set[int]] = defaultdict(set)
 
     columns = [
         SensorReading.tank_id,
+        SensorReading.timestamp,
         SensorReading.received_at,
         *[getattr(SensorReading, parameter) for parameter in PARAMETERS],
     ]
     rows = db.execute(
         select(*columns)
         .where(
-            SensorReading.received_at >= previous_start,
-            SensorReading.received_at < end,
+            or_(
+                and_(
+                    SensorReading.timestamp >= previous_start,
+                    SensorReading.timestamp < end,
+                ),
+                and_(
+                    SensorReading.received_at >= previous_start,
+                    SensorReading.received_at < end,
+                ),
+            ),
             SensorReading.tank_id.in_(scope_tank_ids),
         )
-        .order_by(SensorReading.received_at)
+        .order_by(SensorReading.timestamp, SensorReading.received_at)
         .execution_options(yield_per=5_000)
     )
     for row in rows:
         tank_id = int(row[0])
-        stamp = _aware(row[1])
+        observation_at = _aware(row[1])
+        received_at = _aware(row[2])
         values = {
-            parameter: float(row[index + 2]) if row[index + 2] is not None else None
+            parameter: float(row[index + 3]) if row[index + 3] is not None else None
             for index, parameter in enumerate(PARAMETERS)
         }
-        is_current = stamp >= start
+
+        # Reporting health describes when the backend accepted a report, even
+        # when that report contains a historical observation timestamp.
+        if previous_start <= received_at < end:
+            receipt_interval = int(received_at.timestamp() // 30)
+            if received_at >= start:
+                current_intervals[tank_id].add(receipt_interval)
+                reporting_index = int((received_at - start).total_seconds() // bucket_seconds)
+                if 0 <= reporting_index < bucket_count:
+                    reporting_bucket_presence[tank_id].add(reporting_index)
+            else:
+                previous_intervals[tank_id].add(receipt_interval)
+
+        # Water-quality history follows when the sensor observation occurred.
+        if not previous_start <= observation_at < end:
+            continue
+        is_current = observation_at >= start
         period_start = start if is_current else previous_start
-        index = int((stamp - period_start).total_seconds() // bucket_seconds)
+        index = int((observation_at - period_start).total_seconds() // bucket_seconds)
         if index < 0 or index >= bucket_count:
             continue
         target = fleet_current if is_current else fleet_previous
@@ -237,10 +263,7 @@ def build_fleet_analytics(
                 value,
             )
 
-        interval = int(stamp.timestamp() // 30)
         if is_current:
-            current_intervals[tank_id].add(interval)
-            tank_bucket_presence[tank_id].add(index)
             diagnostic_accumulator = diagnostic_tank_current[tank_id].setdefault(
                 index, _empty_accumulator()
             )
@@ -252,8 +275,6 @@ def build_fleet_analytics(
                 tank_accumulator["count"] += 1
                 tank_accumulator["contributors"].add(tank_id)
                 _add_values(tank_accumulator, values)
-        else:
-            previous_intervals[tank_id].add(interval)
 
     stats: dict[str, dict[str, float | None]] = {}
     for parameter in PARAMETERS:
@@ -361,7 +382,7 @@ def build_fleet_analytics(
     gap_count = 0
     for tank in tanks:
         in_gap = False
-        presence = tank_bucket_presence[tank.id]
+        presence = reporting_bucket_presence[tank.id]
         for index in range(bucket_count):
             missing = index not in presence
             if missing and not in_gap:

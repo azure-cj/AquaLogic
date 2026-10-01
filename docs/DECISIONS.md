@@ -1083,6 +1083,31 @@ the bridge does not recover within the configured window. Physical pump actions
 retain their shorter safety expiry; the bridge does not automatically retry
 expired or ambiguous motion commands.
 
+## 2026-10-01 — Separate water-quality observation time from reporting time
+
+**Decision:** Use `SensorReading.timestamp` for water-quality Analytics window
+filtering, ordering, bucket placement, sample/contributor counts, metric
+averages and extrema, period comparisons, and primary-driver comparisons. Keep
+`SensorReading.received_at` for accepted-report intervals, uptime, and reporting
+gaps. Preserve receipt-time semantics for freshness, Offline status, monitoring
+incident detection/recovery, latest accepted report selection, and
+`RegisteredDevice.last_seen_at`. Continue placing alert events by
+`Alert.created_at` without changing alert or push behavior.
+
+**Reason:** Replayed sensor values describe when the water was observed, while
+reporting health describes when the backend received a report. Keeping both
+timestamps explicit lets recovered history appear in its observation period
+without making a device appear continuously online during an outage.
+
+**Consequences:** The Analytics API shape and database schema remain unchanged.
+The service selects rows relevant to either time window and applies observation
+and receipt filters independently. ESP32 backlog observation times remain
+estimated by the bridge because the firmware record does not persist a capture
+timestamp. This supersedes the water-quality filtering and bucket placement in
+the 2026-08-21 receipt-time analytics decision while retaining its reporting
+health semantics. Alert replay timing, recovered-alert push delivery, and exact
+firmware capture timestamps remain deferred.
+
 ## Adding a decision
 
 Use this format:

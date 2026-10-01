@@ -1,7 +1,7 @@
 # Analytics
 
-Last reviewed: 2026-08-21
-Status: Implemented receipt-time analytics hardening
+Last reviewed: 2026-10-01
+Status: Implemented split observation-time and receipt-time analytics
 
 ## 1. Purpose
 
@@ -64,10 +64,12 @@ bucket size, and `Asia/Manila` display timezone.
 
 ## 5. Current Calculation Rules
 
-- Readings are averaged per metric within each bucket; missing metric values do
-  not contribute to that metric's average.
+- Water-quality readings are filtered and bucketed by observation time. Each
+  metric is averaged within those buckets; missing metric values do not
+  contribute to that metric's average.
 - Empty buckets remain in the timeline with null metric values and zero sample
-  count so reporting gaps remain visible.
+  count. Reporting-gap diagnostics are calculated independently from receipt
+  time.
 - Alert events are placed by alert creation time and retain the linked reading
   value when available.
 - Threshold overlays use the effective historical threshold revisions rather
@@ -78,24 +80,34 @@ bucket size, and `Asia/Manila` display timezone.
   degraded at or above the configured critical threshold, critical below that,
   and no-data when no interval was reported.
 - Reporting gaps count contiguous missing bucket runs per tank.
-- Previous-period comparisons use the equivalent preceding window.
+- Water-quality previous-period comparisons use the equivalent preceding
+  observation-time window.
+- Reporting uptime and reporting-gap calculations use server receipt time.
 - Percentage change is unavailable when the previous average is missing or zero.
 
 ## 6. Timestamp Boundary
 
-Analytics now groups readings, calculates reporting intervals, and detects gaps
-using server receipt time. This is consistent with the Phase 01 and Phase 02
-operational boundary:
+Analytics keeps observation and receipt time as separate calculation inputs:
 
-- `timestamp` is the hardware observation time retained for history and clock
-  diagnostics;
-- `received_at` is the server receipt time used by analytics bucketing, uptime,
-  gap detection, fleet/tank freshness, and latest operational reading
-  selection.
+- `SensorReading.timestamp` is the observation time used to filter, order, and
+  bucket temperature, pH, turbidity, and TDS history. Metric sample counts,
+  contributor counts, fleet and selected-tank averages, minimums, maximums,
+  current/previous comparisons, and primary-driver comparisons follow this
+  observation-time selection.
+- `SensorReading.received_at` is the server receipt time used for accepted
+  report intervals, uptime, and reporting-gap diagnostics. Tank freshness,
+  Offline status, monitoring incidents and recovery, latest accepted report
+  selection, and `RegisteredDevice.last_seen_at` continue to use receipt time.
+- `Alert.created_at` continues to place alert events and alert buckets.
 
-Late observations are accepted and placed operationally by receipt time.
-Observation timestamps remain available for historical display and hardware
-clock diagnostics.
+Rows may be selected for the calculation pass when either timestamp falls in
+the requested current/previous windows. Each calculation then applies its own
+timestamp window, so an old observation replayed now affects reporting health
+at receipt time while its water-quality value stays in its observation period.
+
+ESP32 backlog observations are still approximate: the current firmware backlog
+record contains sequence and sensor values but no capture timestamp, so the
+bridge estimates `observed_at` from sequence and outage timing.
 
 ## 7. UI Behavior
 
@@ -120,10 +132,12 @@ an authenticated operational record available in the monitoring-outage view.
 
 ## 9. Implemented Hardening
 
-- Analytics filtering, ordering, bucket placement, uptime, and gap detection use
-  server `received_at`.
-- Regression coverage verifies late observations, receipt-time bucket placement,
-  receipt-time uptime, and receipt-time gap detection.
+- Analytics water-quality filtering, ordering, bucket placement, statistics,
+  and comparisons use `SensorReading.timestamp`; reporting intervals, uptime,
+  and reporting-gap detection use `received_at`.
+- Regression coverage verifies recovered observation-time buckets and counts,
+  observation-time current/previous statistics and primary-driver comparisons,
+  receipt-time uptime and gaps, freshness, and alert creation-time placement.
 - Nullable timelines, historical threshold segments, previous-period
   comparisons, alert timing, and deferred metric compatibility are preserved.
 

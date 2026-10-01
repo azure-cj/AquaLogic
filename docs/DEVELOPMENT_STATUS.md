@@ -16,7 +16,9 @@ Last reviewed: 2026-10-01
 - Fleet overview, threshold administration, and fleet analytics endpoints.
 - Fleet analytics provide complete bucket timelines, three-tank overlays,
   historical threshold segments, exact alert events, previous-period
-  comparisons, reporting-gap diagnostics, and classified uptime.
+  comparisons, reporting-gap diagnostics, and classified uptime. Water-quality
+  trends use observation time; reporting health and monitoring continue to use
+  server receipt time, while alert events remain on alert creation time.
 - Optional demo sensor generation behind two explicit flags.
 - The local seed workflow creates seven days of deterministic demo sensor
   history, representative normal/warning/critical/offline fleet states, alert
@@ -49,9 +51,9 @@ Last reviewed: 2026-10-01
 - The bridge drains the ESP32 offline backlog after successful live polls
   (batched, acked only after backend confirmation, capped per cycle) and
   backfills estimated `observed_at` timestamps spread evenly over the outage
-  interval, since the ESP32 has no real-time clock. Estimates are flagged
-  `time_estimated=true` in logs/docs only; persisting the flag is a backend
-  follow-up (see `DECISIONS.md`).
+  interval, since ESP32 backlog records do not persist a capture timestamp.
+  Estimates are flagged `time_estimated=true` in logs/docs only; persisting that
+  flag is a backend follow-up (see `DECISIONS.md`).
 - M2 bridge store-and-forward is implemented: each live `/data` sample is
   persisted before Railway upload in an ignored, bridge-local SQLite outbox;
   bounded oldest-first replay retains capture timestamps and UUIDs through
