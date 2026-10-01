@@ -41,7 +41,14 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
     payload = analytics.json()
     assert sum(bucket["critical"] for bucket in payload["alert_series"]) == 1
     assert payload["alert_events"][0]["value"] == .1
-    assert len(payload["fleet_series"]) == 96
+    assert len(payload["fleet_series"]) in {48, 49}
+    assert all(
+        datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00")).minute in {0, 30}
+        for point in payload["fleet_series"]
+    )
+    assert payload["window"]["bucket_seconds"] == 900
+    assert payload["window"]["water_quality_bucket_seconds"] == 1_800
+    assert len(payload["alert_series"]) == 96
     assert any(point["values"]["temperature"] == 25 for point in payload["fleet_series"])
     assert any(point["values"]["temperature"] is None for point in payload["fleet_series"])
     tank_uptime = next(item for item in analytics.json()["uptime"] if item["tank_id"] == tank["id"])
@@ -66,7 +73,7 @@ def test_alert_history_filters_and_analytics_buckets(client, auth_headers, db_se
         headers=auth_headers,
     )
     assert custom.status_code == 200
-    assert len(custom.json()["fleet_series"]) == 8
+    assert len(custom.json()["fleet_series"]) in {4, 5}
 
 
 def test_alert_history_paginates_filtered_results_in_stable_newest_first_order(
@@ -299,7 +306,7 @@ def test_analytics_uses_observation_time_for_metrics_and_receipt_time_for_report
 
     recovered = []
     # The backend receives this recovery batch within 15 seconds, while the
-    # captured observations span three separate hourly buckets.
+    # captured observations land in three separate clock-aligned trend buckets.
     recovered.append(
         reading(
             tank_a["id"], start + timedelta(minutes=15), recovery_receipt,
@@ -381,13 +388,19 @@ def test_analytics_uses_observation_time_for_metrics_and_receipt_time_for_report
     assert response.status_code == 200
     payload = response.json()
     current_points = payload["fleet_series"]
-    assert [point["sample_count"] for point in current_points] == [4, 10, 2]
-    assert [point["contributor_count"] for point in current_points] == [2, 1, 2]
-    assert [point["values"]["temperature"] for point in current_points] == [35, 20, 32.5]
-    assert [point["values"]["ph"] for point in current_points] == [7.75, 7.0, 7.375]
-    assert [point["values"]["turbidity"] for point in current_points] == [1.75, 1.0, 1.375]
-    assert [point["values"]["tds"] for point in current_points] == [175, 100, 137.5]
-    assert [point["sample_count"] for point in payload["previous_fleet_series"]] == [1, 0, 0]
+    assert payload["window"]["bucket_seconds"] == 3_600
+    assert payload["window"]["water_quality_bucket_seconds"] == 1_800
+    assert [point["sample_count"] for point in current_points] == [4, 0, 10, 0, 2, 0]
+    assert [point["contributor_count"] for point in current_points] == [2, 0, 1, 0, 2, 0]
+    assert [point["values"]["temperature"] for point in current_points] == [35, None, 20, None, 32.5, None]
+    assert [point["values"]["ph"] for point in current_points] == [7.75, None, 7.0, None, 7.375, None]
+    assert [point["values"]["turbidity"] for point in current_points] == [1.75, None, 1.0, None, 1.375, None]
+    assert [point["values"]["tds"] for point in current_points] == [175, None, 100, None, 137.5, None]
+    assert [point["sample_count"] for point in payload["previous_fleet_series"]] == [1, 0, 0, 0, 0, 0]
+    assert [
+        datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
+        for point in current_points
+    ] == [start + timedelta(minutes=30 * index) for index in range(6)]
 
     temperature_stats = payload["stats"]["temperature"]
     assert temperature_stats["average"] == 25.3125
@@ -400,10 +413,10 @@ def test_analytics_uses_observation_time_for_metrics_and_receipt_time_for_report
     selected_series = {item["tank_id"]: item["series"] for item in payload["tank_series"]}
     tank_a_series = selected_series[tank_a["id"]]
     tank_b_series = selected_series[tank_b["id"]]
-    assert [point["sample_count"] for point in tank_a_series] == [1, 10, 1]
-    assert [point["values"]["temperature"] for point in tank_a_series] == [20, 20, 35]
-    assert [point["sample_count"] for point in tank_b_series] == [3, 0, 1]
-    assert [point["values"]["temperature"] for point in tank_b_series] == [40, None, 30]
+    assert [point["sample_count"] for point in tank_a_series] == [1, 0, 10, 0, 1, 0]
+    assert [point["values"]["temperature"] for point in tank_a_series] == [20, None, 20, None, 35, None]
+    assert [point["sample_count"] for point in tank_b_series] == [3, 0, 0, 0, 1, 0]
+    assert [point["values"]["temperature"] for point in tank_b_series] == [40, None, None, None, 30, None]
     driver = payload["insights"]["primary_driver_by_metric"]["temperature"]
     assert driver == tank_a["id"]
 
@@ -423,3 +436,72 @@ def test_analytics_uses_observation_time_for_metrics_and_receipt_time_for_report
         start + timedelta(hours=1, minutes=10)
     ).isoformat().replace("+00:00", "Z")
     assert payload["alert_events"][0]["timestamp"] == expected_alert_time
+
+
+def test_analytics_half_hour_buckets_align_and_include_partial_current_bucket(
+    client, auth_headers, db_session
+):
+    tank = _tank(client, auth_headers, "Half-hour analytics tank")
+    start = datetime.now(timezone.utc).replace(minute=17, second=0, microsecond=0)
+    end = start + timedelta(minutes=175)
+    recent_receipt = end - timedelta(minutes=5)
+
+    def reading(observed_at, received_at):
+        return SensorReading(
+            tank_id=tank["id"],
+            timestamp=observed_at,
+            received_at=received_at,
+            temperature=25,
+            ph=7.1,
+            turbidity=2,
+            dissolved_oxygen=None,
+            tds=180,
+            ammonia=None,
+        )
+
+    db_session.add_all(
+        [
+            reading(start, recent_receipt),
+            reading(start + timedelta(minutes=12), recent_receipt),
+            reading(start + timedelta(minutes=13), recent_receipt),
+            reading(start + timedelta(minutes=43), recent_receipt),
+            reading(start + timedelta(minutes=103), recent_receipt),
+            reading(start + timedelta(minutes=164), recent_receipt),
+            # This row is outside the observation window but still reports now.
+            reading(end, recent_receipt),
+            # Historical capture timestamp, but an independently timed report.
+            reading(start - timedelta(days=1), start + timedelta(minutes=5)),
+        ]
+    )
+    db_session.commit()
+
+    start_value = start.isoformat().replace("+00:00", "Z")
+    end_value = end.isoformat().replace("+00:00", "Z")
+    response = client.get(
+        "/analytics/fleet?range=custom&bucket=1h"
+        f"&start={start_value}&end={end_value}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["window"]["bucket_seconds"] == 3_600
+    assert payload["window"]["water_quality_bucket_seconds"] == 1_800
+    points = payload["fleet_series"]
+    assert [point["sample_count"] for point in points] == [2, 1, 1, 0, 1, 0, 1]
+    assert [
+        datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00"))
+        for point in points
+    ] == [
+        start.replace(minute=0) + timedelta(minutes=30 * index)
+        for index in range(7)
+    ]
+    assert [datetime.fromisoformat(point["timestamp"].replace("Z", "+00:00")).minute for point in points] == [0, 30, 0, 30, 0, 30, 0]
+    assert sum(point["sample_count"] for point in points) == 6
+    # Despite backfilled observations sharing a receipt time, monitoring sees
+    # only the two actual reporting intervals; alert/report bucket resolution
+    # remains at the requested one hour.
+    uptime = next(item for item in payload["uptime"] if item["tank_id"] == tank["id"])
+    assert uptime["reported_intervals"] == 2
+    assert len(payload["alert_series"]) == 3
+    assert payload["insights"]["reporting_gap_count"] == 1

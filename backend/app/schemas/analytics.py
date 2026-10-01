@@ -12,6 +12,7 @@ class AnalyticsWindow(BaseModel):
     start: datetime
     end: datetime
     bucket_seconds: int
+    water_quality_bucket_seconds: int
     timezone: str = "Asia/Manila"
 
 

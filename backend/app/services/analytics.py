@@ -14,8 +14,22 @@ from app.services.decision_engine import PARAMETERS
 from app.services.thresholds import effective_threshold_segments_by_tank
 
 
+WATER_QUALITY_BUCKET_SECONDS = 30 * 60
+
+
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _floor_bucket(value: datetime, bucket_seconds: int) -> datetime:
+    """Return the UTC clock boundary containing value."""
+    epoch = int(_aware(value).timestamp())
+    return datetime.fromtimestamp(epoch - epoch % bucket_seconds, tz=timezone.utc)
+
+
+def _overlapping_bucket_count(start: datetime, end: datetime, bucket_seconds: int) -> int:
+    aligned_start = _floor_bucket(start, bucket_seconds)
+    return max(0, ceil((end - aligned_start).total_seconds() / bucket_seconds))
 
 
 def _empty_accumulator() -> dict[str, Any]:
@@ -175,6 +189,14 @@ def build_fleet_analytics(
     duration = end - start
     previous_start = start - duration
     bucket_count = ceil(duration.total_seconds() / bucket_seconds)
+    water_quality_start = _floor_bucket(start, WATER_QUALITY_BUCKET_SECONDS)
+    previous_water_quality_start = _floor_bucket(previous_start, WATER_QUALITY_BUCKET_SECONDS)
+    water_quality_bucket_count = _overlapping_bucket_count(
+        start, end, WATER_QUALITY_BUCKET_SECONDS
+    )
+    previous_water_quality_bucket_count = _overlapping_bucket_count(
+        previous_start, start, WATER_QUALITY_BUCKET_SECONDS
+    )
     tank_stmt = select(Tank).order_by(Tank.name)
     if not include_retired:
         tank_stmt = tank_stmt.where(Tank.retired_at.is_(None))
@@ -246,9 +268,16 @@ def build_fleet_analytics(
         if not previous_start <= observation_at < end:
             continue
         is_current = observation_at >= start
-        period_start = start if is_current else previous_start
-        index = int((observation_at - period_start).total_seconds() // bucket_seconds)
-        if index < 0 or index >= bucket_count:
+        period_start = water_quality_start if is_current else previous_water_quality_start
+        index = int(
+            (_floor_bucket(observation_at, WATER_QUALITY_BUCKET_SECONDS) - period_start)
+            .total_seconds()
+            // WATER_QUALITY_BUCKET_SECONDS
+        )
+        period_bucket_count = (
+            water_quality_bucket_count if is_current else previous_water_quality_bucket_count
+        )
+        if index < 0 or index >= period_bucket_count:
             continue
         target = fleet_current if is_current else fleet_previous
         accumulator = target.setdefault(index, _empty_accumulator())
@@ -436,21 +465,31 @@ def build_fleet_analytics(
             "start": start,
             "end": end,
             "bucket_seconds": bucket_seconds,
+            "water_quality_bucket_seconds": WATER_QUALITY_BUCKET_SECONDS,
             "timezone": "Asia/Manila",
         },
         "tanks": [{"id": tank.id, "name": tank.name, "lifecycle": tank.lifecycle} for tank in tanks],
         "fleet_series": _point_series(
-            fleet_current, start, bucket_seconds, bucket_count
+            fleet_current,
+            water_quality_start,
+            WATER_QUALITY_BUCKET_SECONDS,
+            water_quality_bucket_count,
         ),
         "previous_fleet_series": _point_series(
-            fleet_previous, previous_start, bucket_seconds, bucket_count
+            fleet_previous,
+            previous_water_quality_start,
+            WATER_QUALITY_BUCKET_SECONDS,
+            previous_water_quality_bucket_count,
         ),
         "tank_series": [
             {
                 "tank_id": tank_id,
                 "tank_name": tank_names[tank_id],
                 "series": _point_series(
-                    tank_current[tank_id], start, bucket_seconds, bucket_count
+                    tank_current[tank_id],
+                    water_quality_start,
+                    WATER_QUALITY_BUCKET_SECONDS,
+                    water_quality_bucket_count,
                 ),
             }
             for tank_id in selected_tank_ids
