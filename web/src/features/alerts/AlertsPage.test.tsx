@@ -9,6 +9,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Alerts, { resolutionLabel } from './AlertsPage';
 
+function alertPage(items: unknown[]) {
+  return {
+    items,
+    page: 1,
+    page_size: 25,
+    total: items.length,
+    total_pages: items.length ? 1 : 0,
+    has_previous: false,
+    has_next: false,
+  };
+}
+
 vi.mock('@/shared/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/api/client')>();
   return { ...original, api: vi.fn() };
@@ -45,7 +57,7 @@ describe('alert history', () => {
   it('uses Mark handled wording and explains that it does not confirm recovery', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return [];
-      return [{
+      return alertPage([{
         id: 2,
         tank_id: 4,
         parameter: 'temperature',
@@ -55,7 +67,7 @@ describe('alert history', () => {
         created_at: '2026-08-21T10:00:00Z',
         resolved_at: null,
         resolution_source: null,
-      }];
+      }]);
     });
 
     renderPage();
@@ -68,7 +80,7 @@ describe('alert history', () => {
   it('renders an automatic resolution from the API', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return [];
-      return [{
+      return alertPage([{
         id: 1,
         tank_id: 4,
         parameter: 'temperature',
@@ -78,7 +90,7 @@ describe('alert history', () => {
         created_at: '2026-08-21T10:00:00Z',
         resolved_at: '2026-08-21T10:05:00Z',
         resolution_source: 'system',
-      }];
+      }]);
     });
 
     renderPage();
@@ -90,7 +102,7 @@ describe('alert history', () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return [];
       if (path === '/alerts/2/resolve') return {};
-      return [{
+      return alertPage([{
         id: 2,
         tank_id: 4,
         parameter: 'temperature',
@@ -100,7 +112,7 @@ describe('alert history', () => {
         created_at: '2026-08-21T10:00:00Z',
         resolved_at: null,
         resolution_source: null,
-      }];
+      }]);
     });
 
     renderPage();

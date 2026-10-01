@@ -1,7 +1,7 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-09-27
+Last reviewed: 2026-10-01
 
 ## Completed and working locally
 
@@ -177,7 +177,10 @@ Last reviewed: 2026-09-27
   feedback and strict/open boundary guidance, deferred parameters remain
   hidden, and alert history distinguishes automatic recovery from the
   operator-facing Mark handled action while retaining the in-app-only
-  notification surface. Global thresholds are labeled as defaults; the tank
+  notification surface. Alert history loads 25 server-paged rows at a time,
+  preserves filters and page in the URL, and filters deferred parameters before
+  paging; the API retains its legacy response for callers without page
+  parameters. Global thresholds are labeled as defaults; the tank
   workspace shows inherited/overridden effective thresholds with admin edit and
   reset actions, and analytics suppresses shared bands when selected tanks
   differ.

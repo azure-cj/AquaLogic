@@ -1,4 +1,4 @@
-from .alert import AlertRead
+from .alert import AlertHistoryPage, AlertRead
 from .auth import LoginRequest, Token
 from .fish import (
     AssignedTankRead,
@@ -17,6 +17,7 @@ from .user import UserRead
 
 __all__ = [
     "AlertRead",
+    "AlertHistoryPage",
     "AssignedTankRead",
     "FishAssignmentRequest",
     "FishImageUploadRead",

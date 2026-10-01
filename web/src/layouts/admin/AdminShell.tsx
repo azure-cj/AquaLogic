@@ -1,6 +1,6 @@
 import { ApiError, api, clearSession } from '@/shared/api/client';
 import { prefetchAdminRoute } from '@/app/route-loaders';
-import type { Alert } from '@/shared/api/models';
+import type { AlertHistoryPage } from '@/shared/api/models';
 import {
   LoadingState
 } from '@/shared/components/admin-ui';
@@ -69,7 +69,7 @@ export function AdminShell() {
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const alertQuery = useQuery({
     queryKey: ['alerts', 'nav-unresolved'],
-    queryFn: () => api<Alert[]>('/alerts/history?resolved=false'),
+    queryFn: () => api<AlertHistoryPage>('/alerts/history?resolved=false&page=1&page_size=25'),
     enabled: Boolean(me.data),
     refetchInterval: 30_000,
   });
@@ -177,9 +177,9 @@ export function AdminShell() {
       >
         <Icon size={iconSize} aria-hidden="true" />
         <span>{item.label}</span>
-        {item.badge === 'unresolved-alerts' && Boolean(alertQuery.data?.length) && (
-          <b className="nav-badge" aria-label={`${alertQuery.data!.length} unresolved`}>
-            {alertQuery.data!.length > 99 ? '99+' : alertQuery.data!.length}
+        {item.badge === 'unresolved-alerts' && Boolean(alertQuery.data?.total) && (
+          <b className="nav-badge" aria-label={`${alertQuery.data!.total} unresolved`}>
+            {alertQuery.data!.total > 99 ? '99+' : alertQuery.data!.total}
           </b>
         )}
       </NavLink>
