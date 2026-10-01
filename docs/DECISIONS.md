@@ -1108,6 +1108,25 @@ the 2026-08-21 receipt-time analytics decision while retaining its reporting
 health semantics. Alert replay timing, recovered-alert push delivery, and exact
 firmware capture timestamps remain deferred.
 
+## 2026-10-01 — Align water-quality Analytics to half-hour clock buckets
+
+**Decision:** Keep water-quality history on observation time and aggregate it
+into fixed 30-minute buckets aligned to :00 and :30. Keep alert and reporting-
+gap resolution at the existing requested resolution, and continue using
+receipt time for reporting health. Show bucket intervals and partial coverage
+in tooltips, expose the trend bucket width in the Analytics response, and allow
+manual refresh with a visible last-updated time.
+
+**Reason:** Clock-aligned half-hour points are easier for operators to read and
+make the recovery-time clustering explanation visible without changing
+reporting or alert semantics.
+
+**Consequences:** The Analytics response adds the
+`window.water_quality_bucket_seconds` field and may return up to 1,441 trend
+points for a 30-day range. No storage, bridge, firmware, or alert behavior
+changes are required. The existing selected `bucket_seconds` continues to
+describe alert and reporting-gap buckets.
+
 ## Adding a decision
 
 Use this format:

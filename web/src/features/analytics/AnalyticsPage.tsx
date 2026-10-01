@@ -14,6 +14,7 @@ import {
   Download,
   Info,
   Layers3,
+  RefreshCw,
   Search,
 } from 'lucide-react';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
@@ -47,6 +48,7 @@ import {
 import {
   activeThreshold,
   analyticsCsv,
+  formatAnalyticsBucketRange,
   formatAnalyticsDate,
   MANILA_TIMEZONE,
   thresholdZones,
@@ -181,16 +183,29 @@ export function ChartTooltip({
   payload,
   label,
   unit,
+  bucketSeconds,
+  windowStart,
+  windowEnd,
+  timezone,
 }: {
   active?: boolean;
   payload?: Array<{ name: string; value: number | null; color?: string; payload?: ChartRow; }>;
   label?: number;
   unit: string;
+  bucketSeconds: number;
+  windowStart: string;
+  windowEnd: string;
+  timezone?: string;
 }) {
   if (!active || !payload?.length || label == null) return null;
+  const partialBucket =
+    label < new Date(windowStart).getTime() ||
+    label + bucketSeconds * 1_000 > new Date(windowEnd).getTime();
+  const contributors = payload[0]?.payload?.contributors ?? 0;
   return (
     <div className="analytics-tooltip analytics-trend-tooltip">
-      <strong>{formatAnalyticsDate(label)}</strong>
+      <strong>{formatAnalyticsBucketRange(label, bucketSeconds, timezone)}</strong>
+      {partialBucket && <span className="analytics-tooltip-note">Partial bucket in selected range</span>}
       {payload
         .filter((item) => item.value != null)
         .map((item) => (
@@ -200,7 +215,7 @@ export function ChartTooltip({
           </span>
         ))}
       <small>
-        {payload[0]?.payload?.contributors ?? 0} contributing tank(s) ·{' '}
+        {contributors} contributing tank{contributors === 1 ? '' : 's'} ·{' '}
         {payload[0]?.payload?.samples ?? 0} samples
       </small>
     </div>
@@ -356,7 +371,15 @@ function TrendChart({
           tickFormatter={(value) => Number(value).toFixed(1)}
         />
         <Tooltip
-          content={<ChartTooltip unit={selected.unit} />}
+          content={
+            <ChartTooltip
+              unit={selected.unit}
+              bucketSeconds={data.window.water_quality_bucket_seconds}
+              windowStart={data.window.start}
+              windowEnd={data.window.end}
+              timezone={data.window.timezone}
+            />
+          }
           cursor={{ stroke: '#58747d', strokeWidth: 1.25, strokeDasharray: '3 3' }}
           offset={6}
           isAnimationActive={false}
@@ -642,14 +665,30 @@ export default function AnalyticsPage() {
         title="Fleet analytics"
         description="Diagnose water-quality trends, threshold events, and reporting health."
         actions={
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={exportData}
-            disabled={!hasAnyReadings}
-          >
-            <Download size={16} /> Export CSV
-          </button>
+          <div className="analytics-page-actions">
+            {query.dataUpdatedAt > 0 && (
+              <span className="analytics-updated-at" aria-live="polite">
+                Updated at {formatAnalyticsDate(query.dataUpdatedAt)}
+              </span>
+            )}
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => void query.refetch()}
+              disabled={!data || query.isFetching || !validCustomRange || !validBucket}
+              aria-label="Refresh analytics"
+            >
+              <RefreshCw size={16} aria-hidden="true" /> Refresh
+            </button>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={exportData}
+              disabled={!hasAnyReadings}
+            >
+              <Download size={16} /> Export CSV
+            </button>
+          </div>
         }
       />
 
@@ -675,7 +714,7 @@ export default function AnalyticsPage() {
             </select>
           </label>
           <label className="field">
-            <span>Resolution</span>
+            <span>Alert and gap resolution</span>
             <select
               value={bucket}
               onChange={(event) =>
@@ -873,7 +912,7 @@ export default function AnalyticsPage() {
 
           <Panel
             title={`${selected.label} trend`}
-            description={`Fleet context and selected tanks · ${selected.unit}`}
+            description={`Fleet context and selected tanks · ${selected.unit} · ${data.window.water_quality_bucket_seconds / 60}-minute buckets, aligned to :00 and :30`}
             className="chart-panel main-trend-panel"
             action={
               <div className="chart-legend" aria-label="Trend chart legend">

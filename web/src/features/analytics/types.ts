@@ -85,6 +85,7 @@ export type AnalyticsResponse = {
     start: string;
     end: string;
     bucket_seconds: number;
+    water_quality_bucket_seconds: number;
     timezone: string;
   };
   tanks: Array<{ id: number; name: string; lifecycle: 'active' | 'retired'; }>;

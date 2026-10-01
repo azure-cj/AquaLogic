@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import AnalyticsPage, { ChartTooltip, chartRows } from './AnalyticsPage';
 import type { AnalyticsResponse, MetricKey } from './types';
-import { analyticsCsv, thresholdZones } from './utils';
+import { analyticsCsv, formatAnalyticsBucketRange, thresholdZones } from './utils';
 
 vi.mock('@/shared/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/api/client')>();
@@ -30,6 +30,7 @@ const response = (): AnalyticsResponse => ({
     start: '2026-07-26T00:00:00Z',
     end: '2026-07-27T00:00:00Z',
     bucket_seconds: 900,
+    water_quality_bucket_seconds: 1800,
     timezone: 'Asia/Manila',
   },
   tanks: [{ id: 1, name: 'Tank A', lifecycle: 'active' }],
@@ -124,9 +125,11 @@ function renderPage(path = '/admin/analytics') {
 }
 
 describe('fleet analytics', () => {
-  it('shows API bucket time and sample count without regrouping chart points', () => {
+  it('shows the API half-hour interval and sample count without regrouping chart points', () => {
     const data = response();
-    const bucketTimestamp = '2026-10-01T04:54:00Z';
+    const bucketTimestamp = '2026-10-01T06:00:00Z';
+    data.window.start = bucketTimestamp;
+    data.window.end = '2026-10-01T06:15:00Z';
     data.fleet_series = [
       {
         timestamp: bucketTimestamp,
@@ -162,11 +165,77 @@ describe('fleet analytics', () => {
         ]}
         label={rows[0].timestamp}
         unit="°C"
+        bucketSeconds={data.window.water_quality_bucket_seconds}
+        windowStart={data.window.start}
+        windowEnd={data.window.end}
+        timezone={data.window.timezone}
       />,
     );
 
-    expect(screen.getByText('Oct 1, 2026, 12:54 PM')).toBeInTheDocument();
-    expect(screen.getByText(/1 contributing tank\(s\).*95 samples/)).toBeInTheDocument();
+    expect(screen.getByText('Oct 1, 2026, 2:00 PM – 2:30 PM')).toBeInTheDocument();
+    expect(screen.getByText('Partial bucket in selected range')).toBeInTheDocument();
+    expect(screen.getByText('1 contributing tank · 95 samples')).toBeInTheDocument();
+  });
+
+  it('formats a bucket across midnight with both calendar dates', () => {
+    expect(formatAnalyticsBucketRange('2026-10-01T15:30:00Z', 1800)).toBe(
+      'Oct 1, 2026, 11:30 PM – Oct 2, 2026, 12:00 AM',
+    );
+  });
+
+  it('uses plural contributor wording for multiple tanks', () => {
+    render(
+      <ChartTooltip
+        active
+        payload={[
+          {
+            name: 'Fleet average',
+            value: 25,
+            color: '#168b8d',
+            payload: {
+              timestamp: Date.parse('2026-10-01T06:00:00Z'),
+              fleet: 25,
+              previous: null,
+              contributors: 2,
+              samples: 98,
+            },
+          },
+        ]}
+        label={Date.parse('2026-10-01T06:00:00Z')}
+        unit="°C"
+        bucketSeconds={1800}
+        windowStart="2026-10-01T06:00:00Z"
+        windowEnd="2026-10-01T06:30:00Z"
+      />,
+    );
+
+    expect(screen.getByText('2 contributing tanks · 98 samples')).toBeInTheDocument();
+  });
+
+  it('shows the trend resolution and refreshes only when requested', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/tanks') return [];
+      return response();
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const refresh = await screen.findByRole('button', { name: 'Refresh analytics' });
+    expect(await screen.findByText(/Updated at/)).toBeInTheDocument();
+    expect(screen.getByText(/30-minute buckets, aligned to :00 and :30/)).toBeInTheDocument();
+    const initialAnalyticsCalls = vi.mocked(api).mock.calls.filter(([path]) =>
+      String(path).startsWith('/analytics/fleet?'),
+    ).length;
+
+    await user.click(refresh);
+
+    await waitFor(() => {
+      expect(
+        vi.mocked(api).mock.calls.filter(([path]) =>
+          String(path).startsWith('/analytics/fleet?'),
+        ),
+      ).toHaveLength(initialAnalyticsCalls + 1);
+    });
   });
 
   it('uses URL state and renders diagnostic uptime rows', async () => {
@@ -226,10 +295,22 @@ describe('fleet analytics', () => {
       tank_name: data.tanks[0].name,
       series: data.fleet_series,
     }];
+    data.alert_events = [{
+      id: 1,
+      tank_id: 1,
+      tank_name: data.tanks[0].name,
+      reading_id: null,
+      parameter: 'temperature',
+      severity: 'warning',
+      message: 'Temperature warning',
+      timestamp: data.fleet_series[0].timestamp,
+      value: 29,
+    }];
     const csv = analyticsCsv(data, ['temperature']);
     expect(csv).toContain('warning_min');
     expect(csv).toContain('"Tank ""A"", display"');
     expect(csv).toContain('Asia/Manila');
+    expect(csv.split('\r\n')[1].endsWith(',1,0')).toBe(true);
   });
 
   it('maps configured threshold values to visible warning and critical bands', () => {

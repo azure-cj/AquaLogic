@@ -445,17 +445,23 @@ use a hosted species-photo URL through the existing `photo_url` field.
 - `GET /analytics/fleet` accepts `range=24h|7d|30d|custom`,
   `bucket=auto|15m|1h|6h|1d`, and up to three repeated `tank_id` values.
   Custom requests require ISO `start` and `end` values, are limited to 30 days,
-  and all requests are capped at 1,000 buckets. The response contains complete
-  nullable timelines, fleet and selected-tank series, previous-period
-  statistics, alert events, effective threshold segments, and classified
-  reporting uptime. A single selected tank receives that tank's effective
-  historical segments. Fleet or multi-tank scopes return shared segments only
-  when effective histories match; otherwise `thresholds_vary_by_tank=true`,
+  and the selected alert/gap resolution is capped at 1,000 buckets. Water-
+  quality series use fixed 30-minute observation-time buckets aligned to
+  :00/:30, with up to 1,441 points for a 30-day window including partial edge
+  buckets. `window.bucket_seconds` reports the alert/gap resolution and
+  `window.water_quality_bucket_seconds` reports the fixed trend resolution.
+  The response contains complete nullable timelines, fleet and selected-tank
+  series, previous-period statistics, alert events, effective threshold
+  segments, and classified reporting uptime. A single selected tank receives
+  that tank's effective historical segments. Fleet or multi-tank scopes return
+  shared segments only when effective histories match; otherwise
+  `thresholds_vary_by_tank=true`,
   `threshold_scope="varies"`, and an empty `threshold_segments` list prevent a
   misleading shared threshold line.
-- Analytics aggregation places readings, reporting intervals, and gaps by server
-  `received_at`. Observation `timestamp` remains available for historical and
-  hardware-clock context, and late observations are ordered operationally by
+- Analytics water-quality trend readings, sample counts, averages, and period
+  comparisons use observation `SensorReading.timestamp`. Alert events retain
+  `Alert.created_at`; reporting intervals and gaps use server `received_at`.
+  Tank freshness, Offline status, and operational monitoring continue to use
   receipt time.
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.

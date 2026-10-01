@@ -8,6 +8,20 @@
   min-width: 0;
 }
 
+.analytics-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.analytics-updated-at {
+  color: var(--muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
 .analytics-controls {
   position: relative;
   z-index: 4;
@@ -412,6 +426,11 @@
   padding-top: 0.25rem;
   border-top: 1px solid var(--border);
   color: var(--muted);
+}
+
+.analytics-tooltip-note {
+  color: var(--muted);
+  font-size: 0.62rem;
 }
 
 .analytics-alert-marker {
