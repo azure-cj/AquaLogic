@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'console_style.dart';
 
+/// One reading column. Rendered inside the shared readings slab, so it draws no
+/// card chrome of its own; attention is shown by a top bar and value colour.
 class ConsoleMetricCard extends StatelessWidget {
   const ConsoleMetricCard({
     super.key,
@@ -20,106 +22,147 @@ class ConsoleMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = stale
-        ? ConsoleStyle.muted
+    final statusColor = stale
+        ? ConsoleStyle.faint
         : attention
         ? ConsoleStyle.warning
-        : ConsoleStyle.accent;
+        : ConsoleStyle.good;
+    final status = stale
+        ? 'Last known'
+        : attention
+        ? 'Attention'
+        : 'Normal';
     return Semantics(
-      label:
-          '$label $value $unit. ${stale
-              ? 'Last known'
-              : attention
-              ? 'Needs attention'
-              : 'Normal'}. Simulated reading.',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: ConsoleStyle.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: attention && !stale
-                ? ConsoleStyle.warning
-                : ConsoleStyle.border,
-          ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final short = constraints.maxHeight < 108;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, color: color, size: short ? 18 : 22),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          height: 1,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
+      label: '$label $value $unit. $status. Simulated reading.',
+      child: Stack(
+        children: [
+          Positioned(
+            left: 20,
+            right: 20,
+            top: 0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              height: 3,
+              decoration: BoxDecoration(
+                color: attention && !stale
+                    ? ConsoleStyle.warning
+                    : Colors.transparent,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(3),
                 ),
-                const Spacer(),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text.rich(
-                    style: const TextStyle(height: 1),
-                    TextSpan(
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 14, 14),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final short = constraints.maxHeight < 130;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        TextSpan(
-                          text: value,
-                          style: TextStyle(
-                            fontSize: short ? 36 : 46,
-                            fontWeight: FontWeight.w700,
-                            color: stale
-                                ? ConsoleStyle.muted
-                                : ConsoleStyle.text,
-                          ),
+                        Icon(
+                          icon,
+                          size: short ? 16 : 20,
+                          color: stale
+                              ? ConsoleStyle.faint
+                              : ConsoleStyle.accent,
                         ),
-                        if (unit.isNotEmpty)
-                          TextSpan(
-                            text: ' $unit',
-                            style: const TextStyle(
-                              fontSize: 17,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              height: 1,
+                              fontSize: short ? 13 : 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: .3,
                               color: ConsoleStyle.muted,
                             ),
                           ),
+                        ),
                       ],
                     ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  stale
-                      ? 'LAST KNOWN'
-                      : attention
-                      ? 'ATTENTION'
-                      : 'NORMAL',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1,
-                    color: stale
-                        ? ConsoleStyle.muted
-                        : attention
-                        ? ConsoleStyle.warning
-                        : ConsoleStyle.good,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
+                    const Spacer(flex: 2),
+                    Flexible(
+                      flex: 6,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.bottomLeft,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: Text.rich(
+                            key: ValueKey('$value$stale$attention'),
+                            style: TextStyle(
+                              height: 1,
+                              fontSize: short ? 40 : 68,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: short ? -.8 : -1.5,
+                              fontFeatures: ConsoleStyle.tabular,
+                              color: stale
+                                  ? ConsoleStyle.faint
+                                  : attention
+                                  ? ConsoleStyle.warning
+                                  : ConsoleStyle.text,
+                            ),
+                            TextSpan(
+                              children: [
+                                TextSpan(text: value),
+                                if (unit.isNotEmpty)
+                                  TextSpan(
+                                    text: ' $unit',
+                                    style: TextStyle(
+                                      fontSize: short ? 15 : 20,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0,
+                                      color: ConsoleStyle.muted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: short ? 8 : 14),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: short ? 12 : 14,
+                              height: 1,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Keeps the value group optically centred in tall slabs.
+                    const Spacer(flex: 3),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

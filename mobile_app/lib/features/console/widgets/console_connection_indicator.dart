@@ -6,25 +6,35 @@ class ConsoleConnectionIndicator extends StatelessWidget {
     super.key,
     required this.label,
     required this.connected,
+    this.compact = false,
   });
   final String label;
   final bool connected;
+
+  /// Compact shows only the dot and the label, for the console header.
+  final bool compact;
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(
-        connected ? Icons.check_circle_outline : Icons.cloud_off_outlined,
-        size: 17,
-        color: connected ? ConsoleStyle.good : ConsoleStyle.warning,
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: connected ? ConsoleStyle.good : ConsoleStyle.warning,
+        ),
       ),
-      const SizedBox(width: 6),
+      const SizedBox(width: 8),
       Text(
-        '$label · ${connected ? 'Connected' : 'Unavailable'}',
-        style: const TextStyle(
-          fontSize: 12,
+        compact ? label : '$label · ${connected ? 'Connected' : 'Unavailable'}',
+        semanticsLabel: '$label ${connected ? 'connected' : 'unavailable'}',
+        style: TextStyle(
+          fontSize: compact ? 14 : 13,
           height: 1,
-          color: ConsoleStyle.muted,
+          fontWeight: FontWeight.w500,
+          color: connected ? ConsoleStyle.muted : ConsoleStyle.warning,
         ),
       ),
     ],

@@ -9,8 +9,9 @@ import '../platform/console_display_session.dart';
 import '../widgets/console_command_sheet.dart';
 import '../widgets/console_equipment_card.dart';
 import '../widgets/console_metric_card.dart';
+import '../widgets/console_panel.dart';
 import '../widgets/console_settings_sheet.dart';
-import '../widgets/console_status_bar.dart';
+import '../widgets/console_connection_indicator.dart';
 import '../widgets/console_style.dart';
 import '../widgets/console_warning_card.dart';
 
@@ -32,6 +33,19 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
   late final ConsoleController _controller;
   late final ConsoleDisplaySession _display;
   bool _allowExit = false;
+  bool _panelOpen = false;
+  // Locate tiles so a panel can morph out of the one that was tapped.
+  final _origins = {
+    for (final id in ['light', 'uv', 'feeder', 'pump-a', 'pump-b', 'settings'])
+      id: GlobalKey(debugLabel: 'console-origin-$id'),
+  };
+
+  Rect? _rectOf(String id) {
+    final box = _origins[id]?.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
   bool _exitDialogOpen = false;
 
   @override
@@ -83,25 +97,29 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
     });
   }
 
-  Future<void> _sheet(Widget child) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: ConsoleStyle.surface,
-    constraints: const BoxConstraints(maxWidth: 620),
-    builder: (context) => Theme(
-      data: ConsoleStyle.theme(context),
-      child: SafeArea(child: SingleChildScrollView(child: child)),
-    ),
-  );
+  Future<void> _sheet(Widget child, String origin) async {
+    final rect = _rectOf(origin);
+    setState(() => _panelOpen = true);
+    await showConsolePanel(context, child, origin: rect);
+    if (mounted) setState(() => _panelOpen = false);
+  }
 
-  void _controls(String title, ConsoleAction? action, {bool readOnly = false}) {
+  void _controls(
+    String origin,
+    String title,
+    IconData icon,
+    ConsoleAction? action, {
+    bool readOnly = false,
+  }) {
     _sheet(
       ConsoleCommandSheet(
         controller: _controller,
         title: title,
+        icon: icon,
         action: action,
         readOnly: readOnly,
       ),
+      origin,
     );
   }
 
@@ -114,6 +132,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
           _requestExit();
         },
       ),
+      'settings',
     );
   }
 
@@ -127,58 +146,77 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
       },
       child: Scaffold(
         backgroundColor: ConsoleStyle.background,
-        body: SafeArea(
-          child: ListenableBuilder(
-            listenable: _controller,
-            builder: (context, _) {
-              final state = _controller.state;
-              if (state == null) {
-                return Center(
-                  child: _controller.error == null
-                      ? const CircularProgressIndicator()
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_controller.error!),
-                            TextButton(
-                              onPressed: _controller.retry,
-                              child: const Text('Retry'),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0, -1.4),
+              radius: 1.4,
+              colors: [Color(0xFF0E2232), ConsoleStyle.background],
+            ),
+          ),
+          child: AnimatedScale(
+            scale: _panelOpen ? .975 : 1,
+            duration: const Duration(milliseconds: 420),
+            curve: _panelOpen
+                ? const ConsoleSpringCurve()
+                : Curves.easeOutCubic,
+            child: SafeArea(
+              child: ListenableBuilder(
+                listenable: _controller,
+                builder: (context, _) {
+                  final state = _controller.state;
+                  if (state == null) {
+                    return Center(
+                      child: _controller.error == null
+                          ? const CircularProgressIndicator()
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_controller.error!),
+                                TextButton(
+                                  onPressed: _controller.retry,
+                                  child: const Text('Retry'),
+                                ),
+                                TextButton(
+                                  onPressed: _requestExit,
+                                  child: const Text('Exit Console Mode'),
+                                ),
+                              ],
                             ),
-                            TextButton(
-                              onPressed: _requestExit,
-                              child: const Text('Exit Console Mode'),
-                            ),
-                          ],
+                    );
+                  }
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 640;
+                      final scaledText =
+                          MediaQuery.textScalerOf(context).scale(16) > 20;
+                      final minimumHeight = wide
+                          ? scaledText
+                                ? 500.0
+                                : 380.0
+                          : 860.0;
+                      final height = math.max(
+                        constraints.maxHeight,
+                        minimumHeight,
+                      );
+                      final dashboard = SizedBox(
+                        height: height,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          child: _dashboard(state, wide, scaledText),
                         ),
-                );
-              }
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth >= 640;
-                  final scaledText =
-                      MediaQuery.textScalerOf(context).scale(16) > 20;
-                  final minimumHeight = wide
-                      ? scaledText
-                            ? 500.0
-                            : 380.0
-                      : 860.0;
-                  final height = math.max(constraints.maxHeight, minimumHeight);
-                  final dashboard = SizedBox(
-                    height: height,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      child: _dashboard(state, wide, scaledText),
-                    ),
+                      );
+                      return constraints.maxHeight < minimumHeight
+                          ? SingleChildScrollView(child: dashboard)
+                          : dashboard;
+                    },
                   );
-                  return constraints.maxHeight < minimumHeight
-                      ? SingleChildScrollView(child: dashboard)
-                      : dashboard;
                 },
-              );
-            },
+              ),
+            ),
           ),
         ),
       ),
@@ -219,141 +257,126 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
       ),
     ];
     final controls = [
-      ConsoleEquipmentCard(
-        key: const ValueKey('console-light'),
-        label: 'Lighting',
-        status: !equipment.lightConfirmed
-            ? 'UNKNOWN'
-            : equipment.lightOn
-            ? 'ON'
-            : 'OFF',
-        icon: Icons.light_mode_outlined,
-        onTap: _controller.canCommand
-            ? () => _controls('Lighting', ConsoleAction.lightOff)
-            : null,
+      KeyedSubtree(
+        key: _origins['light'],
+        child: ConsoleEquipmentCard(
+          key: const ValueKey('console-light'),
+          label: 'Lighting',
+          status: !equipment.lightConfirmed
+              ? 'Unknown'
+              : equipment.lightOn
+              ? 'On'
+              : 'Off',
+          icon: Icons.light_mode_outlined,
+          active: equipment.lightConfirmed && equipment.lightOn,
+          onTap: _controller.canCommand
+              ? () => _controls(
+                  'light',
+                  'Lighting',
+                  Icons.light_mode_outlined,
+                  ConsoleAction.lightOff,
+                )
+              : null,
+        ),
       ),
-      ConsoleEquipmentCard(
-        key: const ValueKey('console-uv'),
-        label: 'UV',
-        status: !equipment.uvConfirmed
-            ? 'UNKNOWN'
-            : equipment.uvOn
-            ? 'ON'
-            : 'OFF',
-        icon: Icons.flare,
-        onTap: _controller.canCommand
-            ? () => _controls('UV sterilizer', ConsoleAction.uvOff)
-            : null,
+      KeyedSubtree(
+        key: _origins['uv'],
+        child: ConsoleEquipmentCard(
+          key: const ValueKey('console-uv'),
+          label: 'UV',
+          status: !equipment.uvConfirmed
+              ? 'Unknown'
+              : equipment.uvOn
+              ? 'On'
+              : 'Off',
+          icon: Icons.flare,
+          active: equipment.uvConfirmed && equipment.uvOn,
+          onTap: _controller.canCommand
+              ? () => _controls(
+                  'uv',
+                  'UV sterilizer',
+                  Icons.flare,
+                  ConsoleAction.uvOff,
+                )
+              : null,
+        ),
       ),
-      ConsoleEquipmentCard(
-        key: const ValueKey('console-feeder'),
-        label: 'Feeder',
-        status: !equipment.feederConfirmed
-            ? 'UNKNOWN'
-            : equipment.feederRunning
-            ? 'RUNNING'
-            : 'READY',
-        icon: Icons.set_meal_outlined,
-        onTap: _controller.canCommand
-            ? () => _controls('Feeder', ConsoleAction.feed)
-            : null,
+      KeyedSubtree(
+        key: _origins['feeder'],
+        child: ConsoleEquipmentCard(
+          key: const ValueKey('console-feeder'),
+          label: 'Feeder',
+          status: !equipment.feederConfirmed
+              ? 'Unknown'
+              : equipment.feederRunning
+              ? 'Running'
+              : 'Ready',
+          icon: Icons.set_meal_outlined,
+          active: equipment.feederConfirmed && equipment.feederRunning,
+          onTap: _controller.canCommand
+              ? () => _controls(
+                  'feeder',
+                  'Feeder',
+                  Icons.set_meal_outlined,
+                  ConsoleAction.feed,
+                )
+              : null,
+        ),
       ),
-      ConsoleEquipmentCard(
-        key: const ValueKey('console-pump-a'),
-        label: 'Pump A',
-        status: equipment.pumpAStatus,
-        icon: Icons.science_outlined,
-        readOnly: true,
-        onTap: () => _controls('Pump A', null, readOnly: true),
+      KeyedSubtree(
+        key: _origins['pump-a'],
+        child: ConsoleEquipmentCard(
+          key: const ValueKey('console-pump-a'),
+          label: 'Pump A',
+          status: _title(equipment.pumpAStatus),
+          icon: Icons.science_outlined,
+          readOnly: true,
+          onTap: () => _controls(
+            'pump-a',
+            'Pump A',
+            Icons.science_outlined,
+            null,
+            readOnly: true,
+          ),
+        ),
       ),
-      ConsoleEquipmentCard(
-        key: const ValueKey('console-pump-b'),
-        label: 'Pump B',
-        status: equipment.pumpBStatus,
-        icon: Icons.science_outlined,
-        readOnly: true,
-        onTap: () => _controls('Pump B', null, readOnly: true),
+      KeyedSubtree(
+        key: _origins['pump-b'],
+        child: ConsoleEquipmentCard(
+          key: const ValueKey('console-pump-b'),
+          label: 'Pump B',
+          status: _title(equipment.pumpBStatus),
+          icon: Icons.science_outlined,
+          readOnly: true,
+          onTap: () => _controls(
+            'pump-b',
+            'Pump B',
+            Icons.science_outlined,
+            null,
+            readOnly: true,
+          ),
+        ),
       ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: scaledText ? 70 : 48,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  state.tankName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.water_drop_outlined,
-                size: 28,
-                color: ConsoleStyle.accent,
-              ),
-              const SizedBox(width: 7),
-              if (wide)
-                Text(
-                  'AquaLogic',
-                  style: TextStyle(
-                    height: 1,
-                    color: ConsoleStyle.accent,
-                    fontSize: wide ? 25 : 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              const Spacer(),
-              if (wide)
-                Text(
-                  state.localConnected ? 'LOCAL ONLINE' : 'LOCAL OFFLINE',
-                  style: TextStyle(
-                    color: state.localConnected
-                        ? ConsoleStyle.good
-                        : ConsoleStyle.warning,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              IconButton(
-                key: const ValueKey('console-settings'),
-                tooltip: 'Console settings',
-                onPressed: _settings,
-                icon: const Icon(Icons.settings_outlined),
-              ),
-            ],
-          ),
+          height: scaledText ? 70 : 56,
+          child: _header(state, wide && !scaledText),
         ),
         const SizedBox(height: 8),
-        Expanded(
-          flex: wide ? 3 : 4,
-          child: wide
-              ? _row(metrics)
-              : GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 1.4,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: metrics,
-                ),
-        ),
-        const SizedBox(height: 8),
+        Expanded(flex: wide ? 5 : 4, child: _readings(metrics, wide)),
+        const SizedBox(height: 14),
         SizedBox(
-          height: scaledText ? 80 : 52,
+          height: scaledText ? 84 : (wide ? 60 : 72),
           child: ConsoleWarningCard(state: state, onRetry: _controller.retry),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 14),
         Expanded(
           flex: 3,
           child: wide
-              ? _row(controls)
+              ? _row(controls, gap: 12)
               : GridView.count(
                   crossAxisCount: 3,
                   mainAxisSpacing: 10,
@@ -363,66 +386,219 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
                   children: controls,
                 ),
         ),
-        const SizedBox(height: 10),
         if (_controller.error != null)
-          Text(
-            _controller.error!,
-            style: const TextStyle(color: ConsoleStyle.warning),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _controller.error!,
+              style: const TextStyle(color: ConsoleStyle.warning),
+            ),
           ),
-        SizedBox(
-          height: wide
-              ? scaledText
-                    ? 90
-                    : 46
-              : 90,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        SizedBox(height: scaledText ? 56 : 40, child: _footer(state)),
+      ],
+    );
+  }
+
+  Widget _header(ConsoleState state, bool wide) {
+    final updated = TimeOfDay.fromDateTime(state.observedAt).format(context);
+    return Row(
+      children: [
+        const Icon(
+          Icons.water_drop_outlined,
+          size: 24,
+          color: ConsoleStyle.accent,
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            state.tankName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 26,
+              height: 1,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -.3,
+            ),
+          ),
+        ),
+        if (wide) ...[
+          const SizedBox(width: 20),
+          Text(
+            'Updated $updated',
+            style: const TextStyle(
+              fontSize: 14,
+              color: ConsoleStyle.faint,
+              fontFeatures: ConsoleStyle.tabular,
+            ),
+          ),
+        ],
+        if (wide && MediaQuery.sizeOf(context).width >= 960) ...[
+          const Spacer(),
+          const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              ConsoleStatusBar(state: state),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (state.isSimulated)
-                    const Text(
-                      'Prototype · simulated data',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: ConsoleStyle.accent,
-                      ),
-                    ),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Text(
-                      state.command == null
-                          ? 'COMMAND · IDLE'
-                          : 'COMMAND · ${state.command!.status.label} — ${state.command!.message}',
-                      key: const ValueKey('console-command-status'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1,
-                        color: ConsoleStyle.muted,
-                      ),
-                    ),
-                  ),
-                ],
+              Icon(Icons.water_drop, size: 16, color: ConsoleStyle.accent),
+              SizedBox(width: 6),
+              Text(
+                'AquaLogic',
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: .4,
+                  color: ConsoleStyle.accent,
+                ),
               ),
             ],
+          ),
+        ],
+        const Spacer(),
+        ConsoleConnectionIndicator(
+          label: 'Local',
+          connected: state.localConnected,
+          compact: true,
+        ),
+        const SizedBox(width: 20),
+        ConsoleConnectionIndicator(
+          label: 'Cloud',
+          connected: state.cloudConnected,
+          compact: true,
+        ),
+        const SizedBox(width: 12),
+        KeyedSubtree(
+          key: _origins['settings'],
+          child: IconButton(
+            key: const ValueKey('console-settings'),
+            tooltip: 'Console settings',
+            onPressed: _settings,
+            iconSize: 24,
+            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+            icon: const Icon(Icons.tune_rounded),
           ),
         ),
       ],
     );
   }
 
-  Widget _row(List<Widget> children) => Row(
+  /// Four readings share one slab separated by hairlines; the cyan line along
+  /// the bottom edge mirrors the enclosure's LED strip.
+  Widget _readings(List<Widget> metrics, bool wide) {
+    const divider = VerticalDivider(
+      width: 1,
+      thickness: 1,
+      indent: 24,
+      endIndent: 24,
+      color: ConsoleStyle.hairline,
+    );
+    final Widget body = wide
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var index = 0; index < metrics.length; index++) ...[
+                if (index > 0) divider,
+                Expanded(child: metrics[index]),
+              ],
+            ],
+          )
+        : Column(
+            children: [
+              for (var row = 0; row < 2; row++) ...[
+                if (row > 0)
+                  const Divider(
+                    height: 1,
+                    indent: 20,
+                    endIndent: 20,
+                    color: ConsoleStyle.hairline,
+                  ),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: metrics[row * 2]),
+                      divider,
+                      Expanded(child: metrics[row * 2 + 1]),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          );
+    return RepaintBoundary(
+      child: Container(
+        decoration: ConsoleStyle.panelDecoration(),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            Expanded(child: body),
+            Container(
+              height: 2,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    ConsoleStyle.accent.withValues(alpha: 0),
+                    ConsoleStyle.accent,
+                    ConsoleStyle.accent.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _footer(ConsoleState state) {
+    const meta = TextStyle(fontSize: 13, height: 1, color: ConsoleStyle.faint);
+    final command = state.command;
+    return Row(
+      children: [
+        if (state.isSimulated) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: ConsoleStyle.warning.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              'Simulated data',
+              style: meta.copyWith(
+                color: ConsoleStyle.warning.withValues(alpha: .85),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+        ],
+        Expanded(
+          child: Text(
+            command == null
+                ? 'Command idle'
+                : 'Command ${command.status.label.toLowerCase()} — ${command.message}',
+            key: const ValueKey('console-command-status'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: meta,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(List<Widget> children, {double gap = 10}) => Row(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       for (var index = 0; index < children.length; index++) ...[
-        if (index > 0) const SizedBox(width: 10),
+        if (index > 0) SizedBox(width: gap),
         Expanded(child: children[index]),
       ],
     ],
   );
+
+  static String _title(String value) => value.isEmpty
+      ? value
+      : value[0].toUpperCase() + value.substring(1).toLowerCase();
 }

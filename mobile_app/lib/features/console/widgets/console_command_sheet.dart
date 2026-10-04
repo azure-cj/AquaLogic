@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../controllers/console_controller.dart';
 import '../models/console_command.dart';
+import 'console_panel.dart';
 import 'console_style.dart';
 
 class ConsoleCommandSheet extends StatelessWidget {
@@ -9,11 +10,13 @@ class ConsoleCommandSheet extends StatelessWidget {
     required this.controller,
     required this.title,
     required this.action,
+    this.icon = Icons.tune_rounded,
     this.readOnly = false,
   });
   final ConsoleController controller;
   final String title;
   final ConsoleAction? action;
+  final IconData icon;
   final bool readOnly;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -24,23 +27,24 @@ class ConsoleCommandSheet extends StatelessWidget {
       final current = switch (action) {
         ConsoleAction.lightOn || ConsoleAction.lightOff =>
           state?.equipment.lightConfirmed != true
-              ? 'UNKNOWN'
+              ? 'Unknown'
               : state?.equipment.lightOn == true
-              ? 'ON'
-              : 'OFF',
+              ? 'On'
+              : 'Off',
         ConsoleAction.uvOn || ConsoleAction.uvOff =>
           state?.equipment.uvConfirmed != true
-              ? 'UNKNOWN'
+              ? 'Unknown'
               : state?.equipment.uvOn == true
-              ? 'ON'
-              : 'OFF',
+              ? 'On'
+              : 'Off',
         _ =>
           state?.equipment.feederConfirmed != true
-              ? 'UNKNOWN'
+              ? 'Unknown'
               : state?.equipment.feederRunning == true
-              ? 'RUNNING'
-              : 'READY',
+              ? 'Running'
+              : 'Ready',
       };
+      final active = current == 'On' || current == 'Running';
       // Resolve the target at submission time; a reopened sheet uses current state.
       final actualAction = switch (action) {
         ConsoleAction.lightOn || ConsoleAction.lightOff =>
@@ -54,86 +58,131 @@ class ConsoleCommandSheet extends StatelessWidget {
         _ => action,
       };
       final text = actualAction == ConsoleAction.feed
-          ? 'FEED ONCE'
+          ? 'Feed once'
           : actualAction == ConsoleAction.lightOff ||
                 actualAction == ConsoleAction.uvOff
-          ? 'TURN OFF'
-          : 'TURN ON';
+          ? 'Turn off'
+          : 'Turn on';
+      final enabled =
+          controller.canCommand && actualAction != null && current != 'Unknown';
       return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+        child: ConsoleStaggerColumn(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
+            ConsolePanelHeader(
+              icon: icon,
+              title: title,
+              subtitle: readOnly ? 'Monitoring only' : 'Local control',
+              closeTooltip: 'Close controls',
+            ),
+            const SizedBox(height: 28),
+            if (readOnly) ...[
+              const ConsoleSectionLabel('Status'),
+              ConsoleInset(
+                child: Row(
+                  children: [
+                    const Text(
+                      'Idle',
+                      style: TextStyle(
+                        fontSize: 32,
+                        height: 1,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
+                    const Spacer(),
+                    _Tag(
+                      icon: Icons.lock_outline,
+                      label: 'Read only',
+                      color: ConsoleStyle.muted,
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Close controls',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const Text(
-              'Prototype · simulated data',
-              style: TextStyle(color: ConsoleStyle.accent),
-            ),
-            const SizedBox(height: 16),
-            if (readOnly)
+              ),
+              const SizedBox(height: 16),
               const Text(
-                'IDLE · READ ONLY\nDosing controls will be available in a later phase after local device integration and safety review.',
-                style: TextStyle(fontSize: 17, height: 1.5),
-              )
-            else ...[
-              Text(
-                'Current status: $current',
-                style: const TextStyle(fontSize: 20),
+                'Dosing controls will be available in a later phase after local device integration and safety review.',
+                style: TextStyle(color: ConsoleStyle.muted, height: 1.5),
               ),
-              const SizedBox(height: 12),
-              Text(
-                command == null
-                    ? 'IDLE · No command submitted.'
-                    : '${command.status.label} · ${command.message}',
-                key: const ValueKey('console-sheet-command'),
-                style: TextStyle(
-                  fontSize: 15,
-                  color:
-                      command?.status == ConsoleCommandStatus.unknown ||
-                          command?.status == ConsoleCommandStatus.rejected
-                      ? ConsoleStyle.warning
-                      : ConsoleStyle.muted,
+            ] else ...[
+              const ConsoleSectionLabel('Current state'),
+              ConsoleInset(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: active
+                            ? ConsoleStyle.accent
+                            : current == 'Unknown'
+                            ? ConsoleStyle.warning
+                            : ConsoleStyle.faint,
+                        boxShadow: active
+                            ? [
+                                BoxShadow(
+                                  color: ConsoleStyle.accent.withValues(
+                                    alpha: .5,
+                                  ),
+                                  blurRadius: 10,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Text(
+                      current,
+                      key: const ValueKey('console-sheet-current'),
+                      style: const TextStyle(
+                        fontSize: 32,
+                        height: 1,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (state?.isSimulated == true)
+                      const _Tag(
+                        label: 'Simulated',
+                        color: ConsoleStyle.warning,
+                      ),
+                  ],
                 ),
               ),
-              if (controller.error != null)
+              const SizedBox(height: 24),
+              const ConsoleSectionLabel('Last command'),
+              _CommandProgress(command: command),
+              if (controller.error != null) ...[
+                const SizedBox(height: 10),
                 Text(
                   controller.error!,
                   style: const TextStyle(color: ConsoleStyle.warning),
                 ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed:
-                    controller.canCommand &&
-                        actualAction != null &&
-                        current != 'UNKNOWN'
-                    ? () => controller.submit(actualAction)
-                    : null,
-                child: Text(
-                  controller.busy
-                      ? 'COMMAND IN PROGRESS'
-                      : state?.localConnected != true
-                      ? 'LOCAL DEVICE OFFLINE'
-                      : current == 'UNKNOWN'
-                      ? 'EQUIPMENT STATE UNCONFIRMED'
-                      : text,
+              ],
+              const SizedBox(height: 28),
+              SizedBox(
+                height: 56,
+                child: FilledButton(
+                  onPressed: enabled
+                      ? () => controller.submit(actualAction)
+                      : null,
+                  style: FilledButton.styleFrom(
+                    disabledBackgroundColor: ConsoleStyle.surface,
+                    disabledForegroundColor: ConsoleStyle.faint,
+                  ),
+                  child: Text(
+                    controller.busy
+                        ? 'Command in progress'
+                        : state?.localConnected != true
+                        ? 'Local device offline'
+                        : current == 'Unknown'
+                        ? 'Equipment state unconfirmed'
+                        : text,
+                  ),
                 ),
               ),
             ],
@@ -141,5 +190,145 @@ class ConsoleCommandSheet extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+/// Accepted → Running → Completed, with failure states shown in amber.
+class _CommandProgress extends StatelessWidget {
+  const _CommandProgress({required this.command});
+  final ConsoleCommand? command;
+
+  @override
+  Widget build(BuildContext context) {
+    final command = this.command;
+    if (command == null) {
+      return const ConsoleInset(
+        child: Text(
+          'No command submitted.',
+          key: ValueKey('console-sheet-command'),
+          style: TextStyle(color: ConsoleStyle.muted),
+        ),
+      );
+    }
+    final failed =
+        command.status == ConsoleCommandStatus.rejected ||
+        command.status == ConsoleCommandStatus.unknown;
+    final reached = switch (command.status) {
+      ConsoleCommandStatus.idle => 0,
+      ConsoleCommandStatus.accepted => 1,
+      ConsoleCommandStatus.running => 2,
+      ConsoleCommandStatus.completed => 3,
+      _ => 0,
+    };
+    const steps = ['Accepted', 'Running', 'Completed'];
+    return ConsoleInset(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!failed)
+            Row(
+              children: [
+                for (var i = 0; i < steps.length; i++) ...[
+                  if (i > 0)
+                    Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        height: 2,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        color: i < reached
+                            ? ConsoleStyle.accent
+                            : ConsoleStyle.hairline,
+                      ),
+                    ),
+                  _Step(label: steps[i], done: i < reached),
+                ],
+              ],
+            ),
+          if (!failed) const SizedBox(height: 14),
+          Text(
+            '${command.status.label} · ${command.message}',
+            key: const ValueKey('console-sheet-command'),
+            style: TextStyle(
+              fontSize: 14,
+              color: failed ? ConsoleStyle.warning : ConsoleStyle.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({required this.label, required this.done});
+  final String label;
+  final bool done;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: done ? ConsoleStyle.accent : Colors.transparent,
+          border: Border.all(
+            color: done ? ConsoleStyle.accent : ConsoleStyle.faint,
+            width: 1.5,
+          ),
+        ),
+        child: done
+            ? const Icon(
+                Icons.check_rounded,
+                size: 12,
+                color: ConsoleStyle.background,
+              )
+            : null,
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: done ? ConsoleStyle.text : ConsoleStyle.faint,
+        ),
+      ),
+    ],
+  );
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag({required this.label, required this.color, this.icon});
+  final String label;
+  final Color color;
+  final IconData? icon;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+        ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    ),
   );
 }

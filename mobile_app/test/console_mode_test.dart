@@ -8,6 +8,7 @@ import 'package:aqualogic/features/console/data/mock_console_repository.dart';
 import 'package:aqualogic/features/console/models/console_command.dart';
 import 'package:aqualogic/features/console/platform/console_display_session.dart';
 import 'package:aqualogic/features/console/screens/tank_console_screen.dart';
+import 'package:aqualogic/features/console/widgets/console_connection_indicator.dart';
 import 'package:aqualogic/features/console/widgets/console_equipment_card.dart';
 import 'package:aqualogic/features/auth/models/auth_user.dart';
 import 'package:aqualogic/features/auth/models/user_role.dart';
@@ -221,7 +222,7 @@ void main() {
       ); // Units share a rich value line.
       expect(find.textContaining('27.3', findRichText: true), findsOneWidget);
       expect(find.text('7.32', findRichText: true), findsOneWidget);
-      expect(find.text('Prototype · simulated data'), findsOneWidget);
+      expect(find.text('Simulated data'), findsOneWidget);
       expect(find.text('Pump A'), findsOneWidget);
       expect(display.enters, 1);
       await tester.pumpWidget(const SizedBox());
@@ -248,7 +249,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('console-light')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('TURN OFF'));
+      await tester.tap(find.text('Turn off'));
       await tester.pump();
       expect(find.textContaining('ACCEPTED'), findsWidgets);
       await tester.pump(const Duration(milliseconds: 500));
@@ -293,9 +294,9 @@ void main() {
             .onTap,
         isNull,
       );
-      expect(find.text('LAST KNOWN'), findsNWidgets(4));
-      expect(find.text('LOCAL DEVICE OFFLINE'), findsOneWidget);
-      await tester.tap(find.text('RETRY'));
+      expect(find.text('Last known'), findsNWidgets(4));
+      expect(find.text('Local device offline'), findsOneWidget);
+      await tester.tap(find.text('Retry'));
       await tester.pump();
       expect(
         tester
@@ -305,78 +306,85 @@ void main() {
             .onTap,
         isNotNull,
       );
-      expect(find.text('CLOUD · Unavailable'), findsOneWidget);
+      expect(
+        tester
+            .widget<ConsoleConnectionIndicator>(
+              find.widgetWithText(ConsoleConnectionIndicator, 'Cloud'),
+            )
+            .connected,
+        isFalse,
+      );
       await tester.pumpWidget(const SizedBox());
       await repository.dispose();
     },
   );
 
-  testWidgets(
-    'More opens console and deliberate exit returns to introduction',
-    (tester) async {
-      const displayChannel = MethodChannel(
-        'com.aqualogic.mobile/console_display',
-      );
-      final displayCalls = <String>[];
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  testWidgets('More opens console and deliberate exit returns to introduction', (
+    tester,
+  ) async {
+    const displayChannel = MethodChannel(
+      'com.aqualogic.mobile/console_display',
+    );
+    final displayCalls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      displayChannel,
+      (call) async {
+        displayCalls.add(call.method);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         displayChannel,
-        (call) async {
-          displayCalls.add(call.method);
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          displayChannel,
-          null,
-        ),
-      );
-      await tester.binding.setSurfaceSize(const Size(844, 390));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MoreScreen(
-            snapshot: MockSensorFeed.snapshot(0),
-            user: const AuthUser(
-              id: 'owner',
-              name: 'Owner',
-              email: 'owner@aqualogic.local',
-              role: UserRole.admin,
-            ),
+        null,
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(844, 390));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MoreScreen(
+          snapshot: MockSensorFeed.snapshot(0),
+          user: const AuthUser(
+            id: 'owner',
+            name: 'Owner',
+            email: 'owner@aqualogic.local',
+            role: UserRole.admin,
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('more-tank-console')),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.byKey(const ValueKey('more-tank-console')));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const ValueKey('enter-console')));
-      await tester.tap(find.byKey(const ValueKey('enter-console')));
-      await tester.pumpAndSettle();
-      expect(find.byType(TankConsoleScreen), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('console-settings')));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Exit Console Mode'));
-      await tester.tap(find.text('Exit Console Mode'));
-      await tester.pumpAndSettle();
-      expect(find.text('Exit Console Mode?'), findsOneWidget);
-      await tester.tap(find.text('Stay in console'));
-      await tester.pumpAndSettle();
-      expect(find.byType(TankConsoleScreen), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Exit console'));
-      await tester.pump();
-      await tester.pumpAndSettle();
-      expect(displayCalls, containsAllInOrder(['enter', 'exit']));
-      expect(find.byKey(const ValueKey('enter-console')), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('more-tank-console')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey('more-tank-console')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('enter-console')));
+    await tester.tap(find.byKey(const ValueKey('enter-console')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TankConsoleScreen), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('console-settings')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Exit Console Mode'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exit Console Mode'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exit Console Mode?'), findsOneWidget);
+    await tester.tap(find.text('Stay in console'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TankConsoleScreen), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exit console'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(displayCalls, containsAllInOrder(['enter', 'exit']));
+    expect(find.byKey(const ValueKey('enter-console')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'large text landscape remains readable without layout exceptions',
