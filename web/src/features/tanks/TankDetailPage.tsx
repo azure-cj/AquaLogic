@@ -1,3 +1,4 @@
+import { AlertDetailDrawer } from '@/features/alerts/AlertDetailDrawer';
 import { ApiError, api } from '@/shared/api/client';
 import type {
   Alert,
@@ -87,7 +88,7 @@ export function TankDetail() {
   const me = useMe();
   const canManage = me.data?.role !== 'staff';
   const isAdmin = me.data?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<TankDetailTab>('overview');
+  const [activeTab, setActiveTab] = useState<TankDetailTab>(params.get('tab') === 'control' ? 'control' : 'overview');
   const [assigning, setAssigning] = useState(false);
   const [assignBusy, setAssignBusy] = useState(false);
   const [removing, setRemoving] = useState<Fish | null>(null);
@@ -96,6 +97,7 @@ export function TankDetail() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [retireBusy, setRetireBusy] = useState(false);
+  const [detailAlertId, setDetailAlertId] = useState<number | null>(null);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [heroFailed, setHeroFailed] = useState(false);
@@ -685,6 +687,7 @@ export function TankDetail() {
                         <span>
                           <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
                           <small>{alert.message}</small>
+                          <button className="text-link" type="button" onClick={() => setDetailAlertId(alert.id)}>View details</button>
                         </span>
                         <button
                           className="button button-secondary"
@@ -759,6 +762,7 @@ export function TankDetail() {
                   <span>
                     <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
                     <small>{alert.message}</small>
+                          <button className="text-link" type="button" onClick={() => setDetailAlertId(alert.id)}>View details</button>
                     <small>Recorded {formatDate(alert.created_at)}</small>
                   </span>
                   <span className="muted">
@@ -778,6 +782,7 @@ export function TankDetail() {
         </Panel>
       </div>
 
+      <AlertDetailDrawer alertId={detailAlertId} onClose={() => setDetailAlertId(null)} />
       <TankEditorDrawer
         open={!isRetired && editing}
         tank={value}
