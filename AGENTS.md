@@ -25,8 +25,13 @@ Aquatics. The repository contains:
   decision engine, demo sensor service, and pytest tests.
 - `web/`: React + TypeScript + Vite public tank experience and staff/admin
   dashboard.
-- `mobile_app/`: Flutter Android-first staff dashboard prototype using local
-  demo data; it is not yet connected to the backend.
+- `mobile_app/`: Flutter Android-first staff app connected to the deployed
+  backend for auth, Home, Tanks, Alerts, Monitoring, Species, read-only
+  Equipment, and Firebase push; mock repositories remain for tests and
+  features without an API.
+- `bridge/`: temporary laptop bridge that forwards ESP32 sensor readings to the
+  backend and runs allowlisted admin actuator commands against the local ESP32.
+  Tests: `python -m pytest bridge/tests -q` from the repository root.
 - `Aqualogic.ino` and the library folders: ESP32 firmware and sensor/display
   dependencies. Hardware integration is a later phase.
 - `docs/`: canonical project context, architecture, contracts, workflows, and

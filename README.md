@@ -11,9 +11,9 @@ software-first and local-first; live hardware integration is a later phase.
 
 - ESP32 firmware: initial Arduino sketch and sensor libraries are included.
 - Backend: FastAPI foundation is included with database models, auth, tank/fish/sensor/alert endpoints, seed scripts, and tests.
-- Staff mobile app: Flutter Android-first prototype is included with dashboard, tanks, tank detail, controls, alerts, fish library, splash screen, and app icon.
+- Staff mobile app: Flutter Android-first app connected to the deployed backend for authentication, Home, Tanks, Alerts, Monitoring, Species, read-only Equipment, and Firebase push notifications.
 - Web app: React customer/public pages and the staff/admin dashboard are implemented under `web/`.
-- Hardware integration: planned after mock data, backend, mobile app, and public web flows are stable.
+- ESP32 bridge: a temporary laptop bridge (`bridge/`) ingests four sensor values and forwards admin-only actuator commands (UV, LED, feeder, guarded Pump A/B tests) to a tester-LAN ESP32. Full hardware deployment (Raspberry Pi, production safety controls) is a later phase.
 
 ## Features
 
@@ -36,12 +36,10 @@ software-first and local-first; live hardware integration is a later phase.
 
 ### Staff Mobile App
 
-- Flutter Android-first staff dashboard.
-- Home screen with system health and live readings.
-- Tank overview and tank detail screens.
-- Demo controls panel.
-- Alerts screen with recommendations.
-- Fish library with search.
+- Flutter Android-first staff dashboard with Owner (backend `admin`) and Staff roles.
+- Live Home, Tanks directory/detail, Alerts and Monitoring incidents (with Mark handled), fish species library, and read-only Equipment status from the backend API.
+- Authenticated Firebase push notifications that deep-link into alert and monitoring records.
+- Mock repositories for tests and for features with no API yet (recent activity, sensor-history charts, profile editing, actuator commands).
 - AquaLogic app icon and startup splash scene.
 
 ### Web App
@@ -71,6 +69,7 @@ care notes, and AquaLogic branding. Customers do not need accounts or login.
 AquaLogic/
   Aqualogic.ino                 # ESP32/Arduino firmware
   backend/                      # FastAPI backend
+  bridge/                       # Temporary ESP32 laptop bridge (sensor ingest + actuator commands)
   mobile_app/                   # Flutter staff mobile app
   docs/                         # Canonical context, plans, and implementation notes
   DallasTemperature/            # Arduino library dependency
@@ -80,8 +79,9 @@ AquaLogic/
   web/                          # React public tank pages and staff/admin dashboard
 ```
 
-The Flutter app currently uses local demo data and is not yet connected to the
-backend API. The firmware is also not a prerequisite for local software work.
+The Flutter app talks to the backend API (Railway in release builds; a local
+backend via `AQUALOGIC_API_BASE_URL` in debug). The firmware is not a
+prerequisite for local software work.
 
 ## Quick Start
 
@@ -259,15 +259,15 @@ Open `Aqualogic.ino` in the Arduino IDE and make sure the included library folde
 - `LiquidCrystal_I2C/`
 - `OneWire/`
 
-Hardware integration is still planned, so mobile and backend development currently use mock/sample data.
+Software development does not require the hardware: use the seed data and demo sensor service. Live sensor and actuator testing goes through the temporary bridge; see `docs/operations/hardware/ESP32_BRIDGE_HARDWARE_TEST_RUNBOOK.md`.
 
 ## Development Roadmap
 
 1. Backend foundation, seed data, authentication, and API contract.
 2. Rule-based status/alert flow and optional demo sensor ingestion.
 3. React public tank pages and staff/admin dashboard stabilization.
-4. Flutter staff app integration with the backend.
-5. ESP32 hardware integration and Raspberry Pi deployment.
+4. Flutter staff app integration with the backend (auth, read-only data, and push done; activity, history charts, and actuator commands remain).
+5. ESP32 hardware validation through the temporary bridge, then Raspberry Pi deployment.
 
 ## Documentation
 

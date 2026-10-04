@@ -4,9 +4,16 @@ Android-first Flutter staff dashboard prototype for AquaLogic.
 
 ## Current status
 
-The app currently uses local demo data for sensor readings, alerts, fish
-information, and control interactions. It is not yet connected to the FastAPI
-backend, does not authenticate users, and does not require ESP32 hardware.
+The app authenticates against the AquaLogic FastAPI service (Railway in release
+builds) and reads live fleet, tank, alert, monitoring-incident, species, and
+read-only equipment data, plus authenticated Android push registration and
+notification navigation. Mock repositories remain injectable for tests and for
+features without a live API (recent activity, sensor-history charts, profile
+editing, and real actuator commands). The app never connects to ESP32 hardware
+directly.
+
+Debug builds default to the Android emulator host alias (`10.0.2.2:8000`); pass
+`--dart-define=AQUALOGIC_API_BASE_URL=...` to point a debug build elsewhere.
 
 ## Development
 
