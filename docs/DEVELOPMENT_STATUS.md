@@ -5,6 +5,14 @@ Last reviewed: 2026-10-04
 
 ## Completed and working locally
 
+### Chrome UI preview (2026-10-04)
+
+An explicit `mobile_app/lib/main_preview.dart` entry provides simulated login,
+the existing mock repositories and Tank Console access for browser UI review.
+Normal Android/Railway authentication and push composition remain unchanged.
+This is a UI preview, not real browser authentication. See
+[`../mobile_app/README.md`](../mobile_app/README.md) for the run command/accounts.
+
 ### Tank Console UI prototype (2026-10-04)
 
 Phase 1 adds More → Tank Console inside the existing Flutter APK, with an
@@ -190,7 +198,10 @@ review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
   feedback and strict/open boundary guidance, deferred parameters remain
   hidden, and alert history distinguishes automatic recovery from the
   operator-facing Mark handled action while retaining the in-app-only
-  notification surface. Global thresholds are labeled as defaults; the tank
+  notification surface. Alert history loads 25 server-paged rows at a time,
+  preserves filters and page in the URL, and filters deferred parameters before
+  paging; the API retains its legacy response for callers without page
+  parameters. Global thresholds are labeled as defaults; the tank
   workspace shows inherited/overridden effective thresholds with admin edit and
   reset actions, and analytics suppresses shared bands when selected tanks
   differ.

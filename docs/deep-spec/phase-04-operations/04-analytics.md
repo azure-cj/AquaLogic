@@ -42,15 +42,17 @@ The response provides:
 - current versus previous uptime comparison;
 - reporting-gap count and operational insight fields.
 
-The web client persists range, resolution, tank, and metric selections in the
-URL and exports the visible analytics dataset as CSV.
+The web client persists range, alert/gap resolution, tank, and metric selections
+in the URL and exports the visible analytics dataset as CSV. Water-quality
+trend series use fixed 30-minute buckets aligned to clock boundaries at :00
+and :30; the alert/gap resolution control does not change those trends.
 
 ## 4. Query Contract
 
 Supported ranges are `24h`, `7d`, `30d`, and `custom`. Custom requests require
 ISO `start` and `end` values and may not exceed 30 days.
 
-Supported resolutions are:
+Alert and reporting-gap resolutions are:
 
 - `auto`
 - `15m`
@@ -58,20 +60,28 @@ Supported resolutions are:
 - `6h`
 - `1d`
 
-Responses are capped at 1,000 buckets. Up to three unique `tank_id` values may
-be selected for comparison. The response identifies the selected window,
-bucket size, and `Asia/Manila` display timezone.
+The selected alert/gap resolution is capped at 1,000 buckets. The fixed
+30-minute water-quality timeline can contain up to 1,441 buckets for the
+maximum 30-day range, including partial buckets at both window edges. Up to
+three unique `tank_id` values may be selected for comparison. The response
+identifies the selected window, alert/gap `bucket_seconds`, fixed
+`water_quality_bucket_seconds`, and `Asia/Manila` display timezone.
 
 ## 5. Current Calculation Rules
 
 - Water-quality readings are filtered and bucketed by observation time. Each
-  metric is averaged within those buckets; missing metric values do not
-  contribute to that metric's average.
+  metric is averaged within 30-minute buckets whose UTC boundaries fall at
+  :00 and :30 (also clean half-hour boundaries in the Asia/Manila display
+  timezone); missing metric values do not contribute to that metric's average.
+- A partial first or last bucket is included when it overlaps the selected
+  observation-time window. Bucket timestamps remain the aligned bucket start;
+  the trend tooltip shows the full interval and identifies partial coverage.
 - Empty buckets remain in the timeline with null metric values and zero sample
   count. Reporting-gap diagnostics are calculated independently from receipt
   time.
 - Alert events are placed by alert creation time and retain the linked reading
-  value when available.
+  value when available. The alert series continues to use the requested
+  alert/gap resolution.
 - Threshold overlays use the effective historical threshold revisions rather
   than applying today's thresholds retroactively.
 - Reporting uptime counts unique 30-second reporting intervals against the
@@ -114,7 +124,11 @@ bridge estimates `observed_at` from sequence and outage timing.
 Analytics provides loading, error, invalid-range, empty-data, and responsive
 states. Charts show fleet context, selected tank overlays, threshold context,
 alert markers, reporting gaps, and comparison information. Alert markers can
-open the relevant alert context.
+open the relevant alert context. Water-quality tooltips show the full 30-minute
+bucket interval, sample count, and correctly singularized contributor count.
+The chart labels its fixed trend resolution. Analytics refreshes only when the
+operator requests it and shows the last successful update time; it does not
+poll automatically.
 
 Analytics is diagnostic and read-only. It does not edit thresholds, resolve
 alerts, create suitability results, or send notifications. Persistent

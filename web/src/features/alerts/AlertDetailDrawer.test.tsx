@@ -31,6 +31,9 @@ function mockContext(data = fixture) {
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === '/auth/me') return { role: 'staff' };
     if (path.includes('/context')) return data;
+    if (path.startsWith('/alerts')) {
+      return { items: [], page: 1, page_size: 25, total: 0, total_pages: 0, has_previous: false, has_next: false };
+    }
     return [];
   });
 }

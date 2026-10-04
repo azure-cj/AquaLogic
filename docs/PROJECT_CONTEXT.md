@@ -27,8 +27,10 @@ can validate operations before the ESP32 hardware deployment is complete.
   staff routes plus public tank routes.
 - A React web application provides the public QR tank page and the staff/admin
   dashboard.
-- A Flutter Android-first app provides a polished staff dashboard prototype with
-  local demo readings and demo controls.
+- A Flutter Android-first staff app talks to the deployed backend for
+  authentication, Home, Tanks, Alerts, Monitoring, Species, and read-only
+  Equipment, and receives Firebase push notifications. Activity, sensor-history
+  charts, profile editing, and actuator commands are not in the live slice.
 - The temporary ESP32 laptop bridge ingests four sensor values and supports
   admin-only UV, normal LED, fish-feeder, and guarded Pump A/B manual-test
   commands without exposing the ESP32 to the internet. Pump tests are limited
@@ -51,7 +53,8 @@ can validate operations before the ESP32 hardware deployment is complete.
 
 ### Planned or deferred
 
-- Connecting the Flutter app to the backend API.
+- Flutter integration of the remaining API-less areas (recent activity,
+  sensor-history charts, profile editing, and actuator commands).
 - Additional hardware, production actuator safety interlocks, and richer
   automation workflows beyond the v1 bridge.
 - Raspberry Pi deployment and production PostgreSQL validation.

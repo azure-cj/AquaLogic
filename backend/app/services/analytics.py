@@ -18,6 +18,9 @@ from app.services.analytics_insights import AnalyticsInsightAccumulator
 WATER_QUALITY_BUCKET_SECONDS = 30 * 60
 
 
+WATER_QUALITY_BUCKET_SECONDS = 30 * 60
+
+
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 

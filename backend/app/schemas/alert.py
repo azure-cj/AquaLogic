@@ -104,3 +104,13 @@ class AlertContextRead(BaseModel):
     current_threshold: AlertContextThreshold | None
     guidance: OperatorGuidance
     species_context: SpeciesContext | None = None
+
+
+class AlertHistoryPage(BaseModel):
+    items: list[AlertRead]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    has_previous: bool
+    has_next: bool

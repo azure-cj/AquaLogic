@@ -1,6 +1,6 @@
 # Alert History
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-10-01
 Status: Implemented Phase 02 alert lifecycle and current operations history view
 
 ## 1. Purpose
@@ -23,7 +23,7 @@ The authenticated alert routes are:
 | --- | --- | --- |
 | GET | `/alerts` | List active alerts by default, or all alerts when requested |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for one tank |
-| GET | `/alerts/history` | Filter alert history |
+| GET | `/alerts/history` | Filter alert history; paginated when requested |
 | PUT | `/alerts/{alert_id}/resolve` | Resolve one alert as an operator |
 
 The web route is `/admin/alerts`. Staff and administrators can read and mark
@@ -62,13 +62,20 @@ the next usable reading is processed, with the system reason
 - `tank_id`
 - `severity`
 - `parameter`
+- repeated `parameters` values
 - `resolved`
 - `created_after`
 - `created_before`
+- `page` and `page_size` for pagination
 
-Results are returned newest first. Alert responses include tank and reading
-references, parameter, severity, message, created time, resolution state,
-resolution time, resolver ID when applicable, and nullable `resolution_source`.
+When pagination is requested, results use a stable newest-first order by
+`created_at` and then `id` and return an `AlertHistoryPage` containing `items`,
+`page`, `page_size`, `total`, `total_pages`, `has_previous`, and `has_next`.
+The default page is 1; the default page size is 25 and the maximum is 100.
+Callers that omit both pagination parameters retain the legacy array response
+for compatibility. Alert responses include tank and reading references,
+parameter, severity, message, created time, resolution state, resolution time,
+resolver ID when applicable, and nullable `resolution_source`.
 
 `resolution_source` is:
 
@@ -82,12 +89,14 @@ authorized staff/admin investigation.
 
 ## 6. Current UI Behavior
 
-The alert page provides tank, severity, parameter, state, and date filters. Each
-row shows the condition, tank, severity, creation time, and current state. An
-unresolved alert has a Mark handled action. A resolved alert identifies whether
-it was handled by an operator, automatically resolved, or has an unknown legacy
-source. Mark handled removes the alert from the active queue but does not
-confirm water recovery.
+The alert page provides tank, severity, parameter, state, and date filters and
+loads 25 rows per server-side page. The current page and filters are preserved
+in the URL; changing a filter returns to the first page. The current web release
+filters deferred metrics before pagination. Each row shows the condition, tank,
+severity, creation time, and current state. An unresolved alert has a Mark
+handled action. A resolved alert identifies whether it was handled by an
+operator, automatically resolved, or has an unknown legacy source. Mark handled
+removes the alert from the active queue but does not confirm water recovery.
 
 Fleet Overview shows a bounded recent unresolved-alert feed and links to the
 full history view. Analytics can display alert markers and events in the
@@ -138,7 +147,6 @@ its authenticated incident routes.
 
 ## 11. Deferred Scope
 
-- Server-side pagination or cursor navigation for large alert histories.
 - Acknowledged, snoozed, reopened, or recurring-alert aggregation states.
 - External notification delivery and notification history.
 - Predictive alerting and business-intelligence reporting.

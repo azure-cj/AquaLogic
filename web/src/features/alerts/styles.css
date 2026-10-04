@@ -16,6 +16,28 @@
   font-size: 0.72rem;
   line-height: 1.45;
 }
+
+.alert-history-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.75rem 1rem 1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.alert-history-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.alert-history-pagination > span {
+  min-width: 84px;
+  text-align: center;
+}
+
 @media (max-width: 1279px) {
   .filter-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -25,6 +47,20 @@
   .filter-grid,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .alert-history-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .alert-history-pagination {
+    justify-content: space-between;
+  }
+
+  .alert-history-pagination .button {
+    min-width: 0;
+    flex: 1 1 0;
   }
 }
  .alert-detail-content { display: grid; gap: 1.15rem; overflow-wrap: anywhere; font-size: .82rem; line-height: 1.55; }

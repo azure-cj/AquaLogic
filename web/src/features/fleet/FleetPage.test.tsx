@@ -39,6 +39,16 @@ const fleet = [{
   assigned_species_count: 1,
 }];
 
+const emptyAlertHistory = {
+  items: [],
+  page: 1,
+  page_size: 25,
+  total: 0,
+  total_pages: 0,
+  has_previous: false,
+  has_next: false,
+};
+
 function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -58,7 +68,7 @@ describe('fleet reporting clarity', () => {
   it('labels offline values as last known and uses server reporting age', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return fleet;
-      if (path === '/alerts/history?resolved=false') return [];
+      if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });
 
@@ -82,7 +92,7 @@ describe('fleet reporting clarity', () => {
     ];
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return withStatuses;
-      if (path === '/alerts/history?resolved=false') return [];
+      if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });
 
@@ -100,7 +110,7 @@ describe('fleet reporting clarity', () => {
   it('keeps cached fleet data visible after a refresh failure', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') throw new TypeError('Failed to fetch');
-      if (path === '/alerts/history?resolved=false') return [];
+      if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });
 

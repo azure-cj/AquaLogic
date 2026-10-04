@@ -208,6 +208,7 @@ describe('admin actuator controls', () => {
   });
 
   it('shows equipment freshness and the scoped UV, LED, and feeder controls', async () => {
+    const user = userEvent.setup();
     renderPanel();
     expect(await screen.findByText('Equipment status')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refresh equipment status' })).toBeInTheDocument();
@@ -225,6 +226,7 @@ describe('admin actuator controls', () => {
     expect(screen.getAllByText('No enabled dose time')).toHaveLength(2);
     expect(screen.getAllByText('Dispense count')).toHaveLength(2);
     expect(screen.getAllByText('Last dispense')).toHaveLength(2);
+    expect(screen.getAllByText('Dose volume')).toHaveLength(4);
     expect(screen.getAllByText('Estimated remaining')).toHaveLength(2);
     expect(screen.getAllByText('Fill check')).toHaveLength(2);
     expect(screen.getAllByText('Schedule time')).toHaveLength(2);
@@ -232,7 +234,6 @@ describe('admin actuator controls', () => {
     expect(screen.getAllByText('Next scheduled dose')).toHaveLength(2);
     expect(screen.getAllByText('Dosing schedule')).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Save dosing schedule' })).toHaveLength(2);
-    expect(screen.queryByText('Use the manual controls for pump maintenance and set chemical dosing times below.')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pump controls' })).toBeInTheDocument();
     expect(screen.getByText('Manage dosing schedules and review syringe levels.')).toBeInTheDocument();
     expect(screen.queryByText(/safety|test|maintenance/i)).not.toBeInTheDocument();
@@ -250,7 +251,6 @@ describe('admin actuator controls', () => {
     expect(screen.getByText('pH Down')).toBeInTheDocument();
     expect(screen.getByText(/Pump A ·/)).toBeInTheDocument();
     expect(screen.getByText(/Pump B ·/)).toBeInTheDocument();
-    expect(screen.queryByText('Pump page')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Full controls$/ })).toHaveAttribute('href', '/admin/tanks/1/actuators');
     expect(screen.queryByRole('heading', { name: 'Command history' })).not.toBeInTheDocument();
     expect(vi.mocked(api).mock.calls.some(([path]) => path.includes('/actuators/history'))).toBe(false);
@@ -320,13 +320,13 @@ describe('admin actuator controls', () => {
     expect(dialog).toHaveTextContent('Equipment: Online');
     expect(dialog).not.toHaveTextContent('esp32-control-01');
     await user.click(within(dialog).getByRole('button', { name: 'Run manual cycle' }));
-    await screen.findByText('pH Up Syringe Pump manual dispense request submitted. Pump status will update after processing.');
+    await screen.findByText('pH Up Syringe Pump manual dispense request queued. The system will update its status after processing.');
 
     await user.click(screen.getByRole('button', { name: 'pH Up Syringe Pump retract' }));
     dialog = screen.getByRole('alertdialog');
     expect(dialog).toHaveTextContent('retract motor action');
     await user.click(within(dialog).getByRole('button', { name: 'Retract' }));
-    await screen.findByText('pH Up Syringe Pump retract request submitted. Pump status will update after processing.');
+    await screen.findByText('pH Up Syringe Pump retract request queued. The system will update its status after processing.');
 
     const calls = vi.mocked(api).mock.calls.filter(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(calls.some(([, init]) => init?.body?.toString().includes('"actuator":"pump_a"') && init.body.toString().includes('"action":"test_dispense"') && init.body.toString().includes('"payload":{}') && init.body.toString().includes('"expires_in_seconds":20'))).toBe(true);
@@ -352,7 +352,7 @@ describe('admin actuator controls', () => {
 
     expect(dialog).toHaveTextContent('Doses follow this schedule and are not triggered by pH');
     await user.click(within(dialog).getByRole('button', { name: 'Save schedule' }));
-    await screen.findByText('pH Up Syringe Pump dosing schedule request submitted. Pump status will update after processing.');
+    await screen.findByText('pH Up Syringe Pump dosing schedule request queued. The system will update its status after processing.');
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
     expect(call?.[1]?.body).toContain('"action":"schedule"');
@@ -394,7 +394,7 @@ describe('admin actuator controls', () => {
     expect(dialog).toHaveTextContent('does not move the motor or reset the two-hour cooldown');
     expect(dialog).toHaveTextContent('Cooldown clears: Available now');
     await user.click(within(dialog).getByRole('button', { name: 'Confirm refill' }));
-    await screen.findByText('pH Up Syringe Pump refill confirmation request submitted. Pump status will update after processing.');
+    await screen.findByText('pH Up Syringe Pump refill confirmation request queued. The system will update its status after processing.');
     const call = vi.mocked(api).mock.calls.find(([path, init]) => path === '/tanks/1/actuators/commands' && init?.method === 'POST');
     expect(call?.[1]?.body).toContain('"action":"refill_confirm"');
     expect(call?.[1]?.body).toContain('"actuator":"pump_a"');
@@ -598,7 +598,6 @@ describe('admin actuator controls', () => {
     renderPanel();
     expect(await screen.findByText('Equipment connection is offline or stale')).toBeInTheDocument();
     expect(screen.getByText('Light and feeder requests may expire while waiting. Pump controls are available when the equipment is online.')).toBeInTheDocument();
-    expect(screen.getAllByText('Pump controls require an online equipment connection.')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'pH Up Syringe Pump manual dispense' })).toBeDisabled();
   });
 

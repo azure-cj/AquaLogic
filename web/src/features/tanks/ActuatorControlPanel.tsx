@@ -589,7 +589,7 @@ function PumpCard({
           <button className="button button-secondary button-small" type="button" onClick={onClearVerification}>Record pump check</button>
         </div>
       )}
-      {disabled && <small className="pump-disabled-note">Pump controls require an online equipment connection.</small>}
+      {disabled && <small className="pump-disabled-note">Reconnect the equipment before dispensing. Offline pump actions are not queued.</small>}
       {busyFor('test_dispense') && <small className="actuator-busy">Preparing manual dispense…</small>}
       {busyFor('schedule') && <small className="actuator-busy">Saving dosing schedule…</small>}
     </article>
@@ -821,7 +821,6 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
     expiresInSeconds?: number,
   ) => {
     if (readOnly) return;
-    const isPumpControl = actuator === 'pump_a' || actuator === 'pump_b';
     const key = `${actuator}:${action}`;
     setBusy(key);
     try {
@@ -836,13 +835,9 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
       ]);
       setHistoryPage(1);
       setExpandedCommandId(null);
-      notify.success(isPumpControl
-        ? `${label} request submitted. Pump status will update after processing.`
-        : `${label} request queued. The system will update its status after processing.`);
+      notify.success(`${label} request queued. The system will update its status after processing.`);
     } catch (caught) {
-      notify.error(errorMessage(caught, isPumpControl
-        ? 'Could not submit the pump request.'
-        : `Could not queue the ${label.toLowerCase()} command.`));
+      notify.error(errorMessage(caught, `Could not queue the ${label.toLowerCase()} command.`));
     } finally {
       setBusy(null);
     }
@@ -1164,7 +1159,7 @@ export function ActuatorControlPanel({ tankId, tankName, variant = 'full', readO
         message={pumpConfirmation?.action === 'test_dispense'
           ? `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment: ${status.data?.device_online ? 'Online' : 'Offline'}. This runs one preset pump cycle${confirmedPumpVolume !== undefined ? ` (${confirmedPumpVolume.toFixed(2)} mL)` : ''}. Use water or an empty syringe only; do not use chemicals. Estimated remaining volume may change. This cycle does not start the chemical-dose cooldown. Stay beside the equipment and be ready to press Stop. If you are unsure whether it completed, check the pump before starting another cycle.`
           : pumpConfirmation?.action === 'refill_confirm'
-            ? `Physically check the syringe and refill it to ${(pumpConfirmation.actuator === 'pump_a' ? pumpA?.capacity_ml : pumpB?.capacity_ml ?? 5)?.toFixed(2) ?? '5.00'} mL if needed before confirming. This updates its estimated remaining volume only; it does not move the motor or reset the two-hour cooldown. Cooldown clears: ${confirmedPumpNextEligible}.`
+            ? `Physically check the syringe and refill it to ${(pumpConfirmation.actuator === 'pump_a' ? pumpA?.capacity_ml : pumpB?.capacity_ml ?? 5)?.toFixed(2) ?? '5.00'} mL if needed before confirming. This updates the estimated amount remaining only; it does not move the motor or reset the two-hour cooldown. Cooldown clears: ${confirmedPumpNextEligible}.`
             : `Tank: ${tankName ?? `Tank ${tankId}`}. Equipment: ${status.data?.device_online ? 'Online' : 'Offline'}. This starts the ${confirmedPumpLabel} retract motor action. It does not update the volume estimate. Check the pump setup and keep Stop available.`}
         confirmLabel={pumpConfirmation?.action === 'test_dispense' ? 'Run manual cycle' : pumpConfirmation?.action === 'refill_confirm' ? 'Confirm refill' : 'Retract'}
         tone={pumpConfirmation?.action === 'retract' ? 'danger' : 'primary'}

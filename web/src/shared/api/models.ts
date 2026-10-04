@@ -80,6 +80,16 @@ export type Alert = {
   resolution_source?: 'operator' | 'system' | null;
 };
 
+export type AlertHistoryPage = {
+  items: Alert[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  has_previous: boolean;
+  has_next: boolean;
+};
+
 export type Customer = {
   id: number;
   name: string;

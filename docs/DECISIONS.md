@@ -21,6 +21,22 @@ settings are saved/restored per console session. Push navigation waits until
 exit while retaining the existing pending-intent behavior. See
 [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md) for the current boundary and
 physical-device review; actual local control remains Phase 2.
+## 2026-10-01 — Add opt-in pagination to alert history
+
+**Decision:** Let alert-history callers request stable newest-first pages using
+`page` and `page_size`, returning totals and navigation metadata. Keep the
+existing array response when both pagination parameters are omitted. The web
+history page and its fleet feeds request pages explicitly; the mobile client
+continues using the compatible legacy response.
+
+**Reason:** The browser should fetch only the alert rows it displays as history
+grows, while this shared endpoint already has a mobile caller that consumes the
+unpaginated contract.
+
+**Consequences:** The paginated response is bounded to 100 rows per request and
+uses `created_at DESC, id DESC` for deterministic navigation. Web filtering for
+deferred parameters happens before counting and pagination. Legacy callers can
+continue reading the full history until they adopt the paginated contract.
 
 ## 2026-09-26 — Keep M6.1 push handling behind a client-only service
 
@@ -1106,6 +1122,25 @@ timestamp. This supersedes the water-quality filtering and bucket placement in
 the 2026-08-21 receipt-time analytics decision while retaining its reporting
 health semantics. Alert replay timing, recovered-alert push delivery, and exact
 firmware capture timestamps remain deferred.
+
+## 2026-10-01 — Align water-quality Analytics to half-hour clock buckets
+
+**Decision:** Keep water-quality history on observation time and aggregate it
+into fixed 30-minute buckets aligned to :00 and :30. Keep alert and reporting-
+gap resolution at the existing requested resolution, and continue using
+receipt time for reporting health. Show bucket intervals and partial coverage
+in tooltips, expose the trend bucket width in the Analytics response, and allow
+manual refresh with a visible last-updated time.
+
+**Reason:** Clock-aligned half-hour points are easier for operators to read and
+make the recovery-time clustering explanation visible without changing
+reporting or alert semantics.
+
+**Consequences:** The Analytics response adds the
+`window.water_quality_bucket_seconds` field and may return up to 1,441 trend
+points for a 30-day range. No storage, bridge, firmware, or alert behavior
+changes are required. The existing selected `bucket_seconds` continues to
+describe alert and reporting-gap buckets.
 
 ## Adding a decision
 

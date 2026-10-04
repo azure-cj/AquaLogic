@@ -823,7 +823,7 @@ export default function AnalyticsPage() {
           <div className="analytics-chart-column">
           <Panel
             title={`${selected.label} trend`}
-            description={`Fleet average and selected tanks · ${selected.unit} · readings grouped every ${data.window.water_quality_bucket_seconds / 60} minutes`}
+            description={`Fleet average and selected tanks · ${selected.unit} · ${data.window.water_quality_bucket_seconds / 60}-minute buckets, aligned to :00 and :30`}
             className="chart-panel main-trend-panel"
             action={
               <div className="metric-tabs" role="tablist" aria-label="Water quality metric">

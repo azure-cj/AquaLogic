@@ -1,7 +1,7 @@
 import { AnalyticsRange, AnalyticsResponse } from '@/features/analytics/types';
 import { fleetCounts, tankNameForAlert } from '@/features/fleet/utils';
 import { api } from '@/shared/api/client';
-import type { Alert, FleetTank } from '@/shared/api/models';
+import type { AlertHistoryPage, FleetTank } from '@/shared/api/models';
 import {
   EmptyState,
   ErrorState,
@@ -187,7 +187,7 @@ export function Fleet() {
   });
   const alerts = useQuery({
     queryKey: ['alerts', 'unresolved'],
-    queryFn: () => api<Alert[]>('/alerts/history?resolved=false'),
+    queryFn: () => api<AlertHistoryPage>('/alerts/history?resolved=false&page=1&page_size=25'),
     refetchInterval: 30_000,
   });
   const analytics = useQuery({
@@ -256,7 +256,7 @@ export function Fleet() {
     ).size;
     return Math.min(100, (bucketCount / rangeConfig.expectedPerBar) * 100);
   });
-  const recentAlerts = [...(alerts.data ?? [])]
+  const recentAlerts = [...(alerts.data?.items ?? [])]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 4);
 
@@ -343,7 +343,7 @@ export function Fleet() {
           <Panel
             title="Recent alerts"
             description={alerts.data
-              ? `${alerts.data.length} unresolved across the fleet`
+              ? `${alerts.data.total} unresolved across the fleet`
               : alerts.isError
                 ? 'Unresolved alert count unavailable'
                 : 'Loading unresolved alert count…'}

@@ -233,7 +233,7 @@ describe('fleet analytics', () => {
 
     const refresh = await screen.findByRole('button', { name: 'Refresh analytics' });
     expect(await screen.findByText(/Updated at/)).toBeInTheDocument();
-    expect(screen.getByText(/readings grouped every 30 minutes/)).toBeInTheDocument();
+    expect(screen.getByText(/30-minute buckets, aligned to :00 and :30/)).toBeInTheDocument();
     const initialAnalyticsCalls = vi.mocked(api).mock.calls.filter(([path]) =>
       String(path).startsWith('/analytics/fleet?'),
     ).length;

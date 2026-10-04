@@ -12,6 +12,13 @@ Last reviewed: 2026-10-04
 
 ## Current boundary
 
+For Chrome UI review, run `flutter run -d chrome -t lib/main_preview.dart` from
+`mobile_app`. This explicit entry uses mock login/repositories, marks simulated
+UI and injects no push service. The normal `main.dart` authentication and Android
+behavior are unchanged. Development-only preview accounts and the browser
+authentication boundary are documented in
+[`../../mobile_app/README.md`](../../mobile_app/README.md).
+
 Tank Console Mode is an additional, isolated UI prototype entered through More.
 Its readings, Local/Cloud connections and lighting/UV/feeder commands are all
 simulated; pumps are read-only. No direct ESP32 networking exists. See

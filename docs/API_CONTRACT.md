@@ -113,7 +113,7 @@ activity API is used by the mobile M3 detail view.
 | GET | `/tanks/{tank_id}/sensors/history` | Read bounded sensor history |
 | POST | `/tanks/{tank_id}/sensors` | Admin-only manual sensor submission |
 | GET | `/alerts` | List active or all alerts |
-| GET | `/alerts/history` | Filter alert history |
+| GET | `/alerts/history` | Filter alert history; paginated when `page` or `page_size` is supplied |
 | GET | `/tanks/{tank_id}/alerts` | List alerts for a tank |
 | PUT | `/alerts/{alert_id}/resolve` | Legacy route used by the UI's **Mark handled** action; closes the alert record without confirming water recovery |
 | GET | `/monitoring-incidents` | Staff/admin paginated monitoring-outage history; defaults to active and supports tank, state, and start-time filters |
@@ -128,6 +128,17 @@ activity API is used by the mobile M3 detail view.
 | POST | `/tanks/{tank_id}/actuators/commands/{command_id}/clear-uncertainty` | Admin-only; record physical verification for an `outcome_unknown` command without rewriting its historical status |
 | GET | `/tanks/{tank_id}/actuators/status` | Admin-only; read bridge freshness and last-known UV, LED, feeder, and pump state |
 | GET | `/tanks/{tank_id}/actuators/history` | Admin-only; read paginated command audit history with actor, timestamps, status, result, and error |
+
+`GET /alerts/history` accepts tank, severity, parameter, resolved-state, and
+creation-time filters. It also accepts repeated `parameters` values to select
+multiple alert parameters. Supplying `page` and/or `page_size` returns an
+`AlertHistoryPage` object with `items`, `page`, `page_size`, `total`,
+`total_pages`, `has_previous`, and `has_next`. Pages are ordered newest first by
+`created_at` and then `id`; the page defaults to 1 and page size defaults to 25,
+with a maximum of 100. Omitting both pagination parameters preserves the legacy
+array response for existing clients. The web history page sends its supported
+parameter set as repeated `parameters` values so deferred metrics do not make
+pages sparse or counts inaccurate.
 
 Retirement is administrator-only and one-way (`active -> retired`). It records
 `retired_at`, the retiring administrator, and an optional bounded note, forces
@@ -434,17 +445,23 @@ use a hosted species-photo URL through the existing `photo_url` field.
 - `GET /analytics/fleet` accepts `range=24h|7d|30d|custom`,
   `bucket=auto|15m|1h|6h|1d`, and up to three repeated `tank_id` values.
   Custom requests require ISO `start` and `end` values, are limited to 30 days,
-  and all requests are capped at 1,000 buckets. The response contains complete
-  nullable timelines, fleet and selected-tank series, previous-period
-  statistics, alert events, effective threshold segments, and classified
-  reporting uptime. A single selected tank receives that tank's effective
-  historical segments. Fleet or multi-tank scopes return shared segments only
-  when effective histories match; otherwise `thresholds_vary_by_tank=true`,
+  and the selected alert/gap resolution is capped at 1,000 buckets. Water-
+  quality series use fixed 30-minute observation-time buckets aligned to
+  :00/:30, with up to 1,441 points for a 30-day window including partial edge
+  buckets. `window.bucket_seconds` reports the alert/gap resolution and
+  `window.water_quality_bucket_seconds` reports the fixed trend resolution.
+  The response contains complete nullable timelines, fleet and selected-tank
+  series, previous-period statistics, alert events, effective threshold
+  segments, and classified reporting uptime. A single selected tank receives
+  that tank's effective historical segments. Fleet or multi-tank scopes return
+  shared segments only when effective histories match; otherwise
+  `thresholds_vary_by_tank=true`,
   `threshold_scope="varies"`, and an empty `threshold_segments` list prevent a
   misleading shared threshold line.
-- Analytics aggregation places readings, reporting intervals, and gaps by server
-  `received_at`. Observation `timestamp` remains available for historical and
-  hardware-clock context, and late observations are ordered operationally by
+- Analytics water-quality trend readings, sample counts, averages, and period
+  comparisons use observation `SensorReading.timestamp`. Alert events retain
+  `Alert.created_at`; reporting intervals and gaps use server `received_at`.
+  Tank freshness, Offline status, and operational monitoring continue to use
   receipt time.
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.
