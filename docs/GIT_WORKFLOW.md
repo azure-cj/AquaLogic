@@ -1,11 +1,14 @@
 # AquaLogic Git Workflow
 
 Status: Team workflow
-Last reviewed: 2026-08-15
+Last reviewed: 2026-10-04
 
-This repository uses `main` as the shared stable branch. Groupmates should work
-on short-lived branches and open pull requests for review. Do not push directly
-to `main` once more than one person is contributing.
+This repository uses `main` as the shared stable branch. Work on short-lived
+branches. Pull requests are recommended for larger or cross-area changes, and
+for anything a teammate should review, such as device protocol or wiring
+changes. Small, low-risk changes (for example docs fixes) may be merged or
+pushed to `main` directly by their author once checks pass. GitHub does not
+enforce this; it is a convention.
 
 ## One-time setup for a groupmate
 
@@ -68,6 +71,9 @@ Use focused commits with conventional prefixes such as `feat:`, `fix:`,
 coherent change and should include its tests or documentation when relevant.
 
 ## Pull request workflow
+
+Use this flow for changes that benefit from review; small, low-risk changes may
+skip it as described above.
 
 1. Push the branch and open a pull request into `main`.
 2. Describe the behavior changed, files affected, validation run, and any
