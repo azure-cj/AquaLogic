@@ -1,0 +1,6523 @@
+  #include <Wire.h>
+  #include <LiquidCrystal_I2C.h>
+  #include <OneWire.h>
+  #include <DallasTemperature.h>
+  #include <WiFi.h>
+  #include <ESPmDNS.h>
+  #include <WebServer.h>
+  #include <ESP32Servo.h>
+  #include <AccelStepper.h>
+  #include <LittleFS.h>
+  #include <Preferences.h>
+  #include <time.h>
+
+  struct SyringeTime;
+
+  const unsigned long WIFI_CONNECT_TIMEOUT_MS = 10000UL;
+  const unsigned long WIFI_RETRY_INTERVAL_MS = 5000UL;
+  const unsigned long FALLBACK_AP_DELAY_MS = 12000UL;
+  const unsigned long FALLBACK_AP_SHUTDOWN_GRACE_MS = 15000UL;
+  const unsigned long BUFFER_FLUSH_INTERVAL_MS = 30000UL;
+  const unsigned long BUFFER_FLUSH_RETRY_INTERVAL_MS = 1000UL;
+  const unsigned long OFFLINE_QUEUE_INTERVAL_MS = 60000UL;
+  const unsigned long CHEMICAL_DOSE_COOLDOWN_MS = 2UL * 60UL * 60UL * 1000UL;
+  const uint8_t RAM_QUEUE_MAX = 10;
+  const uint8_t RAM_QUEUE_CAPACITY = 20;
+  const uint32_t SEQ_RESERVATION_SIZE = 65536UL;
+  #define MANUAL_OFFLINE_MAX_MS 120000UL
+  #define DEBUG_AP_SSID "AquaLogic-Debug-ESP32"
+  #define DEBUG_AP_PASSWORD "6xcRBQQX"
+
+  // ========================
+  // WiFi Credentials
+  // ========================
+  const char* ssid     = "INFINIX";
+  const char* password = "connectnow123*";
+
+  #define ONE_WIRE_BUS    27
+  #define TURBIDITY_PIN   36
+  #define TDS_PIN         34
+  #define PH_PIN          35
+  #define UV_PIN          32
+  #define LED_PIN         17
+  #define SERVO_PIN       33
+
+  #define SYRA_IN1        4
+  #define SYRA_IN2        5
+  #define SYRA_IN3        18
+  #define SYRA_IN4        19
+
+  #define SYRB_IN1        13
+  #define SYRB_IN2        14
+  #define SYRB_IN3        23
+  #define SYRB_IN4        26
+
+  LiquidCrystal_I2C lcd(0x27, 16, 2);
+  OneWire oneWire(ONE_WIRE_BUS);
+  DallasTemperature sensors(&oneWire);
+  WebServer server(80);
+  Servo feederServo;
+  Preferences devicePreferences;
+
+  AccelStepper stepperA(AccelStepper::HALF4WIRE, SYRA_IN1, SYRA_IN3, SYRA_IN2, SYRA_IN4);
+  AccelStepper stepperB(AccelStepper::HALF4WIRE, SYRB_IN1, SYRB_IN3, SYRB_IN2, SYRB_IN4);
+
+  float temperatureC;
+  int   turbidityRaw;
+  int   tdsRaw;
+  int   phRaw;
+  uint32_t phMilliVolts;
+  float phVoltage;
+  float phValue;
+  float turbidityNtu;
+  float tdsPpm;
+
+  String tempStatus;
+  String turbidityStatus;
+  String tdsStatus;
+  String phStatus;
+  String overallStatus;
+
+  bool          uvState        = false;
+  bool          uvScheduleOwnsOutput = false;
+  unsigned long uvOnDuration   = 0;
+  unsigned long uvTurnedOnAt   = 0;
+  unsigned long uvTotalOnMs    = 0;
+  unsigned long uvLastTickAt   = 0;
+
+  bool uvScheduleEnabled   = false;
+  int  uvScheduleOnHour    = 8,  uvScheduleOnMinute  = 0;
+  int  uvScheduleOffHour   = 18, uvScheduleOffMinute = 0;
+
+  bool          ledState        = false;
+  bool          ledManualOverride = false;
+  bool          ledScheduleWindowInitialized = false;
+  bool          ledScheduleWindowOn = false;
+  unsigned long ledOnDuration   = 0;
+  unsigned long ledTurnedOnAt   = 0;
+  unsigned long ledTotalOnMs    = 0;
+  unsigned long ledLastTickAt   = 0;
+
+  bool ledScheduleEnabled   = false;
+  int  ledScheduleOnHour    = 8,  ledScheduleOnMinute  = 0;
+  int  ledScheduleOffHour   = 18, ledScheduleOffMinute = 0;
+
+  void setLedState(bool on, const char* reason) {
+    bool changed = ledState != on;
+    ledState = on;
+    digitalWrite(LED_PIN, on ? HIGH : LOW);
+    if (changed) {
+      Serial.printf("[LED] %s -> GPIO17=%s\n", reason, on ? "HIGH" : "LOW");
+    }
+  }
+
+  bool          feederActive     = false;
+  unsigned long feederStartMs    = 0;
+  unsigned long feederDurationMs = 1000;
+  int           feederOpenAngle  = 125;
+  int           feederCloseAngle = 0;
+  int           feedCount        = 0;
+  String        lastFedTime      = "Never";
+
+  struct FeedTime { int hour; int minute; bool enabled; bool firedToday; };
+  FeedTime feedSchedule[3] = {
+    {8,  0, false, false},
+    {12, 0, false, false},
+    {18, 0, false, false}
+  };
+
+  int lastClockMinute = -1;
+  int feedLastFiredDate[3] = {0, 0, 0};
+  bool wifiConnected = false;
+  bool wifiConnecting = false;
+  unsigned long wifiConnectStartedAt = 0;
+  unsigned long wifiLastRetryAt = 0;
+  bool fallbackApActive = false;
+  unsigned long wifiDisconnectedAt = 0;
+  unsigned long staReconnectedAt = 0;
+  unsigned long fallbackApLastStartAt = 0;
+  bool mdnsStarted = false;
+  bool manualOfflineMode = false;
+  bool pendingManualOffline = false;
+  bool pendingManualReconnect = false;
+  unsigned long manualOfflineSetAt = 0;
+  bool littleFsAvailable = false;
+  String ramBuffer[RAM_QUEUE_CAPACITY];
+  uint8_t ramBufferCount = 0;
+  unsigned long bufferLastFlushAt = 0;
+  unsigned long bufferLastAttemptAt = 0;
+  unsigned long offlineLastQueuedAt = 0;
+  bool bufferCapacityWarningReported = false;
+  uint32_t nextSeq = 1;
+  uint32_t seqCursor = 1;
+  uint32_t seqLimit = 1;
+  uint32_t ackedSeq = 0;
+  uint32_t droppedRecords = 0;
+  uint32_t pendingAckSeq = 0;
+  bool ackWritePending = false;
+
+  #define STEPS_PER_REVOLUTION 4096.0
+
+  // --- Syringe A ---
+  bool          syringeAActive       = false;
+  float         syringeAStepsPerML  = 4096.0;
+  float         syringeADispenseML  = 1.0;
+  float         syringeASpeed       = 500.0;
+  int           syringeADoseCount   = 0;
+  String        syringeALastDispensed = "Never";
+
+  // VOLUME LIMITER — syringe physically holds 5mL. Tracks how much is left
+  // so neither manual dispense nor auto-dosing can drive the plunger past empty.
+  float         syringeACapacityML  = 5.0;
+  float         syringeARemainingML = 5.0;
+  bool          syringeAVolumeKnown = false;
+  int           syringeALastFiredDate[3] = {0, 0, 0};
+  String        syringeALastScheduleEvent = "";
+
+  struct SyringeTime { int hour; int minute; bool enabled; bool firedToday; };
+  SyringeTime syringeASchedule[3] = {
+    {8,  0, false, false},
+    {14, 0, false, false},
+    {20, 0, false, false}
+  };
+  int lastSyringeAClockMinute = -1;
+
+  // --- Syringe B ---
+  bool          syringeBActive       = false;
+  float         syringeBStepsPerML  = 4096.0;
+  float         syringeBDispenseML  = 1.0;
+  float         syringeBSpeed       = 500.0;
+  int           syringeBDoseCount   = 0;
+  String        syringeBLastDispensed = "Never";
+
+  // VOLUME LIMITER — same as Syringe A.
+  float         syringeBCapacityML  = 5.0;
+  float         syringeBRemainingML = 5.0;
+  bool          syringeBVolumeKnown = false;
+  int           syringeBLastFiredDate[3] = {0, 0, 0};
+  String        syringeBLastScheduleEvent = "";
+
+  SyringeTime syringeBSchedule[3] = {
+    {9,  0, false, false},
+    {15, 0, false, false},
+    {21, 0, false, false}
+  };
+  int lastSyringeBClockMinute = -1;
+
+  bool          phAutoDoseEnabled   = false;
+  float         phTargetMin         = 6.5;
+  float         phTargetMax         = 7.5;
+  unsigned long phDoseCooldownMs    = 15000;  // TEMP FOR DEMO — restore to 300000 (5 min) before real chemicals!
+  unsigned long lastPhDoseMs        = 0;
+  time_t        lastChemicalDoseEpoch = 0;
+  bool          persistentStateReady = false;
+  bool          scheduleSettingsLoaded = false;
+  String        pumpDoseBlockReason = "";
+  String        phAutoLastAction    = "None";
+
+  // DEMO/SIMULATION MAPPING — NOT LABORATORY CALIBRATION
+  // This prototype demonstration mapping is based on observed sensor voltage.
+  // Proper pH calibration with standard buffer solutions is required for real measurements.
+  const float DEMO_PH_MIN = 5.0f;
+  const float DEMO_PH_MAX = 10.0f;
+  const float DEMO_PH_POINT_1_VOLTAGE = 0.50f;
+  const float DEMO_PH_POINT_1_VALUE = 6.0f;
+  const float DEMO_PH_POINT_2_VOLTAGE = 0.56f;
+  const float DEMO_PH_POINT_2_VALUE = 6.5f;
+  const float DEMO_PH_POINT_3_VOLTAGE = 0.62f;
+  const float DEMO_PH_POINT_3_VALUE = 7.0f;
+  const float DEMO_PH_POINT_4_VOLTAGE = 0.66f;
+  const float DEMO_PH_POINT_4_VALUE = 7.8f;
+  const float DEMO_PH_POINT_5_VOLTAGE = 0.70f;
+  const float DEMO_PH_POINT_5_VALUE = 8.5f;
+
+  float calculateDemoPH(float sensorVoltage) {
+    float demoPh;
+    if (sensorVoltage <= DEMO_PH_POINT_2_VOLTAGE) {
+      demoPh = DEMO_PH_POINT_1_VALUE +
+        (sensorVoltage - DEMO_PH_POINT_1_VOLTAGE) *
+        (DEMO_PH_POINT_2_VALUE - DEMO_PH_POINT_1_VALUE) /
+        (DEMO_PH_POINT_2_VOLTAGE - DEMO_PH_POINT_1_VOLTAGE);
+    } else if (sensorVoltage <= DEMO_PH_POINT_3_VOLTAGE) {
+      demoPh = DEMO_PH_POINT_2_VALUE +
+        (sensorVoltage - DEMO_PH_POINT_2_VOLTAGE) *
+        (DEMO_PH_POINT_3_VALUE - DEMO_PH_POINT_2_VALUE) /
+        (DEMO_PH_POINT_3_VOLTAGE - DEMO_PH_POINT_2_VOLTAGE);
+    } else if (sensorVoltage <= DEMO_PH_POINT_4_VOLTAGE) {
+      demoPh = DEMO_PH_POINT_3_VALUE +
+        (sensorVoltage - DEMO_PH_POINT_3_VOLTAGE) *
+        (DEMO_PH_POINT_4_VALUE - DEMO_PH_POINT_3_VALUE) /
+        (DEMO_PH_POINT_4_VOLTAGE - DEMO_PH_POINT_3_VOLTAGE);
+    } else {
+      demoPh = DEMO_PH_POINT_4_VALUE +
+        (sensorVoltage - DEMO_PH_POINT_4_VOLTAGE) *
+        (DEMO_PH_POINT_5_VALUE - DEMO_PH_POINT_4_VALUE) /
+        (DEMO_PH_POINT_5_VOLTAGE - DEMO_PH_POINT_4_VOLTAGE);
+    }
+    return constrain(demoPh, DEMO_PH_MIN, DEMO_PH_MAX);
+  }
+
+  // Operational AquaLogic prototype values; not laboratory-grade NTU calibration.
+  const float TURBIDITY_CLEAN_VOLTAGE     = 1.21f;
+  const float TURBIDITY_5_NTU_VOLTAGE     = 0.89f;
+  const float TURBIDITY_10_NTU_VOLTAGE    = 0.76f;
+
+  bool  demoMode     = false;
+  float demoPhValue  = 7.0;
+
+  const time_t MIN_VALID_NTP_EPOCH = 1735689600; // 2025-01-01 UTC
+  const char* AQUA_TZ = "PHT-8"; // Asia/Manila has no daylight-saving time.
+  bool timeSyncWaitingReported = false;
+  bool timeSyncReported = false;
+
+  bool deviceClockSynchronized() {
+    return time(nullptr) >= MIN_VALID_NTP_EPOCH;
+  }
+
+  bool getDeviceLocalTime(struct tm& localTime) {
+    time_t now = time(nullptr);
+    if (now < MIN_VALID_NTP_EPOCH) return false;
+    return localtime_r(&now, &localTime) != nullptr;
+  }
+
+  bool parseIntegerValue(const String& text, long minimum, long maximum, long& value) {
+    if (text.isEmpty()) return false;
+    const char* start = text.c_str();
+    char* end = nullptr;
+    long parsed = strtol(start, &end, 10);
+    if (end == start || *end != '\0' || parsed < minimum || parsed > maximum)
+      return false;
+    value = parsed;
+    return true;
+  }
+
+  bool parseOptionalInteger(WebServer& request, const String& name,
+                            long minimum, long maximum, long& value) {
+    if (!request.hasArg(name)) return true;
+    return parseIntegerValue(request.arg(name), minimum, maximum, value);
+  }
+
+  void serviceTimeSyncDiagnostics() {
+    if (!deviceClockSynchronized()) {
+      if (!timeSyncWaitingReported)
+        Serial.println("[SCHEDULE] Scheduler waiting for NTP synchronization");
+      timeSyncWaitingReported = true;
+      timeSyncReported = false;
+      return;
+    }
+
+    timeSyncWaitingReported = false;
+    if (timeSyncReported) return;
+
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    char timestamp[24];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &localTime);
+    Serial.print("[TIME] Local: ");
+    Serial.println(timestamp);
+    Serial.println("[TIME] Timezone: Asia/Manila (UTC+08:00)");
+    Serial.println("[TIME] NTP synchronized");
+
+    char uvOn[6], uvOff[6], ledOn[6], ledOff[6];
+    snprintf(uvOn, sizeof(uvOn), "%02d:%02d", uvScheduleOnHour, uvScheduleOnMinute);
+    snprintf(uvOff, sizeof(uvOff), "%02d:%02d", uvScheduleOffHour, uvScheduleOffMinute);
+    snprintf(ledOn, sizeof(ledOn), "%02d:%02d", ledScheduleOnHour, ledScheduleOnMinute);
+    snprintf(ledOff, sizeof(ledOff), "%02d:%02d", ledScheduleOffHour, ledScheduleOffMinute);
+    Serial.printf("[SCHEDULE] UV enabled=%s time=%s-%s\n", uvScheduleEnabled ? "true" : "false", uvOn, uvOff);
+    Serial.printf("[SCHEDULE] LED enabled=%s time=%s-%s\n", ledScheduleEnabled ? "true" : "false", ledOn, ledOff);
+    for (int i = 0; i < 3; i++) {
+      Serial.printf("[SCHEDULE] FEEDER slot%d enabled=%s time=%02d:%02d\n",
+        i + 1, feedSchedule[i].enabled ? "true" : "false",
+        feedSchedule[i].hour, feedSchedule[i].minute);
+      Serial.printf("[SCHEDULE] PUMP_A slot%d enabled=%s time=%02d:%02d dose=%.2fmL\n",
+        i + 1, syringeASchedule[i].enabled ? "true" : "false",
+        syringeASchedule[i].hour, syringeASchedule[i].minute, syringeADispenseML);
+      Serial.printf("[SCHEDULE] PUMP_B slot%d enabled=%s time=%02d:%02d dose=%.2fmL\n",
+        i + 1, syringeBSchedule[i].enabled ? "true" : "false",
+        syringeBSchedule[i].hour, syringeBSchedule[i].minute, syringeBDispenseML);
+    }
+    timeSyncReported = true;
+  }
+
+  int deviceDateKey(const struct tm& localTime) {
+    return (localTime.tm_year + 1900) * 10000 +
+          (localTime.tm_mon + 1) * 100 + localTime.tm_mday;
+  }
+
+  String formatDeviceEpoch(time_t epoch) {
+    if (epoch < MIN_VALID_NTP_EPOCH) return "";
+    struct tm localTime;
+    if (!localtime_r(&epoch, &localTime)) return "";
+    char buffer[32];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &localTime);
+    return String(buffer) + "+08:00";
+  }
+
+  String deviceCooldownRemainingText() {
+    if (!deviceClockSynchronized()) return "Waiting for NTP time sync";
+    time_t now = time(nullptr);
+    if (lastChemicalDoseEpoch <= 0 || now >= lastChemicalDoseEpoch + 7200)
+      return "Eligible now";
+    return formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
+  }
+
+  unsigned long chemicalCooldownRemainingMs() {
+    if (!deviceClockSynchronized()) return CHEMICAL_DOSE_COOLDOWN_MS;
+    time_t now = time(nullptr);
+    if (lastChemicalDoseEpoch <= 0 || now >= lastChemicalDoseEpoch + 7200) return 0;
+    return (unsigned long)(lastChemicalDoseEpoch + 7200 - now) * 1000UL;
+  }
+
+  time_t nextScheduleEpoch(const SyringeTime* schedule, time_t now) {
+    struct tm localTime;
+    if (!localtime_r(&now, &localTime)) return 0;
+    time_t next = 0;
+    for (int i = 0; i < 3; i++) {
+      if (!schedule[i].enabled) continue;
+      struct tm slot = localTime;
+      slot.tm_hour = schedule[i].hour;
+      slot.tm_min = schedule[i].minute;
+      slot.tm_sec = 0;
+      time_t candidate = mktime(&slot);
+      if (candidate <= now) {
+        slot.tm_mday += 1;
+        candidate = mktime(&slot);
+      }
+      if (candidate > 0 && (next == 0 || candidate < next)) next = candidate;
+    }
+    return next;
+  }
+
+  time_t nextChemicalEligibleEpoch() {
+    if (!deviceClockSynchronized()) return 0;
+    time_t now = time(nullptr);
+    time_t eligible = now;
+    if (lastChemicalDoseEpoch > 0 && eligible < lastChemicalDoseEpoch + 7200)
+      eligible = lastChemicalDoseEpoch + 7200;
+    return eligible;
+  }
+
+  time_t nextPumpDoseEpoch(const SyringeTime* schedule) {
+    if (!deviceClockSynchronized()) return 0;
+    time_t eligible = nextChemicalEligibleEpoch();
+    if (eligible <= 0) return 0;
+    // If cooldown ends after a slot, report the next real schedule occurrence
+    // after the cooldown. The crossed/blocked slot is skipped, not caught up.
+    return nextScheduleEpoch(schedule, eligible - 1);
+  }
+
+  bool persistScheduleSettings() {
+    if (!persistentStateReady) return false;
+    bool ok = true;
+    ok &= devicePreferences.putBool("uv_en", uvScheduleEnabled) > 0;
+    ok &= devicePreferences.putUChar("uv_on_h", uvScheduleOnHour) > 0;
+    ok &= devicePreferences.putUChar("uv_on_m", uvScheduleOnMinute) > 0;
+    ok &= devicePreferences.putUChar("uv_off_h", uvScheduleOffHour) > 0;
+    ok &= devicePreferences.putUChar("uv_off_m", uvScheduleOffMinute) > 0;
+    ok &= devicePreferences.putBool("led_en", ledScheduleEnabled) > 0;
+    ok &= devicePreferences.putUChar("led_on_h", ledScheduleOnHour) > 0;
+    ok &= devicePreferences.putUChar("led_on_m", ledScheduleOnMinute) > 0;
+    ok &= devicePreferences.putUChar("led_off_h", ledScheduleOffHour) > 0;
+    ok &= devicePreferences.putUChar("led_off_m", ledScheduleOffMinute) > 0;
+    ok &= devicePreferences.putUChar("feed_angle", (uint8_t)feederOpenAngle) > 0;
+    ok &= devicePreferences.putUInt("feed_duration", (uint32_t)feederDurationMs) > 0;
+    for (int i = 0; i < 3; i++) {
+      char key[12];
+      snprintf(key, sizeof(key), "feed_h%d", i);
+      ok &= devicePreferences.putUChar(key, feedSchedule[i].hour) > 0;
+      snprintf(key, sizeof(key), "feed_m%d", i);
+      ok &= devicePreferences.putUChar(key, feedSchedule[i].minute) > 0;
+      snprintf(key, sizeof(key), "feed_e%d", i);
+      ok &= devicePreferences.putBool(key, feedSchedule[i].enabled) > 0;
+      snprintf(key, sizeof(key), "a_h%d", i);
+      ok &= devicePreferences.putUChar(key, syringeASchedule[i].hour) > 0;
+      snprintf(key, sizeof(key), "a_m%d", i);
+      ok &= devicePreferences.putUChar(key, syringeASchedule[i].minute) > 0;
+      snprintf(key, sizeof(key), "a_e%d", i);
+      ok &= devicePreferences.putBool(key, syringeASchedule[i].enabled) > 0;
+      snprintf(key, sizeof(key), "b_h%d", i);
+      ok &= devicePreferences.putUChar(key, syringeBSchedule[i].hour) > 0;
+      snprintf(key, sizeof(key), "b_m%d", i);
+      ok &= devicePreferences.putUChar(key, syringeBSchedule[i].minute) > 0;
+      snprintf(key, sizeof(key), "b_e%d", i);
+      ok &= devicePreferences.putBool(key, syringeBSchedule[i].enabled) > 0;
+    }
+    ok &= devicePreferences.putFloat("ph_min", phTargetMin) > 0;
+    ok &= devicePreferences.putFloat("ph_max", phTargetMax) > 0;
+    ok &= devicePreferences.putBool("ph_enabled", phAutoDoseEnabled) > 0;
+    ok &= devicePreferences.putUInt("ph_cd", (uint32_t)phDoseCooldownMs) > 0;
+    ok &= devicePreferences.putBool("settings_v1", true) > 0;
+    scheduleSettingsLoaded = ok;
+    return ok;
+  }
+
+  bool persistPumpSafetyState() {
+    if (!persistentStateReady) return false;
+    bool ok = true;
+    // Save the global cooldown first: an interrupted write can delay a dose,
+    // but must never make a just-started chemical dose immediately repeatable.
+    ok &= devicePreferences.putLong64("last_chem", (int64_t)lastChemicalDoseEpoch) > 0;
+    ok &= devicePreferences.putFloat("a_remain", syringeARemainingML) > 0;
+    ok &= devicePreferences.putFloat("b_remain", syringeBRemainingML) > 0;
+    ok &= devicePreferences.putBool("a_known", syringeAVolumeKnown) > 0;
+    ok &= devicePreferences.putBool("b_known", syringeBVolumeKnown) > 0;
+    ok &= devicePreferences.putFloat("a_dose", syringeADispenseML) > 0;
+    ok &= devicePreferences.putFloat("b_dose", syringeBDispenseML) > 0;
+    ok &= devicePreferences.putInt("a_count", syringeADoseCount) > 0;
+    ok &= devicePreferences.putInt("b_count", syringeBDoseCount) > 0;
+    ok &= devicePreferences.putString("a_last", syringeALastDispensed) > 0;
+    ok &= devicePreferences.putString("b_last", syringeBLastDispensed) > 0;
+    ok &= devicePreferences.putBool("pump_v1", true) > 0;
+    return ok;
+  }
+
+  void loadPersistentDeviceState() {
+    persistentStateReady = devicePreferences.begin("aqualogic", false);
+    if (!persistentStateReady) {
+      Serial.println("NVS unavailable; chemical dosing will remain blocked");
+      return;
+    }
+
+    if (devicePreferences.getBool("settings_v1", false)) {
+      uvScheduleEnabled = devicePreferences.getBool("uv_en", false);
+      uvScheduleOnHour = devicePreferences.getUChar("uv_on_h", 8);
+      uvScheduleOnMinute = devicePreferences.getUChar("uv_on_m", 0);
+      uvScheduleOffHour = devicePreferences.getUChar("uv_off_h", 18);
+      uvScheduleOffMinute = devicePreferences.getUChar("uv_off_m", 0);
+      ledScheduleEnabled = devicePreferences.getBool("led_en", false);
+      ledScheduleOnHour = devicePreferences.getUChar("led_on_h", 8);
+      ledScheduleOnMinute = devicePreferences.getUChar("led_on_m", 0);
+      ledScheduleOffHour = devicePreferences.getUChar("led_off_h", 18);
+      ledScheduleOffMinute = devicePreferences.getUChar("led_off_m", 0);
+      feederOpenAngle = constrain(devicePreferences.getUChar("feed_angle", feederOpenAngle), 0, 180);
+      feederDurationMs = constrain(devicePreferences.getUInt("feed_duration", (uint32_t)feederDurationMs), 500UL, 60000UL);
+      for (int i = 0; i < 3; i++) {
+        char key[12];
+        snprintf(key, sizeof(key), "feed_h%d", i);
+        feedSchedule[i].hour = constrain(devicePreferences.getUChar(key, feedSchedule[i].hour), 0, 23);
+        snprintf(key, sizeof(key), "feed_m%d", i);
+        feedSchedule[i].minute = constrain(devicePreferences.getUChar(key, feedSchedule[i].minute), 0, 59);
+        snprintf(key, sizeof(key), "feed_e%d", i);
+        feedSchedule[i].enabled = devicePreferences.getBool(key, false);
+        snprintf(key, sizeof(key), "a_h%d", i);
+        syringeASchedule[i].hour = constrain(devicePreferences.getUChar(key, syringeASchedule[i].hour), 0, 23);
+        snprintf(key, sizeof(key), "a_m%d", i);
+        syringeASchedule[i].minute = constrain(devicePreferences.getUChar(key, syringeASchedule[i].minute), 0, 59);
+        snprintf(key, sizeof(key), "a_e%d", i);
+        syringeASchedule[i].enabled = devicePreferences.getBool(key, false);
+        snprintf(key, sizeof(key), "b_h%d", i);
+        syringeBSchedule[i].hour = constrain(devicePreferences.getUChar(key, syringeBSchedule[i].hour), 0, 23);
+        snprintf(key, sizeof(key), "b_m%d", i);
+        syringeBSchedule[i].minute = constrain(devicePreferences.getUChar(key, syringeBSchedule[i].minute), 0, 59);
+        snprintf(key, sizeof(key), "b_e%d", i);
+        syringeBSchedule[i].enabled = devicePreferences.getBool(key, false);
+        snprintf(key, sizeof(key), "feed_fire%d", i);
+        feedLastFiredDate[i] = devicePreferences.getInt(key, 0);
+        snprintf(key, sizeof(key), "a_fire%d", i);
+        syringeALastFiredDate[i] = devicePreferences.getInt(key, 0);
+        snprintf(key, sizeof(key), "b_fire%d", i);
+        syringeBLastFiredDate[i] = devicePreferences.getInt(key, 0);
+      }
+      phTargetMin = devicePreferences.getFloat("ph_min", 6.5f);
+      phTargetMax = devicePreferences.getFloat("ph_max", 7.5f);
+      phAutoDoseEnabled = devicePreferences.getBool("ph_enabled", false);
+      phDoseCooldownMs = constrain(devicePreferences.getUInt("ph_cd", (uint32_t)phDoseCooldownMs), 10000UL, 3600000UL);
+      scheduleSettingsLoaded = true;
+    }
+
+    if (devicePreferences.getBool("pump_v1", false)) {
+      syringeARemainingML = constrain(devicePreferences.getFloat("a_remain", 0.0f), 0.0f, syringeACapacityML);
+      syringeBRemainingML = constrain(devicePreferences.getFloat("b_remain", 0.0f), 0.0f, syringeBCapacityML);
+      syringeAVolumeKnown = devicePreferences.getBool("a_known", false);
+      syringeBVolumeKnown = devicePreferences.getBool("b_known", false);
+      lastChemicalDoseEpoch = (time_t)devicePreferences.getLong64("last_chem", 0);
+      float storedDoseA = devicePreferences.getFloat("a_dose", syringeADispenseML);
+      float storedDoseB = devicePreferences.getFloat("b_dose", syringeBDispenseML);
+      if (isfinite(storedDoseA) && storedDoseA > 0.0f && storedDoseA <= syringeACapacityML)
+        syringeADispenseML = storedDoseA;
+      if (isfinite(storedDoseB) && storedDoseB > 0.0f && storedDoseB <= syringeBCapacityML)
+        syringeBDispenseML = storedDoseB;
+      syringeADoseCount = max((int32_t)0, devicePreferences.getInt("a_count", 0));
+      syringeBDoseCount = max((int32_t)0, devicePreferences.getInt("b_count", 0));
+      syringeALastDispensed = devicePreferences.getString("a_last", "Never");
+      syringeBLastDispensed = devicePreferences.getString("b_last", "Never");
+    }
+  }
+
+  void startNetworkTimeSync() {
+    configTzTime(AQUA_TZ, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+    Serial.println("NTP time configured for Asia/Manila");
+  }
+
+  void setPumpScheduleEvent(bool pumpA, const String& message) {
+    if (pumpA) syringeALastScheduleEvent = message;
+    else syringeBLastScheduleEvent = message;
+    Serial.print("[SCHEDULE] ");
+    Serial.println(message);
+  }
+
+  unsigned long lcdPreviousMillis = 0;
+  int           lcdScreen         = 0;
+
+  // ========================
+  // HTML Dashboard (CSS removed — plain unstyled HTML)
+  // ========================
+  const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AquaLogic Dashboard</title>
+  <style>
+    :root {
+      --bg: #071b2a;
+      --panel: #0d2a3d;
+      --panel-2: #153d57;
+      --card: #0c1f2e;
+      --text: #eaf7ff;
+      --muted: #9ec7dc;
+      --accent: #4dd0ff;
+      --accent-2: #8ae0a6;
+      --warning: #ffbf69;
+      --danger: #ff6b6b;
+      --border: rgba(255,255,255,0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at top, #123b59, var(--bg) 44%);
+      color: var(--text);
+      padding: 18px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      letter-spacing: 0.12em;
+    }
+
+    header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .status-bar {
+      background: rgba(77, 208, 255, 0.12);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      text-align: center;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+      color: var(--accent);
+    }
+
+    .wifi-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 14px 0 20px;
+    }
+
+    .wifi-card {
+      background: linear-gradient(180deg, rgba(77,208,255,0.10), rgba(11,29,35,0.75));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+    }
+
+    .wifi-label {
+      display: block;
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .wifi-value {
+      display: block;
+      font-size: clamp(1rem, 2vw, 1.4rem);
+      font-weight: 700;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: rgba(12,31,46,0.96);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 12px;
+      min-height: 136px;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.16);
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .card-value {
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .card-status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(138,224,166,0.08);
+      color: var(--accent-2);
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+    }
+
+    .card-raw {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      opacity: 0.9;
+    }
+
+    .overall {
+      background: linear-gradient(135deg, rgba(77,208,255,0.18), rgba(138,224,166,0.12));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .overall-label {
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 0.75rem;
+    }
+
+    .overall-value {
+      font-size: clamp(1.2rem, 2.2vw, 2rem);
+      font-weight: 800;
+    }
+
+    .section-label {
+      margin: 20px 0 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .panel {
+      background: rgba(12,31,46,0.94);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+      margin-bottom: 18px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-box {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 10px;
+      min-height: 92px;
+    }
+
+    .stat-box-label {
+      color: var(--muted);
+      font-size: 0.68rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .stat-box-value {
+      font-weight: 800;
+      font-size: clamp(1rem, 2vw, 1.3rem);
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .feedback {
+      margin-top: 12px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(77,208,255,0.25);
+      background: rgba(77,208,255,0.06);
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    button {
+      background: linear-gradient(180deg, #1c7fb5, #155f8d);
+      border: 0;
+      border-radius: 10px;
+      color: white;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      .overall { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+  </head>
+  <body>
+
+  <header>
+    <h1>AQUALOGIC</h1>
+    <p>WATER QUALITY MONITORING SYSTEM</p>
+  </header>
+
+  <div class="status-bar"><span>LIVE DATA — ESP32 SENSOR NODE</span></div>
+
+  <div class="wifi-summary">
+    <div class="wifi-card">
+      <span class="wifi-label">Connected IP</span>
+      <span class="wifi-value" id="wifi-ip">—</span>
+    </div>
+    <div class="wifi-card">
+      <span class="wifi-label">WiFi Mode</span>
+      <span class="wifi-value" id="wifi-mode-badge">—</span>
+    </div>
+  </div>
+
+  <div class="grid" id="cards"></div>
+
+  <div class="overall" id="overall">
+    <span class="overall-label">OVERALL WATER STATUS</span>
+    <span class="overall-value" id="overall-val">--</span>
+  </div>
+
+  <div class="section-label">OFFLINE BUFFER</div>
+  <div class="panel">
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">PENDING</div>
+        <div class="stat-box-value" id="buffer-pending">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">DROPPED</div>
+        <div class="stat-box-value" id="buffer-dropped">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">OLDEST QUEUED</div>
+        <div class="stat-box-value" id="buffer-oldest">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">NEWEST QUEUED</div>
+        <div class="stat-box-value" id="buffer-newest">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">WI-FI STATUS & LOCAL ACCESS</div>
+  <div class="panel">
+    <div class="controls">
+      <button onclick="forceDisconnect()">⚠ FORCE DISCONNECT</button>
+      <button onclick="reconnectWifi()">↻ RECONNECT</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">STA CONNECTION</div>
+        <div class="stat-box-value" id="wifi-state">--</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">MANUAL TEST MODE</div>
+        <div class="stat-box-value" id="wifi-manual">OFF</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TEST TIME REMAINING</div>
+        <div class="stat-box-value" id="wifi-countdown">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">LOCAL AP / FALLBACK</div>
+        <div class="stat-box-value" id="wifi-ap">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">PRIMARY ACCESS IP</div>
+        <div class="stat-box-value" id="wifi-ip">—</div>
+      </div>
+    </div>
+    <div class="feedback" id="wifi-feedback"></div>
+    <div>Force Disconnect starts the manual 2-minute test and pauses STA retries. During a router WiFi outage, the local AP starts after 12 seconds while STA reconnect attempts continue. Join 'AquaLogic-Debug' and open 192.168.4.1. This fallback does not detect Internet/Railway outages while router WiFi is connected.</div>
+  </div>
+
+  <!-- ===== FISH FEEDER ===== -->
+  <div class="section-label">FISH FEEDER — GPIO 33 · SERVO MOTOR</div>
+  <div class="panel">
+
+    <div class="feeder-top">
+      <div class="feeder-icon" id="feeder-icon">🐟</div>
+      <div class="feeder-info">
+        <div class="feeder-title" id="feeder-title">FEEDER READY</div>
+        <div class="feeder-sub">Last fed: <span id="last-fed">Never</span></div>
+      </div>
+      <button onclick="feedNow()">⚡ FEED NOW</button>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">STATUS</div>
+        <div class="stat-box-value" id="feed-status">IDLE</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TOTAL FEEDS</div>
+        <div class="stat-box-value" id="feed-count">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">OPEN ANGLE</div>
+        <div class="stat-box-value" id="disp-angle">125°</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">OPEN DURATION</div>
+        <div class="stat-box-value" id="disp-duration">1.0s</div>
+      </div>
+    </div>
+
+    <hr>
+    <div>PORTION &amp; SERVO TEST</div>
+
+    <div class="row">
+      <label>ANGLE</label>
+      <input type="range" id="servo-angle" min="0" max="180" value="125"
+        oninput="document.getElementById('angle-val').textContent=this.value+'°'"/>
+      <span id="angle-val">125°</span>
+      <label>DURATION</label>
+      <input type="number" id="servo-dur" value="1" min="1" max="30"/>
+      <select id="servo-dur-unit">
+        <option value="1000">sec</option>
+        <option value="60000">min</option>
+      </select>
+    </div>
+
+    <div class="controls">
+      <button onclick="savePortionSettings()">SAVE</button>
+      <button onclick="testServoNow()">⚙ TEST SERVO</button>
+    </div>
+
+    <hr>
+    <div>AUTO-FEED SCHEDULE (UP TO 3 TIMES/DAY)</div>
+
+    <table>
+      <thead><tr><th>SLOT</th><th>TIME</th><th>ENABLED</th></tr></thead>
+      <tbody id="sched-body"></tbody>
+    </table>
+    <button onclick="saveFeederSchedule()">SAVE SCHEDULE</button>
+
+    <hr>
+    <div>RECENT FEED LOG</div>
+    <ul id="feed-log"><li>No feeds yet.</li></ul>
+
+    <div class="feedback" id="feed-feedback"></div>
+  </div>
+
+  <!-- ===== UV LIGHT CONTROL ===== -->
+  <div class="section-label">UV LIGHT CONTROL — GPIO 32</div>
+  <div class="panel">
+    <div class="led-top">
+      <div class="led-bulb" id="uv-bulb"></div>
+      <div class="led-info">
+        <div class="led-title" id="uv-title">UV OFF</div>
+        <div class="led-sub" id="uv-sub">Manually controlled</div>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">CURRENT STATE</div>
+        <div class="stat-box-value" id="uv-stat-state">OFF</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TIMER REMAINING</div>
+        <div class="stat-box-value" id="uv-stat-remaining">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TOTAL ON TIME</div>
+        <div class="stat-box-value" id="uv-stat-total">0s</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">SCHEDULE</div>
+        <div class="stat-box-value" id="uv-stat-sched">OFF</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button onclick="uvOn()">TURN ON</button>
+      <button onclick="uvOff()">TURN OFF</button>
+    </div>
+
+    <hr>
+
+    <div class="row">
+      <label>TIMER — ON FOR</label>
+      <input type="number" id="uv-timer-val" value="10" min="1" max="3600"/>
+      <select id="uv-timer-unit">
+        <option value="1">seconds</option>
+        <option value="60">minutes</option>
+        <option value="3600">hours</option>
+      </select>
+      <button onclick="uvTimer()">START TIMER</button>
+    </div>
+
+    <hr>
+
+    <div class="sched-row">
+      <div class="sched-toggle" onclick="toggleUvSchedule()">
+        <span id="uv-sched-track">[ ]</span>
+        <span>ENABLE SCHEDULE</span>
+      </div>
+
+      <div class="row">
+        <label>ON AT</label>
+        <input type="time" id="uv-sched-on" value="08:00"/>
+        <label>OFF AT</label>
+        <input type="time" id="uv-sched-off" value="18:00"/>
+        <button onclick="sendUvSchedule()">SAVE SCHEDULE</button>
+      </div>
+    </div>
+
+    <div class="feedback" id="uv-feedback"></div>
+  </div>
+
+  <!-- ===== LED LIGHT CONTROL ===== -->
+  <div class="section-label">LED LIGHT CONTROL — GPIO 17</div>
+  <div class="panel">
+    <div class="led-top">
+      <div class="led-bulb" id="led-bulb"></div>
+      <div class="led-info">
+        <div class="led-title" id="led-title">LED OFF</div>
+        <div class="led-sub" id="led-sub">Manually controlled</div>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">CURRENT STATE</div>
+        <div class="stat-box-value" id="led-stat-state">OFF</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TIMER REMAINING</div>
+        <div class="stat-box-value" id="led-stat-remaining">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TOTAL ON TIME</div>
+        <div class="stat-box-value" id="led-stat-total">0s</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">SCHEDULE</div>
+        <div class="stat-box-value" id="led-stat-sched">OFF</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button onclick="ledOn()">TURN ON</button>
+      <button onclick="ledOff()">TURN OFF</button>
+    </div>
+
+    <hr>
+
+    <div class="row">
+      <label>TIMER — ON FOR</label>
+      <input type="number" id="led-timer-val" value="10" min="1" max="3600"/>
+      <select id="led-timer-unit">
+        <option value="1">seconds</option>
+        <option value="60">minutes</option>
+        <option value="3600">hours</option>
+      </select>
+      <button onclick="ledTimer()">START TIMER</button>
+    </div>
+
+    <hr>
+
+    <div class="sched-row">
+      <div class="sched-toggle" onclick="toggleLedSchedule()">
+        <span id="led-sched-track">[ ]</span>
+        <span>ENABLE SCHEDULE</span>
+      </div>
+
+      <div class="row">
+        <label>ON AT</label>
+        <input type="time" id="led-sched-on" value="08:00"/>
+        <label>OFF AT</label>
+        <input type="time" id="led-sched-off" value="18:00"/>
+        <button onclick="sendLedSchedule()">SAVE SCHEDULE</button>
+      </div>
+    </div>
+
+    <div class="feedback" id="led-feedback"></div>
+  </div>
+
+  <!-- ===== DEMO MODE ===== -->
+  <div class="section-label">DEMO MODE — SIMULATED pH (NO CHEMICALS NEEDED)</div>
+  <div class="panel">
+    <div class="sched-row">
+      <div class="sched-toggle" onclick="toggleDemoMode()">
+        <span id="demo-mode-track">[ ]</span>
+        <span>ENABLE DEMO MODE</span>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">DEMO STATUS</div>
+        <div class="stat-box-value" id="demo-status">OFF</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">SIMULATED pH</div>
+        <div class="stat-box-value" id="demo-ph-display">7.00</div>
+      </div>
+    </div>
+
+    <div>TAP TO SET FIXED TEST VALUE</div>
+
+    <div class="controls">
+      <button onclick="setDemoPh(6.0)">6.0 ACIDIC</button>
+      <button onclick="setDemoPh(7.0)">7.0 NORMAL</button>
+      <button onclick="setDemoPh(8.5)">8.5 ALKALINE</button>
+    </div>
+
+    <div class="feedback" id="demo-feedback"></div>
+  </div>
+
+  <!-- ===== PH AUTO-DOSING ===== -->
+  <div class="section-label">PH AUTO-DOSING — SYRINGE A (PH UP) / SYRINGE B (PH DOWN)</div>
+  <div class="panel">
+    <div class="sched-row">
+      <div class="sched-toggle" onclick="togglePhAuto()">
+        <span id="ph-auto-track">[ ]</span>
+        <span>ENABLE AUTO-DOSING</span>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">MODE</div>
+        <div class="stat-box-value" id="ph-auto-mode">MANUAL</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">TARGET RANGE</div>
+        <div class="stat-box-value" id="ph-auto-range">6.50–7.50</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">COOLDOWN LEFT</div>
+        <div class="stat-box-value" id="ph-auto-cooldown">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">LAST ACTION</div>
+        <div class="stat-box-value" id="ph-auto-action">None</div>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row">
+      <label>TARGET MIN pH</label>
+      <input type="number" id="ph-min" value="6.5" min="0" max="14" step="0.1"/>
+      <label>TARGET MAX pH</label>
+      <input type="number" id="ph-max" value="7.5" min="0" max="14" step="0.1"/>
+    </div>
+
+    <div class="row">
+      <label>COOLDOWN (minutes)</label>
+      <input type="number" id="ph-cooldown" value="5" min="1" max="60"/>
+    </div>
+
+    <div class="controls">
+      <button onclick="savePhAutoConfig()">SAVE SETTINGS</button>
+    </div>
+
+    <div class="feedback" id="ph-auto-feedback"></div>
+    <div>Manual dispense always works, even with auto-dosing on.</div>
+  </div>
+
+  <!-- ===== SYRINGE PUMP A ===== -->
+  <div class="section-label">
+    SYRINGE PUMP A — pH UP — GPIO 4/5/18/19 · 28BYJ-48 + ULN2003 · 5mL CAPACITY
+  </div>
+
+  <div class="panel">
+
+    <div class="feeder-top">
+      <div class="feeder-icon" id="syrA-icon">💧</div>
+
+      <div class="feeder-info">
+        <div class="feeder-title" id="syrA-title">SYRINGE A READY</div>
+        <div class="feeder-sub">
+          Last dispensed: <span id="syrA-last">Never</span>
+        </div>
+      </div>
+
+      <button onclick="dispenseA()">⚡ DISPENSE NOW</button>
+      <button onclick="stopSyrA()">■ STOP</button>
+      <button onclick="retractA()">◀ RETRACT</button>
+      <button onclick="refillA()">✓ CONFIRM REFILL</button>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">STATUS</div>
+        <div class="stat-box-value" id="syrA-status">IDLE</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">TOTAL DOSES</div>
+        <div class="stat-box-value" id="syrA-count">0</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">DOSE VOLUME</div>
+        <div class="stat-box-value" id="syrA-disp-volume">1.0mL</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">REMAINING</div>
+        <div class="stat-box-value" id="syrA-remaining">5.0 / 5.0mL</div>
+      </div>
+    </div>
+
+    <div class="feedback" id="syrA-safety"></div>
+    <div class="feedback" id="syrA-schedule-alert"></div>
+
+    <hr>
+
+    <div>FIXED CHEMICAL DOSE SCHEDULE · UP TO 3 TIMES/DAY · ASIA/MANILA TIME</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>SLOT</th>
+          <th>TIME</th>
+          <th>ENABLED</th>
+        </tr>
+      </thead>
+      <tbody id="syrA-sched-body"></tbody>
+    </table>
+
+    <button onclick="saveSyrASchedule()">SAVE SCHEDULE</button>
+
+    <div class="feedback" id="syrA-feedback"></div>
+  </div>
+
+  <!-- ===== SYRINGE PUMP B ===== -->
+  <div class="section-label">
+    SYRINGE PUMP B — pH DOWN — GPIO 13/14/23/26 · 28BYJ-48 + ULN2003 · 5mL CAPACITY
+  </div>
+
+  <div class="panel">
+
+    <div class="feeder-top">
+      <div class="feeder-icon" id="syrB-icon">💧</div>
+
+      <div class="feeder-info">
+        <div class="feeder-title" id="syrB-title">SYRINGE B READY</div>
+        <div class="feeder-sub">
+          Last dispensed: <span id="syrB-last">Never</span>
+        </div>
+      </div>
+
+      <button onclick="dispenseB()">⚡ DISPENSE NOW</button>
+      <button onclick="stopSyrB()">■ STOP</button>
+      <button onclick="retractB()">◀ RETRACT</button>
+      <button onclick="refillB()">✓ CONFIRM REFILL</button>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-box-label">STATUS</div>
+        <div class="stat-box-value" id="syrB-status">IDLE</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">TOTAL DOSES</div>
+        <div class="stat-box-value" id="syrB-count">0</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">DOSE VOLUME</div>
+        <div class="stat-box-value" id="syrB-disp-volume">1.0mL</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-box-label">REMAINING</div>
+        <div class="stat-box-value" id="syrB-remaining">5.0 / 5.0mL</div>
+      </div>
+    </div>
+
+    <div class="feedback" id="syrB-safety"></div>
+    <div class="feedback" id="syrB-schedule-alert"></div>
+
+    <hr>
+
+    <div>FIXED CHEMICAL DOSE SCHEDULE · UP TO 3 TIMES/DAY · ASIA/MANILA TIME</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>SLOT</th>
+          <th>TIME</th>
+          <th>ENABLED</th>
+        </tr>
+      </thead>
+      <tbody id="syrB-sched-body"></tbody>
+    </table>
+
+    <button onclick="saveSyrBSchedule()">SAVE SCHEDULE</button>
+
+    <div class="feedback" id="syrB-feedback"></div>
+  </div>
+
+  <div class="refresh-info">
+    AUTO-REFRESH IN <span id="countdown">10</span>s
+  </div>
+
+  <script>
+
+    const statusClass = s =>
+      s==='NORMAL'||s==='CLEAR'||s==='GOOD' ? 'good' :
+      s==='DIRTY'||s==='CRITICAL'||s==='HIGH' ? 'danger' : 'warn';
+
+    function phClass(s){
+      return s==='CRITICAL'
+        ? 'danger'
+        : s==='ACIDIC'||s==='ALKALINE'
+          ? 'warn'
+          : 'ph';
+    }
+
+    function fmtMs(ms){
+      if(ms<=0)return'—';
+
+      const s=Math.floor(ms/1000);
+
+      if(s<60)return s+'s';
+
+      if(s<3600)
+        return Math.floor(s/60)+'m '+(s%60)+'s';
+
+      return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';
+    }
+
+    function fmtTotal(ms){
+      const s=Math.floor(ms/1000);
+
+      if(s<60)return s+'s';
+
+      if(s<3600)
+        return Math.floor(s/60)+'m '+(s%60)+'s';
+
+      return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m';
+    }
+
+    function fb(id,msg,color){
+      const el=document.getElementById(id);
+      el.textContent=msg;
+      setTimeout(()=>el.textContent='',4000);
+    }
+
+    const feedLog=[];
+
+    function addLog(msg){
+      feedLog.unshift(msg);
+
+      if(feedLog.length>10)
+        feedLog.pop();
+
+      const ul=document.getElementById('feed-log');
+
+      ul.innerHTML=
+        feedLog.map(l=>`<li>● ${l}</li>`).join('')
+        ||'<li>No feeds yet.</li>';
+    }
+
+    const schedTimes=[
+      {h:8,m:0,en:false},
+      {h:12,m:0,en:false},
+      {h:18,m:0,en:false}
+    ];
+
+    function renderSchedTable(){
+
+      document.getElementById('sched-body').innerHTML=
+        schedTimes.map((s,i)=>`
+        <tr>
+          <td>SLOT ${i+1}</td>
+
+          <td>
+            <input
+              type="time"
+              id="ft-${i}"
+              value="${String(s.h).padStart(2,'0')}:${String(s.m).padStart(2,'0')}"
+            />
+          </td>
+
+          <td>
+            <span onclick="toggleSlot(${i})" style="cursor:pointer;">
+              [${s.en?'X':' '}] ${s.en?'ON':'OFF'}
+            </span>
+          </td>
+
+        </tr>`).join('');
+    }
+
+    function toggleSlot(i){
+      schedTimes[i].en=!schedTimes[i].en;
+      renderSchedTable();
+    }
+
+    renderSchedTable();
+
+    async function fetchData(){
+
+      try{
+
+        const res=await fetch('/data');
+        const d=await res.json();
+
+        const phPct=Math.min(
+          Math.max((d.ph_value/14)*100,0),
+          100
+        ).toFixed(1);
+
+        const cards=[
+          {
+            label:'TEMPERATURE',
+            value:d.temp_c.toFixed(1)+'°C',
+            status:d.temp_status,
+            raw:'DS18B20 · PIN 27'
+          },
+
+          {
+            label:'pH LEVEL',
+            value:d.ph_value.toFixed(2),
+            status:d.ph_status,
+            raw:'Analog · PIN 35'
+          },
+
+          {
+            label:'TURBIDITY',
+            value:d.turbidity_ntu.toFixed(1)+' NTU',
+            status:d.turbidity_status,
+            raw:'Analog · PIN 36 (SP)'
+          },
+
+          {
+            label:'TDS',
+            value:d.tds_ppm.toFixed(0)+' ppm',
+            status:d.tds_status,
+            raw:'Analog · PIN 25'
+          }
+        ];
+
+        document.getElementById('cards').innerHTML=
+          cards.map(c=>`
+          <div class="card">
+            <div class="card-label">${c.label}</div>
+            <div class="card-value">${c.value}</div>
+            <span class="card-status">${c.status}</span>
+            <div class="card-raw">${c.raw}</div>
+          </div>`).join('');
+
+        document.getElementById('overall-val').textContent=
+          d.overall_status;
+
+      }catch(e){
+        console.warn('Sensor fetch failed',e);
+      }
+    }
+
+    async function fetchBufferStatus(){
+      try{
+        const res=await fetch('/data/backlog/count');
+        const d=await res.json();
+        document.getElementById('buffer-pending').textContent=d.pending;
+        document.getElementById('buffer-dropped').textContent=d.dropped;
+        document.getElementById('buffer-oldest').textContent=d.pending>0?d.oldest_seq:'—';
+        document.getElementById('buffer-newest').textContent=d.pending>0?d.newest_seq:'—';
+      }catch(e){
+        console.warn('Backlog fetch failed',e);
+      }
+    }
+
+    async function fetchWifi(){
+      try{
+        const res=await fetch('/wifi/status');
+        const d=await res.json();
+        const staConnected=typeof d.sta_connected==='boolean'?d.sta_connected:!!d.connected;
+        const manualTest=d.manual_offline===true;
+        const reconnecting=typeof d.sta_reconnecting==='boolean'?d.sta_reconnecting:(!staConnected&&!manualTest);
+        const modeLabel=d.mode?' ('+d.mode+')':'';
+        document.getElementById('wifi-state').textContent=
+          staConnected?'Connected'+modeLabel:manualTest?'Paused for manual test':reconnecting?'Reconnecting'+modeLabel:'Disconnected';
+        document.getElementById('wifi-manual').textContent=manualTest?'ACTIVE':'OFF';
+        document.getElementById('wifi-countdown').textContent=
+          d.manual_offline_remaining_ms>0
+            ?fmtMs(d.manual_offline_remaining_ms)
+            :'—';
+        const apIp=d.ap_ip&&d.ap_ip!=='0.0.0.0'?' · '+d.ap_ip:'';
+        document.getElementById('wifi-ap').textContent=d.fallback_ap_active
+          ?'Automatic · '+(d.ap_ssid||'Local AP')+apIp
+          :manualTest&&d.ap_ssid?'Manual test · '+d.ap_ssid+apIp:'Off';
+        document.getElementById('wifi-ip').textContent=d.ip||'—';
+        document.getElementById('wifi-mode-badge').textContent=d.mode||'—';
+        if (d.ip) {
+          document.getElementById('wifi-feedback').textContent = 'Current ESP32 IP: ' + d.ip;
+        }
+      }catch(e){
+        console.warn('WiFi status fetch failed',e);
+      }
+    }
+
+    async function forceDisconnect(){
+      try{
+        const res=await fetch('/wifi/disconnect');
+        const d=await res.json();
+        fb('wifi-feedback','Disconnecting. Join '+d.ap_ssid+' at 192.168.4.1.');
+      }catch(e){
+        console.warn('WiFi disconnect request failed',e);
+      }
+    }
+
+    async function reconnectWifi(){
+      try{
+        await fetch('/wifi/reconnect');
+        fb('wifi-feedback','Reconnecting to router...');
+        fetchWifi();
+      }catch(e){
+        console.warn('WiFi reconnect request failed',e);
+      }
+    }
+
+    async function fetchFeeder(){
+
+      try{
+
+        const res=await fetch('/feeder/status');
+        const d=await res.json();
+
+        const feeding=d.feeding;
+
+        document.getElementById('feeder-title').textContent=
+          feeding?'FEEDING NOW...':'FEEDER READY';
+
+        document.getElementById('feed-status').textContent=
+          feeding?'FEEDING':'IDLE';
+
+        document.getElementById('feed-count').textContent=
+          d.feed_count;
+
+        document.getElementById('last-fed').textContent=
+          d.last_fed;
+
+        document.getElementById('disp-angle').textContent=
+          d.open_angle+'°';
+
+        document.getElementById('disp-duration').textContent=
+          (d.duration_ms/1000).toFixed(1)+'s';
+
+        d.schedule.forEach((s,i)=>{
+          schedTimes[i].h=s.hour;
+          schedTimes[i].m=s.minute;
+          schedTimes[i].en=s.enabled;
+        });
+
+        renderSchedTable();
+
+      }catch(e){
+        console.warn('Feeder fetch failed',e);
+      }
+    }
+
+    async function feedNow(){
+
+      await fetch('/feeder/feed');
+
+      addLog(
+        'Manual feed — '+
+        new Date().toLocaleTimeString()
+      );
+
+      fb(
+        'feed-feedback',
+        'Feeding now!'
+      );
+
+      setTimeout(fetchFeeder,500);
+    }
+
+    async function savePortionSettings(){
+
+      const angle=
+        document.getElementById('servo-angle').value;
+
+      const dur=
+        parseInt(
+          document.getElementById('servo-dur').value
+        )||1;
+
+      const unit=
+        parseInt(
+          document.getElementById('servo-dur-unit').value
+        )||1000;
+
+      await fetch(
+        `/feeder/config?angle=${angle}&duration=${dur*unit}`
+      );
+
+      fb(
+        'feed-feedback',
+        'Settings saved!'
+      );
+
+      fetchFeeder();
+    }
+
+    async function testServoNow(){
+
+      await fetch('/feeder/test');
+
+      fb(
+        'feed-feedback',
+        'Testing servo...'
+      );
+
+      setTimeout(fetchFeeder,500);
+    }
+
+    async function saveFeederSchedule(){
+
+      schedTimes.forEach((s,i)=>{
+
+        const t=
+          document.getElementById('ft-'+i).value
+          ||'08:00';
+
+        const[h,m]=t.split(':').map(Number);
+
+        schedTimes[i].h=h;
+        schedTimes[i].m=m;
+      });
+
+      const p=
+        schedTimes.map(
+          (s,i)=>
+            `h${i}=${s.h}&m${i}=${s.m}&e${i}=${s.en?1:0}`
+        ).join('&');
+
+      await fetch('/feeder/schedule?'+p);
+
+      fb(
+        'feed-feedback',
+        'Schedule saved!'
+      );
+
+      fetchFeeder();
+    }
+
+    let uvSchedActive=false;
+
+    async function fetchUV(){
+
+      try{
+
+        const res=await fetch('/uv/status');
+        const d=await res.json();
+
+        const on=d.led_on;
+
+        document.getElementById('uv-title').textContent=
+          on?'UV ON':'UV OFF';
+
+        document.getElementById('uv-stat-state').textContent=
+          on?'ON':'OFF';
+
+        const rem=d.remaining_ms;
+
+        document.getElementById('uv-stat-remaining').textContent=
+          rem>0
+            ?fmtMs(rem)
+            :(on?'∞':'—');
+
+        document.getElementById('uv-stat-total').textContent=
+          fmtTotal(d.total_on_ms);
+
+        const schedOn=d.schedule_enabled;
+
+        uvSchedActive=schedOn;
+
+        document.getElementById('uv-sched-track').textContent=
+          schedOn?'[X]':'[ ]';
+
+        document.getElementById('uv-stat-sched').textContent=
+          schedOn
+            ?d.sched_on+' → '+d.sched_off
+            :'OFF';
+
+        document.getElementById('uv-sub').textContent=
+          schedOn
+            ?'Schedule: '+d.sched_on+' – '+d.sched_off
+            :(rem>0?'Timer running':'Manually controlled');
+
+      }catch(e){
+        console.warn('UV fetch failed',e);
+      }
+    }
+
+    async function uvOn(){
+      await fetch('/uv/on');
+      fb('uv-feedback','UV turned ON');
+      fetchUV();
+    }
+
+    async function uvOff(){
+      await fetch('/uv/off');
+      fb('uv-feedback','UV turned OFF');
+      fetchUV();
+    }
+
+    async function uvTimer(){
+
+      const val=
+        parseInt(
+          document.getElementById('uv-timer-val').value
+        )||10;
+
+      const unit=
+        parseInt(
+          document.getElementById('uv-timer-unit').value
+        )||1;
+
+      await fetch(
+        '/uv/timer?duration='+
+        (val*unit*1000)
+      );
+
+      fb(
+        'uv-feedback',
+        'Timer: ON for '+
+        val+' '+
+        document.getElementById(
+          'uv-timer-unit'
+        ).selectedOptions[0].text
+      );
+
+      fetchUV();
+    }
+
+    function toggleUvSchedule(){
+
+      uvSchedActive=!uvSchedActive;
+
+      document.getElementById(
+        'uv-sched-track'
+      ).textContent=
+        uvSchedActive?'[X]':'[ ]';
+    }
+
+    async function sendUvSchedule(){
+
+      const on=
+        document.getElementById('uv-sched-on').value
+        ||'08:00';
+
+      const off=
+        document.getElementById('uv-sched-off').value
+        ||'18:00';
+
+      const[onH,onM]=
+        on.split(':').map(Number);
+
+      const[offH,offM]=
+        off.split(':').map(Number);
+
+      await fetch(
+        `/uv/schedule?enabled=${uvSchedActive?1:0}&onH=${onH}&onM=${onM}&offH=${offH}&offM=${offM}`
+      );
+
+      fb(
+        'uv-feedback',
+        'Schedule saved: '+
+        (uvSchedActive?on+' → '+off:'disabled')
+      );
+
+      fetchUV();
+    }
+
+    let ledSchedActive=false;
+
+    async function fetchLED(){
+
+      try{
+
+        const res=await fetch('/led/status');
+        const d=await res.json();
+
+        const on=d.led_on;
+
+        document.getElementById('led-title').textContent=
+          on?'LED ON':'LED OFF';
+
+        document.getElementById('led-stat-state').textContent=
+          on?'ON':'OFF';
+
+        const rem=d.remaining_ms;
+
+        document.getElementById('led-stat-remaining').textContent=
+          rem>0
+            ?fmtMs(rem)
+            :(on?'∞':'—');
+
+        document.getElementById('led-stat-total').textContent=
+          fmtTotal(d.total_on_ms);
+
+        const schedOn=d.schedule_enabled;
+
+        ledSchedActive=schedOn;
+
+        document.getElementById('led-sched-track').textContent=
+          schedOn?'[X]':'[ ]';
+
+        document.getElementById('led-stat-sched').textContent=
+          schedOn
+            ?d.sched_on+' → '+d.sched_off
+            :'OFF';
+
+        document.getElementById('led-sub').textContent=
+          schedOn
+            ?'Schedule: '+d.sched_on+' – '+d.sched_off
+            :(rem>0?'Timer running':'Manually controlled');
+
+      }catch(e){
+        console.warn('LED fetch failed',e);
+      }
+    }
+
+    async function ledOn(){
+      await fetch('/led/on');
+      fb('led-feedback','LED turned ON');
+      fetchLED();
+    }
+
+    async function ledOff(){
+      await fetch('/led/off');
+      fb('led-feedback','LED turned OFF');
+      fetchLED();
+    }
+
+    async function ledTimer(){
+
+      const val=
+        parseInt(
+          document.getElementById('led-timer-val').value
+        )||10;
+
+      const unit=
+        parseInt(
+          document.getElementById('led-timer-unit').value
+        )||1;
+
+      await fetch(
+        '/led/timer?duration='+
+        (val*unit*1000)
+      );
+
+      fb(
+        'led-feedback',
+        'Timer: ON for '+
+        val+' '+
+        document.getElementById(
+          'led-timer-unit'
+        ).selectedOptions[0].text
+      );
+
+      fetchLED();
+    }
+
+    function toggleLedSchedule(){
+
+      ledSchedActive=!ledSchedActive;
+
+      document.getElementById(
+        'led-sched-track'
+      ).textContent=
+        ledSchedActive?'[X]':'[ ]';
+    }
+
+    async function sendLedSchedule(){
+
+      const on=
+        document.getElementById('led-sched-on').value
+        ||'08:00';
+
+      const off=
+        document.getElementById('led-sched-off').value
+        ||'18:00';
+
+      const[onH,onM]=
+        on.split(':').map(Number);
+
+      const[offH,offM]=
+        off.split(':').map(Number);
+
+      await fetch(
+        `/led/schedule?enabled=${ledSchedActive?1:0}&onH=${onH}&onM=${onM}&offH=${offH}&offM=${offM}`
+      );
+
+      fb(
+        'led-feedback',
+        'Schedule saved: '+
+        (ledSchedActive?on+' → '+off:'disabled')
+      );
+
+      fetchLED();
+    }
+
+    const syrASchedTimes=[
+      {h:8,m:0,en:false},
+      {h:14,m:0,en:false},
+      {h:20,m:0,en:false}
+    ];
+
+    const syrBSchedTimes=[
+      {h:9,m:0,en:false},
+      {h:15,m:0,en:false},
+      {h:21,m:0,en:false}
+    ];
+
+    function renderSyrSchedTable(
+      tbodyId,
+      times,
+      toggleFn
+    ){
+
+      document.getElementById(tbodyId).innerHTML=
+        times.map((s,i)=>`
+        <tr>
+
+          <td>SLOT ${i+1}</td>
+
+          <td>
+            <input
+              type="time"
+              id="${tbodyId}-t-${i}"
+              value="${String(s.h).padStart(2,'0')}:${String(s.m).padStart(2,'0')}"
+            />
+          </td>
+
+          <td>
+            <span
+              onclick="${toggleFn}(${i})"
+              style="cursor:pointer;"
+            >
+              [${s.en?'X':' '}] ${s.en?'ON':'OFF'}
+            </span>
+          </td>
+
+        </tr>`).join('');
+    }
+
+    function toggleSyrASlot(i){
+
+      syrASchedTimes[i].en=
+        !syrASchedTimes[i].en;
+
+      renderSyrSchedTable(
+        'syrA-sched-body',
+        syrASchedTimes,
+        'toggleSyrASlot'
+      );
+    }
+
+    function toggleSyrBSlot(i){
+
+      syrBSchedTimes[i].en=
+        !syrBSchedTimes[i].en;
+
+      renderSyrSchedTable(
+        'syrB-sched-body',
+        syrBSchedTimes,
+        'toggleSyrBSlot'
+      );
+    }
+
+    renderSyrSchedTable(
+      'syrA-sched-body',
+      syrASchedTimes,
+      'toggleSyrASlot'
+    );
+
+    renderSyrSchedTable(
+      'syrB-sched-body',
+      syrBSchedTimes,
+      'toggleSyrBSlot'
+    );
+
+    async function fetchSyrA(){
+
+      try{
+
+        const res=await fetch('/syringeA/status');
+        const d=await res.json();
+
+        const active=d.active;
+
+        document.getElementById('syrA-title').textContent=
+          active
+            ?'DISPENSING NOW...'
+            :'SYRINGE A READY';
+
+        document.getElementById('syrA-status').textContent=
+          active
+            ?'DISPENSING'
+            :'IDLE';
+
+        document.getElementById('syrA-count').textContent=
+          d.dose_count;
+
+        document.getElementById('syrA-last').textContent=
+          d.last_dispensed;
+
+        document.getElementById('syrA-disp-volume').textContent=
+          d.volume_ml.toFixed(1)+'mL';
+
+        document.getElementById('syrA-remaining').textContent=
+          d.remaining_ml.toFixed(1)+
+          ' / '+
+          d.capacity_ml.toFixed(1)+
+          'mL';
+
+        document.getElementById('syrA-safety').textContent =
+          !d.clock_synced
+            ? 'Asia/Manila clock is not synchronized. Schedules and chemical doses are paused.'
+            : !d.volume_known
+              ? 'Initial syringe fill is unconfirmed. Check the syringe and confirm refill before dosing.'
+              : d.refill_required
+                ? 'Refill required before the next dose.'
+                : 'Next chemical dose eligible: ' + (d.next_eligible_at || 'now') +
+                  (d.next_dose_at ? ' · Next scheduled dose: ' + d.next_dose_at : ' · No pump schedule enabled');
+        document.getElementById('syrA-schedule-alert').textContent = d.schedule_event || '';
+
+        d.schedule.forEach((s,i)=>{
+
+          syrASchedTimes[i].h=s.hour;
+          syrASchedTimes[i].m=s.minute;
+          syrASchedTimes[i].en=s.enabled;
+
+        });
+
+        renderSyrSchedTable(
+          'syrA-sched-body',
+          syrASchedTimes,
+          'toggleSyrASlot'
+        );
+
+      }catch(e){
+        console.warn('Syringe A fetch failed',e);
+      }
+    }
+
+    async function fetchSyrB(){
+
+      try{
+
+        const res=await fetch('/syringeB/status');
+        const d=await res.json();
+
+        const active=d.active;
+
+        document.getElementById('syrB-title').textContent=
+          active
+            ?'DISPENSING NOW...'
+            :'SYRINGE B READY';
+
+        document.getElementById('syrB-status').textContent=
+          active
+            ?'DISPENSING'
+            :'IDLE';
+
+        document.getElementById('syrB-count').textContent=
+          d.dose_count;
+
+        document.getElementById('syrB-last').textContent=
+          d.last_dispensed;
+
+        document.getElementById('syrB-disp-volume').textContent=
+          d.volume_ml.toFixed(1)+'mL';
+
+        document.getElementById('syrB-remaining').textContent=
+          d.remaining_ml.toFixed(1)+
+          ' / '+
+          d.capacity_ml.toFixed(1)+
+          'mL';
+
+        document.getElementById('syrB-safety').textContent =
+          !d.clock_synced
+            ? 'Asia/Manila clock is not synchronized. Schedules and chemical doses are paused.'
+            : !d.volume_known
+              ? 'Initial syringe fill is unconfirmed. Check the syringe and confirm refill before dosing.'
+              : d.refill_required
+                ? 'Refill required before the next dose.'
+                : 'Next chemical dose eligible: ' + (d.next_eligible_at || 'now') +
+                  (d.next_dose_at ? ' · Next scheduled dose: ' + d.next_dose_at : ' · No pump schedule enabled');
+        document.getElementById('syrB-schedule-alert').textContent = d.schedule_event || '';
+
+        d.schedule.forEach((s,i)=>{
+
+          syrBSchedTimes[i].h=s.hour;
+          syrBSchedTimes[i].m=s.minute;
+          syrBSchedTimes[i].en=s.enabled;
+
+        });
+
+        renderSyrSchedTable(
+          'syrB-sched-body',
+          syrBSchedTimes,
+          'toggleSyrBSlot'
+        );
+
+      }catch(e){
+        console.warn('Syringe B fetch failed',e);
+      }
+    }
+
+    async function dispenseA(){
+      const status = await (await fetch('/syringeA/status')).json();
+      if (!status.clock_synced) {
+        fb('syrA-feedback', 'BLOCKED — Asia/Manila clock is not synchronized.');
+        return;
+      }
+      if (status.refill_required) {
+        const refillConfirmed = confirm(`Check Syringe A first. ${status.volume_known ? `Estimated remaining volume is ${status.remaining_ml.toFixed(2)} mL.` : 'Its initial fill has not been confirmed.'} The configured dose is ${status.volume_ml.toFixed(2)} mL. Only choose OK after you have physically refilled it to ${status.capacity_ml.toFixed(2)} mL. This confirmation does not move the motor or reset cooldown. Next eligible time: ${status.next_eligible_at || 'not reported'}.`);
+        if (refillConfirmed) {
+          const refill = await (await fetch('/syringeA/refill-confirm')).json();
+          fb('syrA-feedback', refill.refill_confirmed ? 'Refill confirmed. Click DISPENSE NOW again to request a dose.' : `Refill not confirmed — ${refill.reason || 'try again'}`);
+          setTimeout(fetchSyrA,300);
+        }
+        return;
+      }
+      if (!confirm(`Check Syringe A first. Confirm it contains enough liquid for the configured ${status.volume_ml.toFixed(2)} mL dose. Next eligible time: ${status.next_eligible_at || 'now'}. Chemical doses have a shared 2-hour minimum cooldown.`)) return;
+      const res = await fetch('/syringeA/dispense');
+      const d = await res.json();
+      fb('syrA-feedback', d.dispensed ? 'Chemical dose started.' : `BLOCKED — ${d.reason || 'dose not started'}`);
+      setTimeout(fetchSyrA,500);
+    }
+
+    async function refillA(){
+      if (!confirm('Physically check and refill Syringe A to its 5.00 mL capacity. This only updates the volume estimate; it does not move the motor or reset the two-hour chemical-dose cooldown.')) return;
+      const res = await fetch('/syringeA/refill-confirm');
+      const d = await res.json();
+      fb('syrA-feedback', d.refill_confirmed ? 'Refill confirmed. Motor did not move; cooldown is unchanged.' : `Refill not confirmed — ${d.reason || 'try again'}`);
+      setTimeout(fetchSyrA,300);
+    }
+
+    async function stopSyrA(){
+
+      await fetch('/syringeA/stop');
+
+      fb(
+        'syrA-feedback',
+        'Stopped.'
+      );
+
+      setTimeout(fetchSyrA,300);
+    }
+
+    async function retractA(){
+
+      await fetch('/syringeA/retract');
+
+      fb(
+        'syrA-feedback',
+        'Retract motor action completed. Volume estimate is unchanged; confirm refill separately.'
+      );
+
+      setTimeout(fetchSyrA,500);
+    }
+
+    async function dispenseB(){
+      const status = await (await fetch('/syringeB/status')).json();
+      if (!status.clock_synced) {
+        fb('syrB-feedback', 'BLOCKED — Asia/Manila clock is not synchronized.');
+        return;
+      }
+      if (status.refill_required) {
+        const refillConfirmed = confirm(`Check Syringe B first. ${status.volume_known ? `Estimated remaining volume is ${status.remaining_ml.toFixed(2)} mL.` : 'Its initial fill has not been confirmed.'} The configured dose is ${status.volume_ml.toFixed(2)} mL. Only choose OK after you have physically refilled it to ${status.capacity_ml.toFixed(2)} mL. This confirmation does not move the motor or reset cooldown. Next eligible time: ${status.next_eligible_at || 'not reported'}.`);
+        if (refillConfirmed) {
+          const refill = await (await fetch('/syringeB/refill-confirm')).json();
+          fb('syrB-feedback', refill.refill_confirmed ? 'Refill confirmed. Click DISPENSE NOW again to request a dose.' : `Refill not confirmed — ${refill.reason || 'try again'}`);
+          setTimeout(fetchSyrB,300);
+        }
+        return;
+      }
+      if (!confirm(`Check Syringe B first. Confirm it contains enough liquid for the configured ${status.volume_ml.toFixed(2)} mL dose. Next eligible time: ${status.next_eligible_at || 'now'}. Chemical doses have a shared 2-hour minimum cooldown.`)) return;
+      const res = await fetch('/syringeB/dispense');
+      const d = await res.json();
+      fb('syrB-feedback', d.dispensed ? 'Chemical dose started.' : `BLOCKED — ${d.reason || 'dose not started'}`);
+      setTimeout(fetchSyrB,500);
+    }
+
+    async function refillB(){
+      if (!confirm('Physically check and refill Syringe B to its 5.00 mL capacity. This only updates the volume estimate; it does not move the motor or reset the two-hour chemical-dose cooldown.')) return;
+      const res = await fetch('/syringeB/refill-confirm');
+      const d = await res.json();
+      fb('syrB-feedback', d.refill_confirmed ? 'Refill confirmed. Motor did not move; cooldown is unchanged.' : `Refill not confirmed — ${d.reason || 'try again'}`);
+      setTimeout(fetchSyrB,300);
+    }
+
+    async function stopSyrB(){
+
+      await fetch('/syringeB/stop');
+
+      fb(
+        'syrB-feedback',
+        'Stopped.'
+      );
+
+      setTimeout(fetchSyrB,300);
+    }
+
+    async function retractB(){
+
+      await fetch('/syringeB/retract');
+
+      fb(
+        'syrB-feedback',
+        'Retract motor action completed. Volume estimate is unchanged; confirm refill separately.'
+      );
+
+      setTimeout(fetchSyrB,500);
+    }
+
+    async function saveSyrASchedule(){
+
+      const currentStatus = await (await fetch('/syringeA/status')).json();
+      syrASchedTimes.forEach((s,i)=>{
+
+        const t=
+          document.getElementById(
+            'syrA-sched-body-t-'+i
+          ).value
+          ||'08:00';
+
+        const[h,m]=
+          t.split(':').map(Number);
+
+        syrASchedTimes[i].h=h;
+        syrASchedTimes[i].m=m;
+
+      });
+
+      if (syrASchedTimes.some(s => s.en) && currentStatus.refill_required) {
+        fb('syrA-feedback', 'Check and confirm the syringe is filled before enabling chemical schedule slots.');
+        return;
+      }
+      const selectedTimes = syrASchedTimes.filter(s => s.en).map(s => `${String(s.h).padStart(2, '0')}:${String(s.m).padStart(2, '0')}`).join(', ');
+      if (syrASchedTimes.some(s => s.en) && !confirm(`Enable fixed ${currentStatus.volume_ml.toFixed(2)} mL chemical doses at ${selectedTimes} Asia/Manila time, regardless of current pH? Check the syringe contents. A shared two-hour cooldown applies; blocked occurrences are skipped.`)) return;
+
+      const p=
+        syrASchedTimes.map(
+          (s,i)=>
+            `h${i}=${s.h}&m${i}=${s.m}&e${i}=${s.en?1:0}`
+        ).join('&');
+
+      const response = await fetch('/syringeA/schedule?'+p);
+      if (!response.ok) {
+        fb('syrA-feedback', 'Schedule could not be saved. Check the device and persistent storage.');
+        return;
+      }
+
+      fb(
+        'syrA-feedback',
+        'Schedule saved!'
+      );
+
+      fetchSyrA();
+    }
+
+    async function saveSyrBSchedule(){
+
+      const currentStatus = await (await fetch('/syringeB/status')).json();
+      syrBSchedTimes.forEach((s,i)=>{
+
+        const t=
+          document.getElementById(
+            'syrB-sched-body-t-'+i
+          ).value
+          ||'09:00';
+
+        const[h,m]=
+          t.split(':').map(Number);
+
+        syrBSchedTimes[i].h=h;
+        syrBSchedTimes[i].m=m;
+
+      });
+
+      if (syrBSchedTimes.some(s => s.en) && currentStatus.refill_required) {
+        fb('syrB-feedback', 'Check and confirm the syringe is filled before enabling chemical schedule slots.');
+        return;
+      }
+      const selectedTimes = syrBSchedTimes.filter(s => s.en).map(s => `${String(s.h).padStart(2, '0')}:${String(s.m).padStart(2, '0')}`).join(', ');
+      if (syrBSchedTimes.some(s => s.en) && !confirm(`Enable fixed ${currentStatus.volume_ml.toFixed(2)} mL chemical doses at ${selectedTimes} Asia/Manila time, regardless of current pH? Check the syringe contents. A shared two-hour cooldown applies; blocked occurrences are skipped.`)) return;
+
+      const p=
+        syrBSchedTimes.map(
+          (s,i)=>
+            `h${i}=${s.h}&m${i}=${s.m}&e${i}=${s.en?1:0}`
+        ).join('&');
+
+      const response = await fetch('/syringeB/schedule?'+p);
+      if (!response.ok) {
+        fb('syrB-feedback', 'Schedule could not be saved. Check the device and persistent storage.');
+        return;
+      }
+
+      fb(
+        'syrB-feedback',
+        'Schedule saved!'
+      );
+
+      fetchSyrB();
+    }
+
+    // ===== Demo Mode =====
+
+    let demoModeActive=false;
+
+    function toggleDemoMode(){
+
+      demoModeActive=!demoModeActive;
+
+      document.getElementById(
+        'demo-mode-track'
+      ).textContent=
+        demoModeActive?'[X]':'[ ]';
+
+      fetch(
+        '/demo/mode?enabled='+
+        (demoModeActive?1:0)
+      );
+
+      fb(
+        'demo-feedback',
+        demoModeActive
+          ?'Demo mode ON — using fake pH'
+          :'Demo mode OFF — using real probe'
+      );
+
+      fetchDemo();
+    }
+
+    async function setDemoPh(val){
+
+      await fetch(
+        '/demo/ph?value='+val
+      );
+
+      fb(
+        'demo-feedback',
+        'Simulated pH set to '+val.toFixed(2)
+      );
+
+      fetchDemo();
+    }
+
+    async function fetchDemo(){
+
+      try{
+
+        const res=
+          await fetch('/demo/status');
+
+        const d=
+          await res.json();
+
+        demoModeActive=d.demo_mode;
+
+        document.getElementById(
+          'demo-mode-track'
+        ).textContent=
+          demoModeActive?'[X]':'[ ]';
+
+        document.getElementById(
+          'demo-status'
+        ).textContent=
+          demoModeActive
+            ?'ACTIVE'
+            :'OFF';
+
+        document.getElementById(
+          'demo-ph-display'
+        ).textContent=
+          d.demo_ph.toFixed(2);
+
+      }catch(e){
+        console.warn(
+          'Demo fetch failed',
+          e
+        );
+      }
+    }
+
+    // ===== pH Auto-Dosing =====
+
+    let phAutoActive=false;
+
+    function togglePhAuto(){
+
+      phAutoActive=!phAutoActive;
+
+      document.getElementById(
+        'ph-auto-track'
+      ).textContent=
+        phAutoActive?'[X]':'[ ]';
+
+      fetch(
+        '/ph/auto/config?enabled='+
+        (phAutoActive?1:0)
+      );
+
+      fb(
+        'ph-auto-feedback',
+        phAutoActive
+          ?'Auto-dosing ENABLED'
+          :'Auto-dosing DISABLED'
+      );
+    }
+
+    async function fetchPhAuto(){
+
+      try{
+
+        const res=
+          await fetch('/ph/auto/status');
+
+        const d=
+          await res.json();
+
+        phAutoActive=d.enabled;
+
+        document.getElementById(
+          'ph-auto-track'
+        ).textContent=
+          phAutoActive?'[X]':'[ ]';
+
+        document.getElementById(
+          'ph-auto-mode'
+        ).textContent=
+          phAutoActive
+            ?'AUTO'
+            :'MANUAL';
+
+        document.getElementById(
+          'ph-auto-range'
+        ).textContent=
+          d.target_min.toFixed(2)+
+          '–'+
+          d.target_max.toFixed(2);
+
+        document.getElementById(
+          'ph-auto-cooldown'
+        ).textContent=
+          d.cooldown_remaining_ms>0
+            ?fmtMs(d.cooldown_remaining_ms)
+            :'Ready';
+
+        document.getElementById(
+          'ph-auto-action'
+        ).textContent=
+          d.last_action;
+
+        document.getElementById(
+          'ph-min'
+        ).value=
+          d.target_min;
+
+        document.getElementById(
+          'ph-max'
+        ).value=
+          d.target_max;
+
+        document.getElementById(
+          'ph-cooldown'
+        ).value=
+          Math.round(
+            d.cooldown_ms/60000
+          );
+
+      }catch(e){
+
+        console.warn(
+          'pH auto fetch failed',
+          e
+        );
+      }
+    }
+
+    async function savePhAutoConfig(){
+
+      const min=
+        parseFloat(
+          document.getElementById(
+            'ph-min'
+          ).value
+        )||6.5;
+
+      const max=
+        parseFloat(
+          document.getElementById(
+            'ph-max'
+          ).value
+        )||7.5;
+
+      const cdMin=
+        parseInt(
+          document.getElementById(
+            'ph-cooldown'
+          ).value
+        )||5;
+
+      await fetch(
+        `/ph/auto/config?enabled=${phAutoActive?1:0}&min=${min}&max=${max}&cooldown=${cdMin*60000}`
+      );
+
+      fb(
+        'ph-auto-feedback',
+        'Settings saved!'
+      );
+
+      fetchPhAuto();
+    }
+
+    let t=10;
+
+    fetchData();
+    fetchBufferStatus();
+    fetchWifi();
+    fetchFeeder();
+    fetchUV();
+    fetchLED();
+    fetchSyrA();
+    fetchSyrB();
+    fetchPhAuto();
+    fetchDemo();
+
+    setInterval(fetchData, 10000);
+    setInterval(fetchBufferStatus, 2000);
+    setInterval(fetchWifi, 2000);
+    setInterval(fetchFeeder, 2000);
+    setInterval(fetchUV, 2000);
+    setInterval(fetchLED, 2000);
+    setInterval(fetchSyrA, 2000);
+    setInterval(fetchSyrB, 2000);
+    setInterval(fetchPhAuto, 2000);
+    setInterval(fetchDemo, 2000);
+
+    setInterval(()=>{
+      t=t<=1?10:t-1;
+      document.getElementById(
+        'countdown'
+      ).textContent=t;
+    },1000);
+
+  </script>
+
+  </body>
+  </html>
+  )rawliteral";
+
+  // ========================
+  // FISH FEEDER
+  // ========================
+
+  void startFeederMove(bool isTest) {
+
+    if (feederActive) return;
+
+    feederActive  = true;
+    feederStartMs = millis();
+
+    if (!isTest) {
+
+      feedCount++;
+
+      unsigned long totalSecs =
+        millis() / 1000;
+
+      char buf[12];
+
+      sprintf(
+        buf,
+        "%02d:%02d:%02d",
+        (int)((totalSecs / 3600) % 24),
+        (int)((totalSecs % 3600) / 60),
+        (int)(totalSecs % 60)
+      );
+
+      lastFedTime = String(buf);
+    }
+
+    Serial.print(
+      isTest
+        ? "SERVO TEST — angle: "
+        : "FEED TRIGGERED — angle: "
+    );
+
+    Serial.print(feederOpenAngle);
+
+    Serial.print(
+      "  duration: "
+    );
+
+    Serial.print(feederDurationMs);
+
+    Serial.println("ms");
+
+    feederServo.write(
+      feederOpenAngle
+    );
+
+    lcd.clear();
+
+    lcd.setCursor(0, 0);
+
+    lcd.print(
+      isTest
+        ? "SERVO TEST"
+        : "FEEDING FISH!"
+    );
+
+    lcd.setCursor(0, 1);
+
+    if (isTest)
+      lcd.print("Testing...");
+    else {
+      lcd.print("Count: ");
+      lcd.print(feedCount);
+    }
+  }
+
+  void triggerFeed() {
+    startFeederMove(false);
+  }
+
+  void testServo() {
+    startFeederMove(true);
+  }
+
+  void handleFeeder() {
+
+    if (!feederActive)
+      return;
+
+    if (
+      millis() - feederStartMs
+      >= feederDurationMs
+    ) {
+
+      feederServo.write(
+        feederCloseAngle
+      );
+
+      feederActive=false;
+
+      Serial.println(
+        "FEEDER CLOSED"
+      );
+    }
+  }
+
+  void checkFeederSchedule() {
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+    int today = deviceDateKey(localTime);
+
+    for (int i = 0; i < 3; i++) {
+      if (!feedSchedule[i].enabled) continue;
+      int slotMin = feedSchedule[i].hour * 60 + feedSchedule[i].minute;
+      if (nowMin != slotMin || feedLastFiredDate[i] == today) continue;
+
+      feedLastFiredDate[i] = today;
+      feedSchedule[i].firedToday = true;
+      char key[12];
+      snprintf(key, sizeof(key), "feed_fire%d", i);
+      if (!persistentStateReady || devicePreferences.putInt(key, today) == 0) {
+        Serial.println("[SCHEDULE] FEEDER skipped; reason=PERSISTENCE_FAILED");
+        continue;
+      }
+
+      if (feederActive) {
+        Serial.printf("[SCHEDULE] FEEDER slot%d skipped at %02d:%02d; reason=ACTUATOR_BUSY\n",
+          i + 1, localTime.tm_hour, localTime.tm_min);
+        continue;
+      }
+
+      triggerFeed();
+      Serial.printf("[SCHEDULE] FEEDER slot%d triggered at %02d:%02d:%02d\n",
+        i + 1, localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+    }
+  }
+
+  // ========================
+  // SYRINGE A
+  // ========================
+
+  void startSyringeAMove(
+    long steps,
+    bool isDose,
+    bool chemicalDose=false
+  ) {
+
+    if (syringeAActive)
+      return;
+
+    if (syringeBActive)
+      return;
+
+    syringeAActive=true;
+
+    if (isDose)
+      syringeADoseCount++;
+
+    stepperA.setMaxSpeed(
+      syringeASpeed
+    );
+
+    stepperA.setAcceleration(
+      syringeASpeed*2
+    );
+
+    stepperA.move(steps);
+
+    if (isDose) {
+      syringeALastDispensed = deviceClockSynchronized()
+        ? formatDeviceEpoch(time(nullptr))
+        : "Time not synchronized";
+    }
+
+      Serial.print(
+        isDose
+          ? (chemicalDose ? "SYRINGE A CHEMICAL DOSE — volume: " : "SYRINGE A WATER TEST — volume: ")
+          : "SYRINGE A RETRACT — "
+      );
+
+    if (isDose) {
+
+      Serial.print(
+        syringeADispenseML
+      );
+
+      Serial.print("mL  ");
+    }
+
+    Serial.print(
+      "steps: "
+    );
+
+    Serial.println(steps);
+  }
+
+  // VOLUME LIMITER: refuses to dispense if not enough liquid remains in the
+  // 5mL syringe. Called by manual dispense, scheduled dispense, AND auto-dosing —
+  // so all three paths share the same protection. Returns true if the dose fired.
+
+  bool triggerSyringeA(bool chemicalDose=true) {
+    pumpDoseBlockReason = "";
+    if (!persistentStateReady) pumpDoseBlockReason = "Persistent safety state unavailable";
+    else if (!syringeAVolumeKnown) pumpDoseBlockReason = "Check syringe contents and confirm refill first";
+    else if (syringeARemainingML + 0.001f < syringeADispenseML)
+      pumpDoseBlockReason = "Insufficient volume; refill confirmation required";
+    else if (syringeAActive || syringeBActive) pumpDoseBlockReason = "A pump is already active";
+    else if (chemicalDose && !deviceClockSynchronized()) pumpDoseBlockReason = "Waiting for Asia/Manila NTP time sync";
+
+    time_t now = time(nullptr);
+    if (pumpDoseBlockReason.length() == 0 && chemicalDose && lastChemicalDoseEpoch > 0 && now < lastChemicalDoseEpoch + 7200)
+      pumpDoseBlockReason = "Two-hour chemical-dose cooldown until " + formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
+
+    if (pumpDoseBlockReason.length() > 0) {
+      Serial.println("SYRINGE A BLOCKED — " + pumpDoseBlockReason);
+      return false;
+    }
+
+    float oldRemaining = syringeARemainingML;
+    time_t oldLastChemicalDose = lastChemicalDoseEpoch;
+    int oldDoseCount = syringeADoseCount;
+    String oldLastDispensed = syringeALastDispensed;
+    long steps = (long)(syringeADispenseML * syringeAStepsPerML);
+    startSyringeAMove(steps, true, chemicalDose);
+    if (!syringeAActive) {
+      pumpDoseBlockReason = "Pump could not start";
+      return false;
+    }
+    syringeARemainingML -= syringeADispenseML;
+    if (chemicalDose) {
+      lastChemicalDoseEpoch = now;
+      lastPhDoseMs = millis();
+    }
+
+    // Persist before loop() services the stepper, making the dose non-repeatable
+    // after a reset or a lost HTTP response.
+    if (!persistPumpSafetyState()) {
+      stopSyringeA();
+      syringeARemainingML = oldRemaining;
+      lastChemicalDoseEpoch = oldLastChemicalDose;
+      syringeADoseCount = oldDoseCount;
+      syringeALastDispensed = oldLastDispensed;
+      pumpDoseBlockReason = "Could not persist pump safety state; dose not started";
+      return false;
+    }
+    return true;
+  }
+
+  // FIXED: full retract stroke — pulls the plunger all the way back
+  // (draws a fresh full syringe from the reservoir) instead of only reversing
+  // the last dose amount. Also resets the volume tracker to full capacity,
+  // since a full retract means the syringe is now full again.
+
+  void retractSyringeA() {
+
+    long fullStrokeSteps =
+      (long)(
+        syringeACapacityML *
+        syringeAStepsPerML
+      );
+
+    startSyringeAMove(
+      -fullStrokeSteps,
+      false
+    );
+
+    Serial.println("SYRINGE A RETRACT — volume estimate unchanged");
+  }
+
+  void handleSyringeA() {
+
+    if (!syringeAActive)
+      return;
+
+    stepperA.run();
+
+    if (
+      stepperA.distanceToGo()==0
+    ) {
+
+      syringeAActive=false;
+
+      stepperA.disableOutputs();
+
+      Serial.println(
+        "SYRINGE A DOSE COMPLETE"
+      );
+    }
+  }
+
+  void stopSyringeA() {
+
+    if (!syringeAActive)
+      return;
+
+    stepperA.setCurrentPosition(
+      stepperA.currentPosition()
+    );
+
+    syringeAActive=false;
+
+    stepperA.disableOutputs();
+
+    Serial.println(
+      "SYRINGE A STOPPED (manual)"
+    );
+  }
+
+  void checkSyringeASchedule() {
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+    int today = deviceDateKey(localTime);
+
+    for (int i = 0; i < 3; i++) {
+      if (!syringeASchedule[i].enabled) continue;
+      int slotMin = syringeASchedule[i].hour * 60 + syringeASchedule[i].minute;
+      if (nowMin != slotMin || syringeALastFiredDate[i] == today) continue;
+
+      // Consume this local-date slot before checking the pump. Cooldown, volume,
+      // an active pump, or a storage fault skips this occurrence without catch-up.
+      syringeALastFiredDate[i] = today;
+      char key[12];
+      snprintf(key, sizeof(key), "a_fire%d", i);
+      if (!persistentStateReady || devicePreferences.putInt(key, today) == 0) {
+        setPumpScheduleEvent(true, "Pump A scheduled dose skipped: could not persist occurrence");
+        continue;
+      }
+
+      if (triggerSyringeA(true)) {
+        setPumpScheduleEvent(true, "Pump A scheduled " + String(syringeADispenseML, 2) +
+          " mL dose started at " + formatDeviceEpoch(time(nullptr)));
+      } else {
+        setPumpScheduleEvent(true, "Pump A scheduled dose skipped: " + pumpDoseBlockReason);
+      }
+    }
+  }
+
+  // ========================
+  // SYRINGE B
+  // ========================
+
+  void startSyringeBMove(
+    long steps,
+    bool isDose,
+    bool chemicalDose=false
+  ) {
+
+    if (syringeBActive)
+      return;
+
+    if (syringeAActive)
+      return;
+
+    syringeBActive=true;
+
+    if (isDose)
+      syringeBDoseCount++;
+
+    stepperB.setMaxSpeed(
+      syringeBSpeed
+    );
+
+    stepperB.setAcceleration(
+      syringeBSpeed*2
+    );
+
+    stepperB.move(steps);
+
+    if (isDose) {
+      syringeBLastDispensed = deviceClockSynchronized()
+        ? formatDeviceEpoch(time(nullptr))
+        : "Time not synchronized";
+    }
+
+      Serial.print(
+        isDose
+          ? (chemicalDose ? "SYRINGE B CHEMICAL DOSE — volume: " : "SYRINGE B WATER TEST — volume: ")
+          : "SYRINGE B RETRACT — "
+      );
+
+    if (isDose) {
+
+      Serial.print(
+        syringeBDispenseML
+      );
+
+      Serial.print("mL  ");
+    }
+
+    Serial.print(
+      "steps: "
+    );
+
+    Serial.println(steps);
+  }
+
+  // VOLUME LIMITER — mirrors triggerSyringeA().
+
+  bool triggerSyringeB(bool chemicalDose=true) {
+    pumpDoseBlockReason = "";
+    if (!persistentStateReady) pumpDoseBlockReason = "Persistent safety state unavailable";
+    else if (!syringeBVolumeKnown) pumpDoseBlockReason = "Check syringe contents and confirm refill first";
+    else if (syringeBRemainingML + 0.001f < syringeBDispenseML)
+      pumpDoseBlockReason = "Insufficient volume; refill confirmation required";
+    else if (syringeAActive || syringeBActive) pumpDoseBlockReason = "A pump is already active";
+    else if (chemicalDose && !deviceClockSynchronized()) pumpDoseBlockReason = "Waiting for Asia/Manila NTP time sync";
+
+    time_t now = time(nullptr);
+    if (pumpDoseBlockReason.length() == 0 && chemicalDose && lastChemicalDoseEpoch > 0 && now < lastChemicalDoseEpoch + 7200)
+      pumpDoseBlockReason = "Two-hour chemical-dose cooldown until " + formatDeviceEpoch(lastChemicalDoseEpoch + 7200);
+
+    if (pumpDoseBlockReason.length() > 0) {
+      Serial.println("SYRINGE B BLOCKED — " + pumpDoseBlockReason);
+      return false;
+    }
+
+    float oldRemaining = syringeBRemainingML;
+    time_t oldLastChemicalDose = lastChemicalDoseEpoch;
+    int oldDoseCount = syringeBDoseCount;
+    String oldLastDispensed = syringeBLastDispensed;
+    long steps = (long)(syringeBDispenseML * syringeBStepsPerML);
+    startSyringeBMove(steps, true, chemicalDose);
+    if (!syringeBActive) {
+      pumpDoseBlockReason = "Pump could not start";
+      return false;
+    }
+    syringeBRemainingML -= syringeBDispenseML;
+    if (chemicalDose) {
+      lastChemicalDoseEpoch = now;
+      lastPhDoseMs = millis();
+    }
+
+    if (!persistPumpSafetyState()) {
+      stopSyringeB();
+      syringeBRemainingML = oldRemaining;
+      lastChemicalDoseEpoch = oldLastChemicalDose;
+      syringeBDoseCount = oldDoseCount;
+      syringeBLastDispensed = oldLastDispensed;
+      pumpDoseBlockReason = "Could not persist pump safety state; dose not started";
+      return false;
+    }
+    return true;
+  }
+
+  // FIXED: mirrors retractSyringeA() — full-stroke pull-back + refill.
+
+  void retractSyringeB() {
+
+    long fullStrokeSteps =
+      (long)(
+        syringeBCapacityML *
+        syringeBStepsPerML
+      );
+
+    startSyringeBMove(
+      -fullStrokeSteps,
+      false
+    );
+
+    Serial.println("SYRINGE B RETRACT — volume estimate unchanged");
+  }
+
+  void handleSyringeB() {
+
+    if (!syringeBActive)
+      return;
+
+    stepperB.run();
+
+    if (
+      stepperB.distanceToGo()==0
+    ) {
+
+      syringeBActive=false;
+
+      stepperB.disableOutputs();
+
+      Serial.println(
+        "SYRINGE B DOSE COMPLETE"
+      );
+    }
+  }
+
+  void stopSyringeB() {
+
+    if (!syringeBActive)
+      return;
+
+    stepperB.setCurrentPosition(
+      stepperB.currentPosition()
+    );
+
+    syringeBActive=false;
+
+    stepperB.disableOutputs();
+
+    Serial.println(
+      "SYRINGE B STOPPED (manual)"
+    );
+  }
+
+  void checkSyringeBSchedule() {
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    int nowMin = localTime.tm_hour * 60 + localTime.tm_min;
+    int today = deviceDateKey(localTime);
+
+    for (int i = 0; i < 3; i++) {
+      if (!syringeBSchedule[i].enabled) continue;
+      int slotMin = syringeBSchedule[i].hour * 60 + syringeBSchedule[i].minute;
+      if (nowMin != slotMin || syringeBLastFiredDate[i] == today) continue;
+
+      syringeBLastFiredDate[i] = today;
+      char key[12];
+      snprintf(key, sizeof(key), "b_fire%d", i);
+      if (!persistentStateReady || devicePreferences.putInt(key, today) == 0) {
+        setPumpScheduleEvent(false, "Pump B scheduled dose skipped: could not persist occurrence");
+        continue;
+      }
+
+      if (triggerSyringeB(true)) {
+        setPumpScheduleEvent(false, "Pump B scheduled " + String(syringeBDispenseML, 2) +
+          " mL dose started at " + formatDeviceEpoch(time(nullptr)));
+      } else {
+        setPumpScheduleEvent(false, "Pump B scheduled dose skipped: " + pumpDoseBlockReason);
+      }
+    }
+  }
+
+  // ========================
+  // pH AUTO-DOSING
+  // ========================
+
+  // checkPhAutoDose() calls triggerSyringeA()/B(), which internally enforce
+  // the 5mL volume limit. When a dose succeeds AND we're in demoMode (no real
+  // chemicals), we simulate the correction by snapping the fake pH reading
+  // back to the midpoint of the target range — this closes the demo loop
+  // without needing to manually reset the pH value after each auto-dose.
+
+  void checkPhAutoDose() {
+
+    if (!phAutoDoseEnabled)
+      return;
+
+    if (
+      syringeAActive ||
+      syringeBActive
+    )
+      return;
+
+    if (
+      millis()-lastPhDoseMs <
+      phDoseCooldownMs
+    )
+      return;
+
+    if (
+      phValue <
+      phTargetMin
+    ) {
+
+      bool ok =
+        triggerSyringeA();
+
+      if (ok) {
+
+        phAutoLastAction =
+          "AUTO: pH UP dosed at pH "+
+          String(phValue,2);
+
+        if (demoMode) {
+
+          demoPhValue =
+            (
+              phTargetMin+
+              phTargetMax
+            )/2.0f;
+
+          phAutoLastAction +=
+            " — pH reading updated to "+
+            String(
+              demoPhValue,
+              2
+            )+
+            " (demo)";
+        }
+
+      } else {
+
+        phAutoLastAction =
+          "AUTO: pH UP BLOCKED — Syringe A low volume ("+
+          String(
+            syringeARemainingML,
+            1
+          )+
+          "mL left)";
+      }
+
+      Serial.println(
+        phAutoLastAction
+      );
+
+    } else if (
+      phValue >
+      phTargetMax
+    ) {
+
+      bool ok =
+        triggerSyringeB();
+
+      if (ok) {
+
+        phAutoLastAction =
+          "AUTO: pH DOWN dosed at pH "+
+          String(phValue,2);
+
+        if (demoMode) {
+
+          demoPhValue =
+            (
+              phTargetMin+
+              phTargetMax
+            )/2.0f;
+
+          phAutoLastAction +=
+            " — pH reading updated to "+
+            String(
+              demoPhValue,
+              2
+            )+
+            " (demo)";
+        }
+
+      } else {
+
+        phAutoLastAction =
+          "AUTO: pH DOWN BLOCKED — Syringe B low volume ("+
+          String(
+            syringeBRemainingML,
+            1
+          )+
+          "mL left)";
+      }
+
+      Serial.println(
+        phAutoLastAction
+      );
+    }
+  }
+
+  // ========================
+  // HTTP HANDLERS
+  // ========================
+
+  uint32_t recordSeq(const String& record) {
+    int marker = record.indexOf("\"seq\":");
+    return marker < 0 ? 0 : strtoul(record.c_str() + marker + 6, NULL, 10);
+  }
+
+  void writeBufferMeta() {
+    if (!littleFsAvailable) return;
+
+    File meta = LittleFS.open("/meta.json", FILE_WRITE);
+    if (!meta) return;
+
+    meta.print("{\"next_seq\":");
+    meta.print(nextSeq);
+    meta.print(",\"acked_seq\":");
+    meta.print(ackedSeq);
+    meta.print(",\"dropped\":");
+    meta.print(droppedRecords);
+    meta.println("}");
+    meta.close();
+  }
+
+  void loadBufferMeta() {
+    if (!LittleFS.exists("/meta.json")) return;
+
+    File meta = LittleFS.open("/meta.json", FILE_READ);
+    if (!meta) return;
+
+    String json = meta.readString();
+    meta.close();
+
+    int marker = json.indexOf("\"next_seq\":");
+    if (marker >= 0) nextSeq = strtoul(json.c_str() + marker + 11, NULL, 10);
+
+    marker = json.indexOf("\"acked_seq\":");
+    if (marker >= 0) ackedSeq = strtoul(json.c_str() + marker + 12, NULL, 10);
+
+    marker = json.indexOf("\"dropped\":");
+    if (marker >= 0) droppedRecords = strtoul(json.c_str() + marker + 10, NULL, 10);
+
+    if (nextSeq == 0) nextSeq = 1;
+  }
+
+  void reserveSequenceRange() {
+    seqCursor = nextSeq;
+    seqLimit = seqCursor + SEQ_RESERVATION_SIZE;
+    nextSeq = seqLimit;
+    writeBufferMeta();
+  }
+
+  void setupBufferStorage() {
+    littleFsAvailable = LittleFS.begin(false);
+    if (!littleFsAvailable) {
+      Serial.println("LittleFS unavailable; using RAM-only offline buffer");
+      return;
+    }
+
+    if (!LittleFS.exists("/buffer.ndjson") && LittleFS.exists("/buffer.bak")) {
+      if (LittleFS.rename("/buffer.bak", "/buffer.ndjson"))
+        Serial.println("[BACKLOG] Restored buffer backup");
+    } else if (LittleFS.exists("/buffer.ndjson") && LittleFS.exists("/buffer.bak")) {
+      LittleFS.remove("/buffer.bak");
+    }
+    if (LittleFS.exists("/buffer.ndjson") && LittleFS.exists("/buffer.tmp"))
+      LittleFS.remove("/buffer.tmp");
+
+    loadBufferMeta();
+    reserveSequenceRange();
+    Serial.println("LittleFS offline buffer ready");
+  }
+
+  String makeBufferedRecord() {
+    if (seqCursor >= seqLimit) reserveSequenceRange();
+
+    String record = "{\"seq\":" + String(seqCursor++) +
+      ",\"temp_c\":" + String(temperatureC, 2) +
+      ",\"temp_status\":\"" + tempStatus +
+      "\",\"ph_value\":" + String(phValue, 2) +
+      ",\"ph_status\":\"" + phStatus +
+      "\",\"turbidity_ntu\":" + String(turbidityNtu, 1) +
+      ",\"turbidity_status\":\"" + turbidityStatus +
+      "\",\"tds_ppm\":" + String(tdsPpm, 0) +
+      ",\"tds_status\":\"" + tdsStatus +
+      "\",\"overall_status\":\"" + overallStatus + "\"}";
+    return record;
+  }
+
+  bool flushOfflineBuffer();
+
+  void queueOfflineReading() {
+    if (wifiConnected) return;
+
+    unsigned long now = millis();
+    if (offlineLastQueuedAt != 0 && now - offlineLastQueuedAt < OFFLINE_QUEUE_INTERVAL_MS)
+      return;
+    offlineLastQueuedAt = now;
+
+    String record = makeBufferedRecord();
+    if (ramBufferCount >= RAM_QUEUE_CAPACITY && littleFsAvailable)
+      flushOfflineBuffer();
+
+    if (ramBufferCount >= RAM_QUEUE_CAPACITY) {
+      droppedRecords++;
+      Serial.printf("[OFFLINE] RAM queue full; reading seq=%lu not queued\n",
+        (unsigned long)recordSeq(record));
+      return;
+    }
+
+    ramBuffer[ramBufferCount++] = record;
+    Serial.printf("[OFFLINE] Queuing sensor reading seq=%lu\n",
+      (unsigned long)recordSeq(record));
+  }
+
+  void compactAckedBuffer() {
+    if (!littleFsAvailable || !LittleFS.exists("/buffer.ndjson")) return;
+
+    File source = LittleFS.open("/buffer.ndjson", FILE_READ);
+    File temp = LittleFS.open("/buffer.tmp", FILE_WRITE);
+    if (!source || !temp) {
+      source.close();
+      temp.close();
+      return;
+    }
+
+    bool copySucceeded = true;
+    while (source && source.available()) {
+      String line = source.readStringUntil('\n');
+      if (recordSeq(line) > ackedSeq && temp.println(line) != line.length() + 2) {
+        copySucceeded = false;
+        break;
+      }
+    }
+    source.close();
+    temp.close();
+
+    if (!copySucceeded) {
+      LittleFS.remove("/buffer.tmp");
+      Serial.println("[BACKLOG] Compaction write failed; original retained");
+      return;
+    }
+
+    if (LittleFS.exists("/buffer.bak") && !LittleFS.remove("/buffer.bak")) return;
+    if (!LittleFS.rename("/buffer.ndjson", "/buffer.bak")) return;
+    if (!LittleFS.rename("/buffer.tmp", "/buffer.ndjson")) {
+      LittleFS.rename("/buffer.bak", "/buffer.ndjson");
+      Serial.println("[BACKLOG] Compaction swap failed; original restored");
+      return;
+    }
+    LittleFS.remove("/buffer.bak");
+    writeBufferMeta();
+    Serial.printf("[BACKLOG] Compacted through ACK seq=%lu\n", (unsigned long)ackedSeq);
+  }
+
+  bool ackedPortionExceedsThreshold() {
+    if (!littleFsAvailable || !LittleFS.exists("/buffer.ndjson")) return false;
+
+    File file = LittleFS.open("/buffer.ndjson", FILE_READ);
+    uint32_t total = 0;
+    uint32_t acknowledged = 0;
+    while (file && file.available()) {
+      uint32_t seq = recordSeq(file.readStringUntil('\n'));
+      if (seq == 0) continue;
+      total++;
+      if (seq <= ackedSeq) acknowledged++;
+    }
+    file.close();
+    return total > 0 && acknowledged * 4 >= total;
+  }
+
+  bool flushOfflineBuffer() {
+    if (ramBufferCount == 0) return true;
+    if (feederActive || syringeAActive || syringeBActive || !littleFsAvailable) return false;
+
+    size_t bytesRequired = 0;
+    for (uint8_t i = 0; i < ramBufferCount; i++)
+      bytesRequired += ramBuffer[i].length() + 2;
+    size_t totalBytes = LittleFS.totalBytes();
+    size_t usedBytes = LittleFS.usedBytes();
+    if (usedBytes > totalBytes || bytesRequired > totalBytes - usedBytes) {
+      if (!bufferCapacityWarningReported)
+        Serial.println("[OFFLINE] LittleFS capacity reached; RAM backlog retained");
+      bufferCapacityWarningReported = true;
+      return false;
+    }
+
+    File file = LittleFS.open("/buffer.ndjson", FILE_APPEND);
+    if (!file) return false;
+
+    uint8_t writtenCount = 0;
+    while (writtenCount < ramBufferCount) {
+      size_t expectedBytes = ramBuffer[writtenCount].length() + 2;
+      if (file.println(ramBuffer[writtenCount]) != expectedBytes) break;
+      writtenCount++;
+    }
+    file.flush();
+    file.close();
+
+    if (writtenCount > 0) {
+      for (uint8_t i = writtenCount; i < ramBufferCount; i++)
+        ramBuffer[i - writtenCount] = ramBuffer[i];
+      ramBufferCount -= writtenCount;
+    }
+
+    if (ramBufferCount > 0) {
+      Serial.println("[OFFLINE] LittleFS write incomplete; unwritten RAM records retained");
+      return false;
+    }
+
+    bufferLastFlushAt = millis();
+    bufferCapacityWarningReported = false;
+    Serial.printf("[OFFLINE] Wrote %u queued readings to LittleFS\n", writtenCount);
+    return true;
+  }
+
+  void serviceBufferStorage() {
+    if (feederActive || syringeAActive || syringeBActive) return;
+
+    if (ackWritePending) {
+      if (pendingAckSeq > ackedSeq) ackedSeq = pendingAckSeq;
+      ackWritePending = false;
+      writeBufferMeta();
+      // Keep acknowledged lines until they exceed 25% so routine bridge acks do not rewrite flash.
+      if (ackedPortionExceedsThreshold()) compactAckedBuffer();
+    }
+
+    unsigned long now = millis();
+    bool flushDue = wifiConnected || ramBufferCount >= RAM_QUEUE_MAX ||
+      (ramBufferCount > 0 && now - bufferLastFlushAt >= BUFFER_FLUSH_INTERVAL_MS);
+    if (ramBufferCount > 0 && flushDue &&
+        now - bufferLastAttemptAt >= BUFFER_FLUSH_RETRY_INTERVAL_MS) {
+      bufferLastAttemptAt = now;
+      flushOfflineBuffer();
+    }
+  }
+
+  void printCurrentWifiIp(const char* context) {
+    Serial.print(context);
+    Serial.print(" | WiFi mode=");
+
+    switch (WiFi.getMode()) {
+      case WIFI_AP_STA:
+        Serial.print("AP_STA");
+        Serial.print(" | STA IP=");
+        Serial.print(WiFi.localIP());
+        Serial.print(" | AP IP=");
+        Serial.println(WiFi.softAPIP());
+        break;
+      case WIFI_AP:
+        Serial.print("AP");
+        Serial.print(" | IP=");
+        Serial.println(WiFi.softAPIP());
+        break;
+      case WIFI_STA:
+        Serial.print("STA");
+        Serial.print(" | IP=");
+        Serial.println(WiFi.localIP());
+        break;
+      default:
+        Serial.println("OFF");
+        break;
+    }
+  }
+
+  void showManualWiFiNotice(const char* line1, const char* line2) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print(line1);
+    lcd.setCursor(0, 1);
+    lcd.print(line2);
+  }
+
+  void enterManualOfflineMode() {
+    if (mdnsStarted) {
+      MDNS.end();
+      mdnsStarted = false;
+    }
+
+    fallbackApActive = false;
+    wifiDisconnectedAt = 0;
+    staReconnectedAt = 0;
+    fallbackApLastStartAt = 0;
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_AP);
+    bool apStarted = WiFi.softAP(DEBUG_AP_SSID, DEBUG_AP_PASSWORD);
+    manualOfflineMode = true;
+    manualOfflineSetAt = millis();
+    wifiConnected = false;
+    wifiConnecting = false;
+
+    Serial.print("Manual WiFi offline mode; AP ");
+    Serial.print(apStarted ? "started at " : "failed: ");
+    Serial.println(WiFi.softAPIP());
+    printCurrentWifiIp("Manual offline mode");
+    showManualWiFiNotice("LOCAL AP READY", "192.168.4.1");
+  }
+
+  void exitManualOfflineMode() {
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+    manualOfflineMode = false;
+    fallbackApActive = false;
+    wifiDisconnectedAt = millis();
+    staReconnectedAt = 0;
+    fallbackApLastStartAt = 0;
+    pendingManualReconnect = false;
+    wifiConnecting = false;
+    wifiLastRetryAt = 0;
+    Serial.println("Manual WiFi offline mode ended; STA reconnect enabled");
+  }
+
+  void serviceManualWiFi() {
+    if (pendingManualOffline) {
+      pendingManualOffline = false;
+      if (!manualOfflineMode) enterManualOfflineMode();
+      return;
+    }
+
+    if (pendingManualReconnect) {
+      if (manualOfflineMode) exitManualOfflineMode();
+      else pendingManualReconnect = false;
+    }
+
+    if (manualOfflineMode && millis() - manualOfflineSetAt >= MANUAL_OFFLINE_MAX_MS) {
+      pendingManualReconnect = true;
+      Serial.println("MANUAL OFFLINE MODE AUTO-CLEARED (safety timeout)");
+      showManualWiFiNotice("OFFLINE TIMEOUT", "RECONNECTING");
+      exitManualOfflineMode();
+    }
+  }
+
+  void serviceWiFi() {
+    if (manualOfflineMode) return;
+
+    unsigned long now = millis();
+    bool connectedNow = WiFi.status() == WL_CONNECTED;
+    if (connectedNow) {
+      if (!wifiConnected) {
+        wifiConnected = true;
+        wifiConnecting = false;
+        staReconnectedAt = now;
+        Serial.print("[WIFI] STA reconnected: ");
+        Serial.println(WiFi.localIP());
+        printCurrentWifiIp("WiFi connected");
+      }
+      wifiDisconnectedAt = 0;
+      if (!mdnsStarted && MDNS.begin("aqualogic")) {
+        MDNS.addService("http", "tcp", 80);
+        mdnsStarted = true;
+        Serial.println("[WIFI] mDNS active: http://aqualogic.local");
+      }
+
+      if (fallbackApActive && staReconnectedAt != 0 &&
+          now - staReconnectedAt >= FALLBACK_AP_SHUTDOWN_GRACE_MS) {
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
+        fallbackApActive = false;
+        staReconnectedAt = 0;
+        fallbackApLastStartAt = 0;
+        Serial.println("[RECOVERY] Fallback AP stopped after stable STA recovery");
+      }
+      return;
+    }
+
+    staReconnectedAt = 0;
+    if (wifiConnected) {
+      wifiConnected = false;
+      wifiDisconnectedAt = now;
+      if (mdnsStarted) {
+        MDNS.end();
+        mdnsStarted = false;
+      }
+      Serial.println("[WIFI] STA disconnected; offline buffering enabled");
+    } else if (wifiDisconnectedAt == 0) {
+      wifiDisconnectedAt = now;
+    }
+
+    if (!fallbackApActive && now - wifiDisconnectedAt >= FALLBACK_AP_DELAY_MS &&
+        now - fallbackApLastStartAt >= WIFI_RETRY_INTERVAL_MS) {
+      fallbackApLastStartAt = now;
+      WiFi.mode(WIFI_AP_STA);
+      fallbackApActive = WiFi.softAP(DEBUG_AP_SSID, DEBUG_AP_PASSWORD);
+      if (fallbackApActive) {
+        Serial.print("[WIFI] Fallback AP started at ");
+        Serial.println(WiFi.softAPIP());
+        printCurrentWifiIp("Automatic fallback mode");
+      } else {
+        WiFi.mode(WIFI_STA);
+        Serial.println("Automatic fallback AP start failed; will retry");
+      }
+    }
+
+    if (wifiConnecting && now - wifiConnectStartedAt < WIFI_CONNECT_TIMEOUT_MS) return;
+    if (now - wifiLastRetryAt < WIFI_RETRY_INTERVAL_MS) return;
+
+    WiFi.begin(ssid, password);
+    wifiConnecting = true;
+    wifiConnectStartedAt = now;
+    wifiLastRetryAt = now;
+  }
+
+  const char* wifiModeName() {
+    wifi_mode_t mode = WiFi.getMode();
+    if (mode == WIFI_STA) return "STA";
+    if (mode == WIFI_AP) return "AP";
+    if (mode == WIFI_AP_STA) return "AP_STA";
+    return "OFF";
+  }
+
+  void handleWiFiDisconnect() {
+    server.send(200, "application/json", "{\"disconnecting\":true,\"ap_ssid\":\"" DEBUG_AP_SSID "\"}");
+    // Defer the mode switch until the response is sent so the browser receives this confirmation.
+    pendingManualOffline = true;
+  }
+
+  void handleWiFiReconnect() {
+    server.send(200, "application/json", "{\"reconnecting\":true}");
+    pendingManualReconnect = true;
+  }
+
+  void handleWiFiStatus() {
+    unsigned long remaining = 0;
+    if (manualOfflineMode) {
+      unsigned long elapsed = millis() - manualOfflineSetAt;
+      remaining = elapsed < MANUAL_OFFLINE_MAX_MS ? MANUAL_OFFLINE_MAX_MS - elapsed : 0;
+    }
+
+    wifi_mode_t mode = WiFi.getMode();
+    bool staConnected = WiFi.status() == WL_CONNECTED;
+    bool apEnabled = mode == WIFI_AP || (mode == WIFI_AP_STA && fallbackApActive);
+    String staIp = staConnected ? WiFi.localIP().toString() : "0.0.0.0";
+    String apIp = apEnabled ? WiFi.softAPIP().toString() : "0.0.0.0";
+    String ip = staConnected ? staIp : (apEnabled ? apIp : "0.0.0.0");
+    String apSsid = apEnabled ? DEBUG_AP_SSID : "";
+
+    String json = "{\"connected\":" + String(wifiConnected ? "true" : "false") +
+      ",\"sta_connected\":" + String(staConnected ? "true" : "false") +
+      ",\"sta_reconnecting\":" + String(!staConnected && !manualOfflineMode ? "true" : "false") +
+      ",\"fallback_ap_active\":" + String(fallbackApActive ? "true" : "false") +
+      ",\"manual_offline\":" + String(manualOfflineMode ? "true" : "false") +
+      ",\"manual_offline_remaining_ms\":" + String(remaining) +
+      ",\"mode\":\"" + wifiModeName() +
+      "\",\"ip\":\"" + ip +
+      "\",\"sta_ip\":\"" + staIp +
+      "\",\"ap_ip\":\"" + apIp +
+      "\",\"ap_ssid\":\"" + apSsid + "\"}";
+    server.send(200, "application/json", json);
+  }
+
+  void handleBacklog() {
+    uint32_t limit = server.hasArg("limit") ? constrain(server.arg("limit").toInt(), 1, 200) : 50;
+    String json = "[";
+    uint32_t sent = 0;
+
+    if (littleFsAvailable && LittleFS.exists("/buffer.ndjson")) {
+      File file = LittleFS.open("/buffer.ndjson", FILE_READ);
+      while (file && file.available() && sent < limit) {
+        String line = file.readStringUntil('\n');
+        if (recordSeq(line) > ackedSeq) {
+          if (sent++ > 0) json += ",";
+          json += line;
+        }
+      }
+      file.close();
+    }
+    for (uint8_t i = 0; i < ramBufferCount && sent < limit; i++) {
+      if (recordSeq(ramBuffer[i]) <= ackedSeq) continue;
+      if (sent++ > 0) json += ",";
+      json += ramBuffer[i];
+    }
+    json += "]";
+    server.send(200, "application/json", json);
+  }
+
+  void handleBacklogCount() {
+    uint32_t pending = 0;
+    uint32_t oldest = 0;
+    uint32_t newest = 0;
+    if (littleFsAvailable && LittleFS.exists("/buffer.ndjson")) {
+      File file = LittleFS.open("/buffer.ndjson", FILE_READ);
+      while (file && file.available()) {
+        uint32_t seq = recordSeq(file.readStringUntil('\n'));
+        if (seq > ackedSeq) {
+          pending++;
+          if (oldest == 0) oldest = seq;
+          newest = seq;
+        }
+      }
+      file.close();
+    }
+    for (uint8_t i = 0; i < ramBufferCount; i++) {
+      uint32_t seq = recordSeq(ramBuffer[i]);
+      if (seq > ackedSeq) {
+        pending++;
+        if (oldest == 0) oldest = seq;
+        newest = seq;
+      }
+    }
+
+    String json = "{\"pending\":" + String(pending) +
+      ",\"dropped\":" + String(droppedRecords) +
+      ",\"oldest_seq\":" + String(oldest) +
+      ",\"newest_seq\":" + String(newest) + "}";
+    server.send(200, "application/json", json);
+  }
+
+  void handleBacklogAck() {
+    if (!server.hasArg("upto")) {
+      server.send(400, "application/json", "{\"error\":\"missing upto\"}");
+      return;
+    }
+
+    String ackText = server.arg("upto");
+    const char* ackStart = ackText.c_str();
+    char* ackEnd = nullptr;
+    unsigned long parsedAck = strtoul(ackStart, &ackEnd, 10);
+    if (ackStart == ackEnd || *ackEnd != '\0' || ackStart[0] == '-' || parsedAck > UINT32_MAX) {
+      server.send(400, "application/json", "{\"error\":\"invalid upto\"}");
+      return;
+    }
+    uint32_t requested = (uint32_t)parsedAck;
+
+    if (requested > ackedSeq) {
+      uint32_t highestQueued = 0;
+      if (littleFsAvailable && LittleFS.exists("/buffer.ndjson")) {
+        File file = LittleFS.open("/buffer.ndjson", FILE_READ);
+        while (file && file.available())
+          highestQueued = max(highestQueued, recordSeq(file.readStringUntil('\n')));
+        file.close();
+      }
+      for (uint8_t i = 0; i < ramBufferCount; i++)
+        highestQueued = max(highestQueued, recordSeq(ramBuffer[i]));
+      if (requested > highestQueued) {
+        server.send(400, "application/json", "{\"error\":\"upto exceeds queued sequence\"}");
+        return;
+      }
+    }
+
+    if (requested > pendingAckSeq) pendingAckSeq = requested;
+    ackWritePending = true;
+    if (requested > ackedSeq) ackedSeq = requested;
+    Serial.printf("[BACKLOG] ACK seq=%lu\n", (unsigned long)requested);
+    server.send(200, "application/json", "{\"ack\":\"accepted\"}");
+  }
+
+  void handleRoot() {
+    server.send(
+      200,
+      "text/html",
+      DASHBOARD_HTML
+    );
+  }
+
+  void handleData() {
+
+    String json="{";
+
+    json +=
+      "\"temp_c\":"+
+      String(
+        temperatureC,
+        2
+      )+",";
+
+    json +=
+      "\"temp_status\":\""+
+      tempStatus+
+      "\",";
+
+    json +=
+      "\"ph_value\":"+
+      String(
+        phValue,
+        2
+      )+",";
+
+    json +=
+      "\"ph_status\":\""+
+      phStatus+
+      "\",";
+
+    json +=
+      "\"turbidity_ntu\":"+
+      String(
+        turbidityNtu,
+        1
+      )+",";
+
+    json +=
+      "\"turbidity_status\":\""+
+      turbidityStatus+
+      "\",";
+
+    json +=
+      "\"tds_ppm\":"+
+      String(
+        tdsPpm,
+        0
+      )+",";
+
+    json +=
+      "\"tds_status\":\""+
+      tdsStatus+
+      "\",";
+
+    json +=
+      "\"overall_status\":\""+
+      overallStatus+
+      "\"";
+
+    json+="}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleFeederStatus() {
+
+    String json="{";
+
+    json +=
+      "\"feeding\":"+
+      String(
+        feederActive
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"feed_count\":"+
+      String(feedCount)+",";
+
+    json +=
+      "\"last_fed\":\""+
+      lastFedTime+
+      "\",";
+
+    json +=
+      "\"open_angle\":"+
+      String(feederOpenAngle)+",";
+
+    json +=
+      "\"duration_ms\":"+
+      String(feederDurationMs)+",";
+
+    json +=
+      "\"schedule\":[";
+
+    for (
+      int i=0;
+      i<3;
+      i++
+    ) {
+
+      json +=
+        "{\"hour\":"+
+        String(
+          feedSchedule[i].hour
+        )+",";
+
+      json +=
+        "\"minute\":"+
+        String(
+          feedSchedule[i].minute
+        )+",";
+
+      json +=
+        "\"enabled\":"+
+        String(
+          feedSchedule[i].enabled
+            ?"true"
+            :"false"
+        )+
+        "}";
+
+      if (i<2)
+        json+=",";
+    }
+
+    json+="]}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleFeedNow() {
+
+    if (!feederActive)
+      triggerFeed();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"fed\":true}"
+    );
+  }
+
+  void handleFeederTest() {
+
+    if (!feederActive)
+      testServo();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"tested\":true}"
+    );
+  }
+
+  void handleFeederConfig() {
+    long angle = feederOpenAngle;
+    long duration = (long)feederDurationMs;
+    if (!parseOptionalInteger(server, "angle", 0, 180, angle) ||
+        !parseOptionalInteger(server, "duration", 500, 60000, duration)) {
+      server.send(400, "application/json", "{\"config\":\"invalid\"}");
+      return;
+    }
+
+    int oldAngle = feederOpenAngle;
+    unsigned long oldDuration = feederDurationMs;
+    feederOpenAngle = (int)angle;
+    feederDurationMs = (unsigned long)duration;
+    if (!persistScheduleSettings()) {
+      feederOpenAngle = oldAngle;
+      feederDurationMs = oldDuration;
+      server.send(503, "application/json", "{\"config\":\"not_saved\"}");
+      return;
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"config\":\"saved\"}"
+    );
+  }
+
+  void handleFeederSchedule() {
+    FeedTime proposed[3];
+    bool changed[3] = {false, false, false};
+    for (int i = 0; i < 3; i++) {
+      proposed[i] = feedSchedule[i];
+      long hour = proposed[i].hour;
+      long minute = proposed[i].minute;
+      long enabled = proposed[i].enabled ? 1 : 0;
+      String hi = "h" + String(i);
+      String mi = "m" + String(i);
+      String ei = "e" + String(i);
+      if (!parseOptionalInteger(server, hi, 0, 23, hour) ||
+          !parseOptionalInteger(server, mi, 0, 59, minute) ||
+          !parseOptionalInteger(server, ei, 0, 1, enabled)) {
+        server.send(400, "application/json", "{\"schedule\":\"invalid\"}");
+        return;
+      }
+      proposed[i].hour = (int)hour;
+      proposed[i].minute = (int)minute;
+      proposed[i].enabled = enabled == 1;
+      changed[i] = proposed[i].hour != feedSchedule[i].hour ||
+        proposed[i].minute != feedSchedule[i].minute ||
+        proposed[i].enabled != feedSchedule[i].enabled;
+    }
+
+    FeedTime previous[3];
+    for (int i = 0; i < 3; i++) {
+      previous[i] = feedSchedule[i];
+      feedSchedule[i] = proposed[i];
+    }
+    if (!persistScheduleSettings()) {
+      for (int i = 0; i < 3; i++) feedSchedule[i] = previous[i];
+      server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+      return;
+    }
+
+    for (int i = 0; i < 3; i++) {
+      if (!changed[i]) continue;
+      char key[12];
+      snprintf(key, sizeof(key), "feed_fire%d", i);
+      if (devicePreferences.putInt(key, 0) == 0) {
+        for (int j = 0; j < 3; j++) feedSchedule[j] = previous[j];
+        persistScheduleSettings();
+        server.send(503, "application/json", "{\"schedule\":\"marker_reset_failed\"}");
+        return;
+      }
+      feedLastFiredDate[i] = 0;
+      feedSchedule[i].firedToday = false;
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"schedule\":\"saved\"}"
+    );
+  }
+
+  // ========================
+  // SYRINGE A HTTP
+  // ========================
+
+  void handleSyrAStatus() {
+
+    String json="{";
+
+    json +=
+      "\"active\":"+
+      String(
+        syringeAActive
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"dose_count\":"+
+      String(
+        syringeADoseCount
+      )+",";
+
+    json +=
+      "\"last_dispensed\":\""+
+      syringeALastDispensed+
+      "\",";
+
+    json +=
+      "\"volume_ml\":"+
+      String(
+        syringeADispenseML,
+        2
+      )+",";
+
+    json +=
+      "\"remaining_ml\":"+
+      String(
+        syringeARemainingML,
+        2
+      )+",";
+
+    json +=
+      "\"capacity_ml\":"+
+      String(
+        syringeACapacityML,
+        2
+      )+",";
+
+    time_t nextEligible = nextChemicalEligibleEpoch();
+    time_t nextDose = nextPumpDoseEpoch(syringeASchedule);
+    String lastChemical = formatDeviceEpoch(lastChemicalDoseEpoch);
+    String nextEligibleText = formatDeviceEpoch(nextEligible);
+    bool refillRequired = !syringeAVolumeKnown ||
+      syringeARemainingML + 0.001f < syringeADispenseML;
+    json += "\"volume_known\":" + String(syringeAVolumeKnown ? "true" : "false") + ",";
+    json += "\"refill_required\":" + String(refillRequired ? "true" : "false") + ",";
+    json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+    json += "\"last_chemical_dose_at\":\"" + lastChemical + "\",";
+    json += "\"next_eligible_at\":\"" + nextEligibleText + "\",";
+    json += "\"next_dose_at\":\"" + formatDeviceEpoch(nextDose) + "\",";
+    json += "\"schedule_event\":\"" + syringeALastScheduleEvent + "\",";
+
+    json += "\"schedule\":[";
+
+    for (
+      int i=0;
+      i<3;
+      i++
+    ) {
+
+      json +=
+        "{\"hour\":"+
+        String(
+          syringeASchedule[i].hour
+        )+",";
+
+      json +=
+        "\"minute\":"+
+        String(
+          syringeASchedule[i].minute
+        )+",";
+
+      json +=
+        "\"enabled\":"+
+        String(
+          syringeASchedule[i].enabled
+            ?"true"
+            :"false"
+        )+
+        "}";
+
+      if (i<2)
+        json+=",";
+    }
+
+    json+="]}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleSyrADispense() {
+    bool ok = triggerSyringeA(true);
+    if (ok) {
+      server.send(200, "application/json", "{\"dispensed\":true}");
+    } else {
+      String reason = pumpDoseBlockReason;
+      reason.replace("\\", "\\\\");
+      reason.replace("\"", "\\\"");
+      server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason +
+        "\",\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\"}");
+    }
+  }
+
+  void handleSyrATestDispense() {
+    bool ok = triggerSyringeA(false);
+    if (ok) {
+      server.send(200, "application/json", "{\"dispensed\":true}");
+    } else {
+      String reason = pumpDoseBlockReason;
+      reason.replace("\\", "\\\\");
+      reason.replace("\"", "\\\"");
+      server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason + "\"}");
+    }
+  }
+
+  void handleSyrARefillConfirm() {
+    if (syringeAActive || syringeBActive || !persistentStateReady) {
+      server.send(409, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Pump busy or persistent state unavailable\"}");
+      return;
+    }
+    float previousRemaining = syringeARemainingML;
+    bool previousKnown = syringeAVolumeKnown;
+    syringeARemainingML = syringeACapacityML;
+    syringeAVolumeKnown = true;
+    if (!persistPumpSafetyState()) {
+      syringeARemainingML = previousRemaining;
+      syringeAVolumeKnown = previousKnown;
+      server.send(503, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Could not persist refill confirmation\"}");
+      return;
+    }
+    server.send(200, "application/json", "{\"refill_confirmed\":true}");
+  }
+
+  void handleSyrAStop() {
+
+    stopSyringeA();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"stopped\":true}"
+    );
+  }
+
+  void handleSyrARetract() {
+
+    if (
+      !syringeAActive &&
+      !syringeBActive
+    )
+      retractSyringeA();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"retracted\":true}"
+    );
+  }
+
+  void handleSyrASchedule() {
+    SyringeTime proposed[3];
+    bool changedSlots[3] = {false, false, false};
+    for (int i = 0; i < 3; i++) {
+      proposed[i] = syringeASchedule[i];
+      long hour = proposed[i].hour;
+      long minute = proposed[i].minute;
+      long enabled = proposed[i].enabled ? 1 : 0;
+      String hi = "h" + String(i);
+      String mi = "m" + String(i);
+      String ei = "e" + String(i);
+      if (!parseOptionalInteger(server, hi, 0, 23, hour) ||
+          !parseOptionalInteger(server, mi, 0, 59, minute) ||
+          !parseOptionalInteger(server, ei, 0, 1, enabled)) {
+        server.send(400, "application/json", "{\"schedule\":\"invalid\"}");
+        return;
+      }
+      proposed[i].hour = (int)hour;
+      proposed[i].minute = (int)minute;
+      proposed[i].enabled = enabled == 1;
+      changedSlots[i] = proposed[i].hour != syringeASchedule[i].hour ||
+        proposed[i].minute != syringeASchedule[i].minute ||
+        proposed[i].enabled != syringeASchedule[i].enabled;
+    }
+
+    SyringeTime previous[3];
+    for (int i = 0; i < 3; i++) {
+      previous[i] = syringeASchedule[i];
+      syringeASchedule[i] = proposed[i];
+    }
+    if (!persistScheduleSettings()) {
+      for (int i = 0; i < 3; i++) syringeASchedule[i] = previous[i];
+      server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+      return;
+    }
+    for (int i = 0; i < 3; i++) {
+      if (!changedSlots[i]) continue;
+      char key[12];
+      snprintf(key, sizeof(key), "a_fire%d", i);
+      if (devicePreferences.putInt(key, 0) == 0) {
+        for (int j = 0; j < 3; j++) syringeASchedule[j] = previous[j];
+        persistScheduleSettings();
+        setPumpScheduleEvent(true, "PUMP_A schedule save failed; occurrence marker reset failed");
+        server.send(503, "application/json", "{\"schedule\":\"marker_reset_failed\"}");
+        return;
+      }
+      syringeALastFiredDate[i] = 0;
+      syringeASchedule[i].firedToday = false;
+    }
+    setPumpScheduleEvent(true, "PUMP_A schedule saved; changed slot markers cleared");
+    server.send(200, "application/json", "{\"schedule\":\"saved\"}");
+  }
+
+  // ========================
+  // SYRINGE B HTTP
+  // ========================
+
+  void handleSyrBStatus() {
+
+    String json="{";
+
+    json +=
+      "\"active\":"+
+      String(
+        syringeBActive
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"dose_count\":"+
+      String(
+        syringeBDoseCount
+      )+",";
+
+    json +=
+      "\"last_dispensed\":\""+
+      syringeBLastDispensed+
+      "\",";
+
+    json +=
+      "\"volume_ml\":"+
+      String(
+        syringeBDispenseML,
+        2
+      )+",";
+
+    json +=
+      "\"remaining_ml\":"+
+      String(
+        syringeBRemainingML,
+        2
+      )+",";
+
+    json +=
+      "\"capacity_ml\":"+
+      String(
+        syringeBCapacityML,
+        2
+      )+",";
+
+    time_t nextEligible = nextChemicalEligibleEpoch();
+    time_t nextDose = nextPumpDoseEpoch(syringeBSchedule);
+    String lastChemical = formatDeviceEpoch(lastChemicalDoseEpoch);
+    String nextEligibleText = formatDeviceEpoch(nextEligible);
+    bool refillRequired = !syringeBVolumeKnown ||
+      syringeBRemainingML + 0.001f < syringeBDispenseML;
+    json += "\"volume_known\":" + String(syringeBVolumeKnown ? "true" : "false") + ",";
+    json += "\"refill_required\":" + String(refillRequired ? "true" : "false") + ",";
+    json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+    json += "\"last_chemical_dose_at\":\"" + lastChemical + "\",";
+    json += "\"next_eligible_at\":\"" + nextEligibleText + "\",";
+    json += "\"next_dose_at\":\"" + formatDeviceEpoch(nextDose) + "\",";
+    json += "\"schedule_event\":\"" + syringeBLastScheduleEvent + "\",";
+
+    json +=
+      "\"schedule\":[";
+
+    for (
+      int i=0;
+      i<3;
+      i++
+    ) {
+
+      json +=
+        "{\"hour\":"+
+        String(
+          syringeBSchedule[i].hour
+        )+",";
+
+      json +=
+        "\"minute\":"+
+        String(
+          syringeBSchedule[i].minute
+        )+",";
+
+      json +=
+        "\"enabled\":"+
+        String(
+          syringeBSchedule[i].enabled
+            ?"true"
+            :"false"
+        )+
+        "}";
+
+      if (i<2)
+        json+=",";
+    }
+
+    json+="]}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleSyrBDispense() {
+    bool ok = triggerSyringeB(true);
+    if (ok) {
+      server.send(200, "application/json", "{\"dispensed\":true}");
+    } else {
+      String reason = pumpDoseBlockReason;
+      reason.replace("\\", "\\\\");
+      reason.replace("\"", "\\\"");
+      server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason +
+        "\",\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\"}");
+    }
+  }
+
+  void handleSyrBTestDispense() {
+    bool ok = triggerSyringeB(false);
+    if (ok) {
+      server.send(200, "application/json", "{\"dispensed\":true}");
+    } else {
+      String reason = pumpDoseBlockReason;
+      reason.replace("\\", "\\\\");
+      reason.replace("\"", "\\\"");
+      server.send(409, "application/json", "{\"dispensed\":false,\"reason\":\"" + reason + "\"}");
+    }
+  }
+
+  void handleSyrBRefillConfirm() {
+    if (syringeAActive || syringeBActive || !persistentStateReady) {
+      server.send(409, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Pump busy or persistent state unavailable\"}");
+      return;
+    }
+    float previousRemaining = syringeBRemainingML;
+    bool previousKnown = syringeBVolumeKnown;
+    syringeBRemainingML = syringeBCapacityML;
+    syringeBVolumeKnown = true;
+    if (!persistPumpSafetyState()) {
+      syringeBRemainingML = previousRemaining;
+      syringeBVolumeKnown = previousKnown;
+      server.send(503, "application/json", "{\"refill_confirmed\":false,\"reason\":\"Could not persist refill confirmation\"}");
+      return;
+    }
+    server.send(200, "application/json", "{\"refill_confirmed\":true}");
+  }
+
+  void handleSyrBStop() {
+
+    stopSyringeB();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"stopped\":true}"
+    );
+  }
+
+  void handleSyrBRetract() {
+
+    if (
+      !syringeBActive &&
+      !syringeAActive
+    )
+      retractSyringeB();
+
+    server.send(
+      200,
+      "application/json",
+      "{\"retracted\":true}"
+    );
+  }
+
+  void handleSyrBSchedule() {
+    SyringeTime proposed[3];
+    bool changedSlots[3] = {false, false, false};
+    for (int i = 0; i < 3; i++) {
+      proposed[i] = syringeBSchedule[i];
+      long hour = proposed[i].hour;
+      long minute = proposed[i].minute;
+      long enabled = proposed[i].enabled ? 1 : 0;
+      String hi = "h" + String(i);
+      String mi = "m" + String(i);
+      String ei = "e" + String(i);
+      if (!parseOptionalInteger(server, hi, 0, 23, hour) ||
+          !parseOptionalInteger(server, mi, 0, 59, minute) ||
+          !parseOptionalInteger(server, ei, 0, 1, enabled)) {
+        server.send(400, "application/json", "{\"schedule\":\"invalid\"}");
+        return;
+      }
+      proposed[i].hour = (int)hour;
+      proposed[i].minute = (int)minute;
+      proposed[i].enabled = enabled == 1;
+      changedSlots[i] = proposed[i].hour != syringeBSchedule[i].hour ||
+        proposed[i].minute != syringeBSchedule[i].minute ||
+        proposed[i].enabled != syringeBSchedule[i].enabled;
+    }
+
+    SyringeTime previous[3];
+    for (int i = 0; i < 3; i++) {
+      previous[i] = syringeBSchedule[i];
+      syringeBSchedule[i] = proposed[i];
+    }
+    if (!persistScheduleSettings()) {
+      for (int i = 0; i < 3; i++) syringeBSchedule[i] = previous[i];
+      server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+      return;
+    }
+    for (int i = 0; i < 3; i++) {
+      if (!changedSlots[i]) continue;
+      char key[12];
+      snprintf(key, sizeof(key), "b_fire%d", i);
+      if (devicePreferences.putInt(key, 0) == 0) {
+        for (int j = 0; j < 3; j++) syringeBSchedule[j] = previous[j];
+        persistScheduleSettings();
+        setPumpScheduleEvent(false, "PUMP_B schedule save failed; occurrence marker reset failed");
+        server.send(503, "application/json", "{\"schedule\":\"marker_reset_failed\"}");
+        return;
+      }
+      syringeBLastFiredDate[i] = 0;
+      syringeBSchedule[i].firedToday = false;
+    }
+    setPumpScheduleEvent(false, "PUMP_B schedule saved; changed slot markers cleared");
+    server.send(200, "application/json", "{\"schedule\":\"saved\"}");
+  }
+
+  // ========================
+  // PH AUTO HTTP
+  // ========================
+
+  void handlePhAutoStatus() {
+    unsigned long remaining = chemicalCooldownRemainingMs();
+
+    String json="{";
+
+    json +=
+      "\"enabled\":"+
+      String(
+        phAutoDoseEnabled
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"target_min\":"+
+      String(
+        phTargetMin,
+        2
+      )+",";
+
+    json +=
+      "\"target_max\":"+
+      String(
+        phTargetMax,
+        2
+      )+",";
+
+    json +=
+      "\"cooldown_ms\":"+
+      String(
+        phDoseCooldownMs
+      )+",";
+
+    json +=
+      "\"cooldown_remaining_ms\":"+
+      String(
+        remaining
+      )+",";
+
+    json += "\"clock_synced\":" + String(deviceClockSynchronized() ? "true" : "false") + ",";
+    json += "\"next_eligible_at\":\"" + formatDeviceEpoch(nextChemicalEligibleEpoch()) + "\",";
+
+    json +=
+      "\"last_action\":\""+
+      phAutoLastAction+
+      "\"";
+
+    json+="}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handlePhAutoConfig() {
+
+    if (
+      server.hasArg("enabled")
+    )
+      phAutoDoseEnabled=
+        server.arg(
+          "enabled"
+        ).toInt()==1;
+
+    if (
+      server.hasArg("min")
+    )
+      phTargetMin=
+        server.arg(
+          "min"
+        ).toFloat();
+
+    if (
+      server.hasArg("max")
+    )
+      phTargetMax=
+        server.arg(
+          "max"
+        ).toFloat();
+
+    if (
+      server.hasArg("cooldown")
+    )
+      phDoseCooldownMs=
+        constrain(
+          (unsigned long)
+          server.arg(
+            "cooldown"
+          ).toInt(),
+          10000UL,
+          3600000UL
+        );
+
+    if (!persistScheduleSettings()) {
+      server.send(503, "application/json", "{\"config\":\"not_saved\"}");
+      return;
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"config\":\"saved\"}"
+    );
+  }
+
+  // ========================
+  // DEMO MODE
+  // ========================
+
+  void handleDemoStatus() {
+
+    String json="{";
+
+    json +=
+      "\"demo_mode\":"+
+      String(
+        demoMode
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"demo_ph\":"+
+      String(
+        demoPhValue,
+        2
+      );
+
+    json+="}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleDemoPh() {
+
+    if (
+      server.hasArg("value")
+    ) {
+
+      demoPhValue=
+        constrain(
+          server.arg(
+            "value"
+          ).toFloat(),
+          0.0f,
+          14.0f
+        );
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"demo_ph\":\"set\"}"
+    );
+  }
+
+  void handleDemoMode() {
+
+    if (
+      server.hasArg("enabled")
+    ) {
+
+      demoMode=
+        server.arg(
+          "enabled"
+        ).toInt()==1;
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"demo_mode\":\"set\"}"
+    );
+  }
+
+  // ========================
+  // UV
+  // ========================
+
+  void handleUV() {
+
+    if (
+      uvState &&
+      uvOnDuration>0
+    ) {
+
+      if (
+        millis()-uvTurnedOnAt
+        >=uvOnDuration
+      ) {
+
+        uvState=false;
+        uvOnDuration=0;
+
+        digitalWrite(
+          UV_PIN,
+          LOW
+        );
+      }
+    }
+
+    if (uvState)
+      uvTotalOnMs +=
+        millis()-uvLastTickAt;
+
+    uvLastTickAt=
+      millis();
+
+    digitalWrite(
+      UV_PIN,
+      uvState
+        ?HIGH
+        :LOW
+    );
+  }
+
+  void handleUvStatus() {
+
+    unsigned long remaining=0;
+
+    if (
+      uvState &&
+      uvOnDuration>0
+    ) {
+
+      unsigned long elapsed=
+        millis()-uvTurnedOnAt;
+
+      remaining=
+        elapsed<uvOnDuration
+          ?uvOnDuration-elapsed
+          :0;
+    }
+
+    char sOn[6];
+    char sOff[6];
+
+    sprintf(
+      sOn,
+      "%02d:%02d",
+      uvScheduleOnHour,
+      uvScheduleOnMinute
+    );
+
+    sprintf(
+      sOff,
+      "%02d:%02d",
+      uvScheduleOffHour,
+      uvScheduleOffMinute
+    );
+
+    String json="{";
+
+    json +=
+      "\"led_on\":"+
+      String(
+        uvState
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"remaining_ms\":"+
+      String(
+        remaining
+      )+",";
+
+    json +=
+      "\"total_on_ms\":"+
+      String(
+        uvTotalOnMs
+      )+",";
+
+    json +=
+      "\"schedule_enabled\":"+
+      String(
+        uvScheduleEnabled
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"sched_on\":\""+
+      String(sOn)+
+      "\",";
+
+    json +=
+      "\"sched_off\":\""+
+      String(sOff)+
+      "\"";
+
+    json+="}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleUvOn() {
+
+    uvState=true;
+    uvOnDuration=0;
+    uvTurnedOnAt=millis();
+
+    digitalWrite(
+      UV_PIN,
+      HIGH
+    );
+
+    server.send(
+      200,
+      "application/json",
+      "{\"led\":\"on\"}"
+    );
+  }
+
+  void handleUvOff() {
+
+    uvState=false;
+    uvOnDuration=0;
+
+    digitalWrite(
+      UV_PIN,
+      LOW
+    );
+
+    server.send(
+      200,
+      "application/json",
+      "{\"led\":\"off\"}"
+    );
+  }
+
+  void handleUvTimer() {
+
+    if (
+      server.hasArg("duration")
+    ) {
+
+      uvOnDuration=
+        server.arg(
+          "duration"
+        ).toInt();
+
+      uvState=true;
+
+      uvTurnedOnAt=
+        millis();
+
+      digitalWrite(
+        UV_PIN,
+        HIGH
+      );
+
+      server.send(
+        200,
+        "application/json",
+        "{\"led\":\"timer\"}"
+      );
+
+    } else {
+
+      server.send(
+        400,
+        "application/json",
+        "{\"error\":\"missing duration\"}"
+      );
+    }
+  }
+
+  void handleUvSchedule() {
+
+    if (
+      server.hasArg("enabled")
+    )
+      uvScheduleEnabled=
+        server.arg(
+          "enabled"
+        ).toInt()==1;
+
+    if (
+      server.hasArg("onH")
+    )
+      uvScheduleOnHour=
+        server.arg(
+          "onH"
+        ).toInt();
+
+    if (
+      server.hasArg("onM")
+    )
+      uvScheduleOnMinute=
+        server.arg(
+          "onM"
+        ).toInt();
+
+    if (
+      server.hasArg("offH")
+    )
+      uvScheduleOffHour=
+        server.arg(
+          "offH"
+        ).toInt();
+
+    if (
+      server.hasArg("offM")
+    )
+      uvScheduleOffMinute=
+        server.arg(
+          "offM"
+        ).toInt();
+
+    uvScheduleOnHour = constrain(uvScheduleOnHour, 0, 23);
+    uvScheduleOffHour = constrain(uvScheduleOffHour, 0, 23);
+    uvScheduleOnMinute = constrain(uvScheduleOnMinute, 0, 59);
+    uvScheduleOffMinute = constrain(uvScheduleOffMinute, 0, 59);
+    if (!persistScheduleSettings()) {
+      server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+      return;
+    }
+
+    server.send(
+      200,
+      "application/json",
+      "{\"schedule\":\"saved\"}"
+    );
+  }
+
+  void checkUvSchedule() {
+
+    if (
+      !uvScheduleEnabled
+    )
+      return;
+
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    int nowMins = localTime.tm_hour * 60 + localTime.tm_min;
+
+    int onMins=
+      uvScheduleOnHour*60+
+      uvScheduleOnMinute;
+
+    int offMins=
+      uvScheduleOffHour*60+
+      uvScheduleOffMinute;
+
+    bool shouldBeOn=
+      (onMins<offMins)
+        ?
+        (
+          nowMins>=onMins &&
+          nowMins<offMins
+        )
+        :
+        (
+          nowMins>=onMins ||
+          nowMins<offMins
+        );
+
+    if (
+      shouldBeOn &&
+      !uvState &&
+      uvOnDuration==0
+    ) {
+
+      uvState=true;
+
+      uvTurnedOnAt=
+        millis();
+
+      digitalWrite(
+        UV_PIN,
+        HIGH
+      );
+
+    } else if (
+      !shouldBeOn &&
+      uvState &&
+      uvOnDuration==0
+    ) {
+
+      uvState=false;
+
+      digitalWrite(
+        UV_PIN,
+        LOW
+      );
+    }
+  }
+
+  // ========================
+  // LED
+  // ========================
+
+  void handleLED() {
+
+    if (
+      ledState &&
+      ledOnDuration>0
+    ) {
+
+      if (
+        millis()-ledTurnedOnAt
+        >=ledOnDuration
+      ) {
+
+        ledOnDuration=0;
+        setLedState(false, "TIMER OFF");
+      }
+    }
+
+    if (ledState)
+      ledTotalOnMs +=
+        millis()-ledLastTickAt;
+
+    ledLastTickAt=
+      millis();
+
+  }
+
+  void handleLedStatus() {
+
+    unsigned long remaining=0;
+
+    if (
+      ledState &&
+      ledOnDuration>0
+    ) {
+
+      unsigned long elapsed=
+        millis()-ledTurnedOnAt;
+
+      remaining=
+        elapsed<ledOnDuration
+          ?ledOnDuration-elapsed
+          :0;
+    }
+
+    char sOn[6];
+    char sOff[6];
+
+    sprintf(
+      sOn,
+      "%02d:%02d",
+      ledScheduleOnHour,
+      ledScheduleOnMinute
+    );
+
+    sprintf(
+      sOff,
+      "%02d:%02d",
+      ledScheduleOffHour,
+      ledScheduleOffMinute
+    );
+
+    String json="{";
+
+    json +=
+      "\"led_on\":"+
+      String(
+        ledState
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"remaining_ms\":"+
+      String(
+        remaining
+      )+",";
+
+    json +=
+      "\"total_on_ms\":"+
+      String(
+        ledTotalOnMs
+      )+",";
+
+    json +=
+      "\"schedule_enabled\":"+
+      String(
+        ledScheduleEnabled
+          ?"true"
+          :"false"
+      )+",";
+
+    json +=
+      "\"sched_on\":\""+
+      String(sOn)+
+      "\",";
+
+    json +=
+      "\"sched_off\":\""+
+      String(sOff)+
+      "\"";
+
+    json+="}";
+
+    server.send(
+      200,
+      "application/json",
+      json
+    );
+  }
+
+  void handleLedOn() {
+
+    ledManualOverride=true;
+    ledOnDuration=0;
+    ledTurnedOnAt=millis();
+    Serial.println("[LED] MANUAL ON");
+    setLedState(true, "MANUAL ON");
+
+    server.send(
+      200,
+      "application/json",
+      "{\"led\":\"on\"}"
+    );
+  }
+
+  void handleLedOff() {
+
+    ledManualOverride=true;
+    ledOnDuration=0;
+    Serial.println("[LED] MANUAL OFF");
+    setLedState(false, "MANUAL OFF");
+
+    server.send(
+      200,
+      "application/json",
+      "{\"led\":\"off\"}"
+    );
+  }
+
+  void handleLedTimer() {
+
+    if (
+      server.hasArg("duration")
+    ) {
+
+      ledOnDuration=
+        server.arg(
+          "duration"
+        ).toInt();
+
+      ledManualOverride=false;
+
+      ledTurnedOnAt=
+        millis();
+
+      setLedState(true, "TIMER ON");
+
+      server.send(
+        200,
+        "application/json",
+        "{\"led\":\"timer\"}"
+      );
+
+    } else {
+
+      server.send(
+        400,
+        "application/json",
+        "{\"error\":\"missing duration\"}"
+      );
+    }
+  }
+
+  void handleLedSchedule() {
+    bool scheduleWasEnabled = ledScheduleEnabled;
+
+    if (
+      server.hasArg("enabled")
+    )
+      ledScheduleEnabled=
+        server.arg(
+          "enabled"
+        ).toInt()==1;
+
+    if (
+      server.hasArg("onH")
+    )
+      ledScheduleOnHour=
+        server.arg(
+          "onH"
+        ).toInt();
+
+    if (
+      server.hasArg("onM")
+    )
+      ledScheduleOnMinute=
+        server.arg(
+          "onM"
+        ).toInt();
+
+    if (
+      server.hasArg("offH")
+    )
+      ledScheduleOffHour=
+        server.arg(
+          "offH"
+        ).toInt();
+
+    if (
+      server.hasArg("offM")
+    )
+      ledScheduleOffMinute=
+        server.arg(
+          "offM"
+        ).toInt();
+
+    ledScheduleOnHour = constrain(ledScheduleOnHour, 0, 23);
+    ledScheduleOffHour = constrain(ledScheduleOffHour, 0, 23);
+    ledScheduleOnMinute = constrain(ledScheduleOnMinute, 0, 59);
+    ledScheduleOffMinute = constrain(ledScheduleOffMinute, 0, 59);
+    if (!persistScheduleSettings()) {
+      server.send(503, "application/json", "{\"schedule\":\"not_saved\"}");
+      return;
+    }
+    ledManualOverride = false;
+    ledScheduleWindowInitialized = false;
+    if (scheduleWasEnabled != ledScheduleEnabled)
+      Serial.printf("[LED] Schedule %s\n", ledScheduleEnabled ? "enabled" : "disabled");
+
+    server.send(
+      200,
+      "application/json",
+      "{\"schedule\":\"saved\"}"
+    );
+  }
+
+  void checkLedSchedule() {
+
+    if (
+      !ledScheduleEnabled
+    )
+      return;
+
+    struct tm localTime;
+    if (!getDeviceLocalTime(localTime)) return;
+    int nowMins = localTime.tm_hour * 60 + localTime.tm_min;
+
+    int onMins=
+      ledScheduleOnHour*60+
+      ledScheduleOnMinute;
+
+    int offMins=
+      ledScheduleOffHour*60+
+      ledScheduleOffMinute;
+
+    bool shouldBeOn=
+      (onMins<offMins)
+        ?
+        (
+          nowMins>=onMins &&
+          nowMins<offMins
+        )
+        :
+        (
+          nowMins>=onMins ||
+          nowMins<offMins
+        );
+
+    if (!ledScheduleWindowInitialized) {
+      ledScheduleWindowInitialized = true;
+      ledScheduleWindowOn = shouldBeOn;
+    } else if (ledScheduleWindowOn != shouldBeOn) {
+      ledScheduleWindowOn = shouldBeOn;
+      ledManualOverride = false;
+    }
+
+    if (!ledManualOverride && ledOnDuration == 0)
+      setLedState(shouldBeOn, shouldBeOn ? "SCHEDULE ON" : "SCHEDULE OFF");
+  }
+
+  // ========================
+  // SETUP
+  // ========================
+
+  void setup() {
+
+    Serial.begin(115200);
+    loadPersistentDeviceState();
+
+    analogReadResolution(12);
+    analogSetPinAttenuation(PH_PIN, ADC_11db);
+    analogSetPinAttenuation(TDS_PIN, ADC_11db);
+
+    Serial.println(
+      "[ADC TEST] PH_PIN = 35"
+    );
+
+    Serial.println(
+      "[ADC TEST] Resolution = 12-bit"
+    );
+
+    Serial.println(
+      "[ADC TEST] Attenuation = 11dB"
+    );
+
+    Serial.println(
+      "[TDS ADC TEST] TDS_PIN = 34"
+    );
+
+    Wire.begin(
+      21,
+      22
+    );
+
+    lcd.init();
+    lcd.backlight();
+
+    sensors.begin();
+
+    pinMode(
+      UV_PIN,
+      OUTPUT
+    );
+
+    digitalWrite(
+      UV_PIN,
+      LOW
+    );
+
+    uvLastTickAt=
+      millis();
+
+    pinMode(
+      LED_PIN,
+      OUTPUT
+    );
+
+    setLedState(false, "BOOT OFF");
+    Serial.println("[LED] Boot state: OFF");
+
+    ledLastTickAt=
+      millis();
+
+    ESP32PWM::allocateTimer(0);
+    ESP32PWM::allocateTimer(1);
+    ESP32PWM::allocateTimer(2);
+    ESP32PWM::allocateTimer(3);
+
+    feederServo.setPeriodHertz(
+      50
+    );
+
+    feederServo.attach(
+      SERVO_PIN,
+      500,
+      2400
+    );
+
+    delay(100);
+
+    feederServo.write(
+      feederCloseAngle
+    );
+
+    delay(500);
+
+    stepperA.setMaxSpeed(
+      syringeASpeed
+    );
+
+    stepperA.setAcceleration(
+      syringeASpeed*2
+    );
+
+    stepperA.disableOutputs();
+
+    stepperB.setMaxSpeed(
+      syringeBSpeed
+    );
+
+    stepperB.setAcceleration(
+      syringeBSpeed*2
+    );
+
+    stepperB.disableOutputs();
+
+    lcd.clear();
+
+    setupBufferStorage();
+    lcd.setCursor(0,0);
+    lcd.print("AquaLogic");
+    lcd.setCursor(0,1);
+    lcd.print("Connecting WiFi");
+    Serial.println("Starting WiFi connection (non-blocking)");
+    WiFi.mode(WIFI_STA);
+    startNetworkTimeSync();
+    WiFi.begin(ssid, password);
+    wifiConnecting = true;
+    wifiConnectStartedAt = millis();
+    wifiLastRetryAt = millis();
+    wifiDisconnectedAt = millis();
+
+    server.on(
+      "/",
+      handleRoot
+    );
+
+    server.on(
+      "/data",
+      handleData
+    );
+
+    server.on(
+      "/data/backlog",
+      HTTP_GET,
+      handleBacklog
+    );
+
+    server.on(
+      "/data/backlog/count",
+      HTTP_GET,
+      handleBacklogCount
+    );
+
+    server.on(
+      "/data/backlog/ack",
+      HTTP_POST,
+      handleBacklogAck
+    );
+
+    server.on(
+      "/wifi/disconnect",
+      handleWiFiDisconnect
+    );
+
+    server.on(
+      "/wifi/reconnect",
+      handleWiFiReconnect
+    );
+
+    server.on(
+      "/wifi/status",
+      handleWiFiStatus
+    );
+
+    server.on(
+      "/feeder/status",
+      handleFeederStatus
+    );
+
+    server.on(
+      "/feeder/feed",
+      handleFeedNow
+    );
+
+    server.on(
+      "/feeder/test",
+      handleFeederTest
+    );
+
+    server.on(
+      "/feeder/config",
+      handleFeederConfig
+    );
+
+    server.on(
+      "/feeder/schedule",
+      handleFeederSchedule
+    );
+
+    server.on(
+      "/syringeA/status",
+      handleSyrAStatus
+    );
+
+    server.on(
+      "/syringeA/dispense",
+      handleSyrADispense
+    );
+
+    server.on(
+      "/syringeA/test-dispense",
+      handleSyrATestDispense
+    );
+
+    server.on(
+      "/syringeA/refill-confirm",
+      handleSyrARefillConfirm
+    );
+
+    server.on(
+      "/syringeA/stop",
+      handleSyrAStop
+    );
+
+    server.on(
+      "/syringeA/retract",
+      handleSyrARetract
+    );
+
+    server.on(
+      "/syringeA/schedule",
+      handleSyrASchedule
+    );
+
+    server.on(
+      "/syringeB/status",
+      handleSyrBStatus
+    );
+
+    server.on(
+      "/syringeB/dispense",
+      handleSyrBDispense
+    );
+
+    server.on(
+      "/syringeB/test-dispense",
+      handleSyrBTestDispense
+    );
+
+    server.on(
+      "/syringeB/refill-confirm",
+      handleSyrBRefillConfirm
+    );
+
+    server.on(
+      "/syringeB/stop",
+      handleSyrBStop
+    );
+
+    server.on(
+      "/syringeB/retract",
+      handleSyrBRetract
+    );
+
+    server.on(
+      "/syringeB/schedule",
+      handleSyrBSchedule
+    );
+
+    server.on(
+      "/ph/auto/status",
+      handlePhAutoStatus
+    );
+
+    server.on(
+      "/ph/auto/config",
+      handlePhAutoConfig
+    );
+
+    server.on(
+      "/demo/status",
+      handleDemoStatus
+    );
+
+    server.on(
+      "/demo/ph",
+      handleDemoPh
+    );
+
+    server.on(
+      "/demo/mode",
+      handleDemoMode
+    );
+
+    server.on(
+      "/uv/status",
+      handleUvStatus
+    );
+
+    server.on(
+      "/uv/on",
+      handleUvOn
+    );
+
+    server.on(
+      "/uv/off",
+      handleUvOff
+    );
+
+    server.on(
+      "/uv/timer",
+      handleUvTimer
+    );
+
+    server.on(
+      "/uv/schedule",
+      handleUvSchedule
+    );
+
+    server.on(
+      "/led/status",
+      handleLedStatus
+    );
+
+    server.on(
+      "/led/on",
+      handleLedOn
+    );
+
+    server.on(
+      "/led/off",
+      handleLedOff
+    );
+
+    server.on(
+      "/led/timer",
+      handleLedTimer
+    );
+
+    server.on(
+      "/led/schedule",
+      handleLedSchedule
+    );
+
+    server.begin();
+  }
+
+  // ========================
+  // LOOP
+  // ========================
+
+  void loop() {
+
+    serviceManualWiFi();
+    serviceWiFi();
+    server.handleClient();
+
+    handleUV();
+    handleLED();
+    handleFeeder();
+    handleSyringeA();
+    handleSyringeB();
+    serviceBufferStorage();
+
+    serviceTimeSyncDiagnostics();
+    checkUvSchedule();
+    checkLedSchedule();
+    checkFeederSchedule();
+    checkSyringeASchedule();
+    checkSyringeBSchedule();
+
+    static unsigned long sensorMillis=0;
+    static unsigned long phDebugMillis=0;
+    static unsigned long adcTestMillis=0;
+    static unsigned long tdsTestMillis=0;
+
+    if (
+      millis()-sensorMillis>=2000
+    ) {
+
+      sensorMillis=
+        millis();
+
+      readSensors();
+
+      evaluateTemperature();
+      evaluatePH();
+      evaluateTurbidity();
+      evaluateTDS();
+      evaluateOverallStatus();
+
+      checkPhAutoDose();
+
+      serialMonitorOutput();
+      queueOfflineReading();
+    }
+
+    if (
+      millis()-adcTestMillis>=1000
+    ) {
+
+      adcTestMillis=
+        millis();
+
+      Serial.print(
+        "[ADC TEST] GPIO35 RAW: "
+      );
+
+      for (
+        int i=0;
+        i<4;
+        i++
+      ) {
+        uint16_t rawSample=
+          analogRead(
+            PH_PIN
+          );
+
+        uint32_t mvSample=
+          analogReadMilliVolts(
+            PH_PIN
+          );
+
+        Serial.print(
+          rawSample
+        );
+
+        Serial.print(
+          " | mV: "
+        );
+
+        Serial.print(
+          mvSample
+        );
+
+        if (
+          i<3
+        ) {
+          Serial.print(
+            "  |  "
+          );
+        }
+      }
+
+      Serial.println();
+    }
+
+    if (
+      millis()-tdsTestMillis>=1000
+    ) {
+
+      tdsTestMillis=
+        millis();
+
+      Serial.print(
+        "[TDS ADC TEST] GPIO34 RAW: "
+      );
+
+      for (
+        int i=0;
+        i<4;
+        i++
+      ) {
+        uint16_t rawSample=
+          analogRead(
+            TDS_PIN
+          );
+
+        uint32_t mvSample=
+          analogReadMilliVolts(
+            TDS_PIN
+          );
+
+        Serial.print(
+          rawSample
+        );
+
+        Serial.print(
+          " | mV: "
+        );
+
+        Serial.print(
+          mvSample
+        );
+
+        Serial.print(
+          " | Cal V: "
+        );
+
+        Serial.print(
+          mvSample/
+          1000.0f,
+          4
+        );
+
+        Serial.print(
+          " V"
+        );
+
+        if (
+          i<3
+        ) {
+          Serial.print(
+            "  |  "
+          );
+        }
+      }
+
+      Serial.println();
+    }
+
+    if (
+      millis()-phDebugMillis>=5000
+    ) {
+
+      phDebugMillis=
+        millis();
+
+      if (
+        phRaw > 0
+      ) {
+        Serial.println("[PH DEBUG]");
+        Serial.printf("RAW ADC: %d\n", phRaw);
+        Serial.printf("ADC mV: %lu\n", (unsigned long)phMilliVolts);
+        Serial.printf("Voltage: %.3f V\n", phVoltage);
+        Serial.printf("Demo pH: %.2f\n", phValue);
+      }
+    }
+
+    unsigned long lcdInterval=
+      (lcdScreen==4)
+        ?3000UL
+        :2500UL;
+
+    if (
+      millis()-lcdPreviousMillis
+      >=lcdInterval
+    ) {
+
+      lcdPreviousMillis=
+        millis();
+
+      if (!feederActive) {
+
+        switch (lcdScreen) {
+
+          case 0:
+            displayTemperature();
+            break;
+
+          case 1:
+            displayPH();
+            break;
+
+          case 2:
+            displayTurbidity();
+            break;
+
+          case 3:
+            displayTDS();
+            break;
+
+          case 4:
+            displayOverallStatus();
+            break;
+        }
+      }
+
+      lcdScreen=
+        (lcdScreen+1)%5;
+    }
+  }
+
+  // ========================
+  // SENSOR FUNCTIONS
+  // ========================
+
+  void readSensors() {
+
+    sensors.requestTemperatures();
+
+    temperatureC=
+      sensors.getTempCByIndex(0);
+
+    turbidityRaw=
+      getAverageAnalog(
+        TURBIDITY_PIN
+      );
+
+    tdsRaw=
+      getAverageAnalog(
+        TDS_PIN
+      );
+
+    phRaw=
+      getAverageAnalog(
+        PH_PIN
+      );
+
+    float turbidityVoltage=
+      turbidityRaw*
+      (3.3f/4095.0f);
+
+    turbidityNtu=
+      calibrateTurbidityNTU(
+        turbidityVoltage
+      );
+
+    uint32_t tdsMilliVolts=
+      analogReadMilliVolts(
+        TDS_PIN
+      );
+
+    float tdsVoltage=
+      tdsMilliVolts/
+      1000.0f;
+
+    tdsPpm=
+      calibrateTdsPPM(
+        tdsVoltage,
+        temperatureC
+      );
+
+    phMilliVolts=
+      analogReadMilliVolts(
+        PH_PIN
+      );
+
+    phVoltage=
+      phMilliVolts/
+      1000.0f;
+
+    phValue=
+      calculateDemoPH(
+        phVoltage
+      );
+
+    Serial.println(
+      "[TURBIDITY DEBUG]"
+    );
+
+    for (
+      int i=0;
+      i<4;
+      i++
+    ) {
+      uint16_t turbidityRawDirect=
+        analogRead(
+          TURBIDITY_PIN
+        );
+
+      uint32_t turbidityMv=
+        analogReadMilliVolts(
+          TURBIDITY_PIN
+        );
+
+      float turbidityVoltageDirect=
+        turbidityRawDirect*
+        (3.3f/4095.0f);
+
+      Serial.print(
+        "RAW: "
+      );
+
+      Serial.print(
+        turbidityRawDirect
+      );
+
+      Serial.print(
+        " | ADC mV: "
+      );
+
+      Serial.print(
+        turbidityMv
+      );
+
+      Serial.print(
+        " | Calculated voltage: "
+      );
+
+      Serial.print(
+        turbidityVoltageDirect,
+        4
+      );
+
+      Serial.print(
+        " V"
+      );
+
+      Serial.print(
+        " | Calculated NTU: "
+      );
+
+      Serial.print(
+        turbidityNtu,
+        2
+      );
+
+      if (
+        i<3
+      ) {
+        Serial.print(
+          "  |  "
+        );
+      }
+    }
+
+    Serial.println();
+
+    Serial.println(
+      "[TDS DEBUG]"
+    );
+
+    Serial.print(
+      "RAW: "
+    );
+
+    Serial.print(
+      tdsRaw
+    );
+
+    Serial.print(
+      " | ADC mV: "
+    );
+
+    Serial.print(
+      tdsMilliVolts
+    );
+
+    Serial.print(
+      " | Calculated voltage: "
+    );
+
+    Serial.print(
+      tdsVoltage,
+      4
+    );
+
+    Serial.print(
+      " | Temperature: "
+    );
+
+    Serial.print(
+      temperatureC,
+      2
+    );
+
+    Serial.print(
+      " | Calculated PPM: "
+    );
+
+    Serial.println(
+      tdsPpm,
+      2
+    );
+
+  }
+
+  int getAverageAnalog(
+    int pin
+  ) {
+
+    long total=0;
+
+    for (
+      int i=0;
+      i<10;
+      i++
+    ) {
+
+      total +=
+        analogRead(pin);
+
+      delay(1);
+    }
+
+    return total/10;
+  }
+
+  float calibrateTurbidityNTU(
+    float voltage
+  ) {
+
+    float estimatedNtu;
+
+    if (
+      voltage>=TURBIDITY_CLEAN_VOLTAGE
+    )
+      estimatedNtu=0.0f;
+
+    else if (
+      voltage>=TURBIDITY_5_NTU_VOLTAGE
+    )
+      estimatedNtu=
+        (TURBIDITY_CLEAN_VOLTAGE-voltage)*
+        (5.0f/(TURBIDITY_CLEAN_VOLTAGE-TURBIDITY_5_NTU_VOLTAGE));
+
+    else if (
+      voltage>=TURBIDITY_10_NTU_VOLTAGE
+    )
+      estimatedNtu=
+        5.0f+
+        (TURBIDITY_5_NTU_VOLTAGE-voltage)*
+        (5.0f/(TURBIDITY_5_NTU_VOLTAGE-TURBIDITY_10_NTU_VOLTAGE));
+
+    else
+      estimatedNtu=
+        10.0f+
+        (TURBIDITY_10_NTU_VOLTAGE-voltage)*
+        (5.0f/(TURBIDITY_5_NTU_VOLTAGE-TURBIDITY_10_NTU_VOLTAGE));
+
+    return constrain(
+      estimatedNtu,
+      0.0f,
+      3000.0f
+    );
+  }
+
+  float calibrateTdsPPM(
+    float voltage,
+    float temperature
+  ) {
+
+    if (
+      voltage<=0.0f
+    )
+      return 0.0f;
+
+    float compensationCoefficient=
+      1.0f+
+      0.02f*
+      (temperature-25.0f);
+
+    float compensatedVoltage=
+      voltage/
+      compensationCoefficient;
+
+    float tds=
+      (
+        133.42f*
+        compensatedVoltage*
+        compensatedVoltage*
+        compensatedVoltage
+
+        -
+        255.86f*
+        compensatedVoltage*
+        compensatedVoltage
+
+        +
+        857.39f*
+        compensatedVoltage
+      )*
+      0.5f;
+
+    return constrain(
+      tds,
+      0.0f,
+      3000.0f
+    );
+  }
+
+  // ========================
+  // EVALUATION
+  // ========================
+
+  void evaluateTemperature() {
+
+    if (
+      temperatureC==
+      DEVICE_DISCONNECTED_C
+    )
+      tempStatus=
+        "NO SENSOR";
+
+    else if (
+      temperatureC>=24 &&
+      temperatureC<=30
+    )
+      tempStatus=
+        "NORMAL";
+
+    else if (
+      temperatureC>30
+    )
+      tempStatus=
+        "HIGH";
+
+    else
+      tempStatus=
+        "LOW";
+  }
+
+  void evaluatePH() {
+
+    if (
+      phValue>=6.8f &&
+      phValue<=7.8f
+    )
+      phStatus=
+        "NORMAL";
+
+    else if (
+      (
+        phValue>=6.5f &&
+        phValue<6.8f
+      ) ||
+      (
+        phValue>7.8f &&
+        phValue<=8.5f
+      )
+    )
+      phStatus=
+        "WARNING";
+
+    else
+      phStatus=
+        "CRITICAL";
+  }
+
+  void evaluateTurbidity() {
+
+    if (
+      turbidityNtu<=5.0f
+    )
+      turbidityStatus=
+        "CLEAR";
+
+    else if (
+      turbidityNtu<=10.0f
+    )
+      turbidityStatus=
+        "MODERATE";
+
+    else
+      turbidityStatus=
+        "DIRTY";
+  }
+
+  void evaluateTDS() {
+
+    if (
+      tdsPpm<=400.0f
+    )
+      tdsStatus=
+        "NORMAL";
+
+    else if (
+      tdsPpm<=500.0f
+    )
+      tdsStatus=
+        "WARNING";
+
+    else
+      tdsStatus=
+        "HIGH";
+  }
+
+  void evaluateOverallStatus() {
+
+    if (
+      tempStatus=="NORMAL" &&
+      turbidityStatus=="CLEAR" &&
+      tdsStatus=="NORMAL" &&
+      phStatus=="NORMAL"
+    )
+      overallStatus=
+        "GOOD";
+
+    else if (
+      turbidityStatus=="DIRTY" ||
+      tdsStatus=="HIGH" ||
+      phStatus=="CRITICAL"
+    )
+      overallStatus=
+        "CRITICAL";
+
+    else
+      overallStatus=
+        "MONITOR";
+  }
+
+  // ========================
+  // SERIAL MONITOR
+  // ========================
+
+  void serialMonitorOutput() {
+
+    Serial.println(
+      "========== WATER DATA =========="
+    );
+
+    Serial.print(
+      "Temperature: "
+    );
+
+    Serial.print(
+      temperatureC,
+      1
+    );
+
+    Serial.print(
+      " C | "
+    );
+
+    Serial.println(
+      tempStatus
+    );
+
+    Serial.print(
+      "pH:          "
+    );
+
+    Serial.print(
+      phValue,
+      2
+    );
+
+    Serial.print(
+      "   | "
+    );
+
+    Serial.println(
+      phStatus
+    );
+
+    Serial.print(
+      "Turbidity:   "
+    );
+
+    Serial.print(
+      turbidityNtu,
+      1
+    );
+
+    Serial.print(
+      " NTU | "
+    );
+
+    Serial.println(
+      turbidityStatus
+    );
+
+    Serial.print(
+      "TDS:         "
+    );
+
+    Serial.print(
+      tdsPpm,
+      0
+    );
+
+    Serial.print(
+      " ppm | "
+    );
+
+    Serial.println(
+      tdsStatus
+    );
+
+    Serial.print(
+      "UV:          "
+    );
+
+    Serial.println(
+      uvState
+        ?"ON"
+        :"OFF"
+    );
+
+    Serial.print(
+      "LED:         "
+    );
+
+    Serial.println(
+      ledState
+        ?"ON"
+        :"OFF"
+    );
+
+    Serial.print(
+      "Demo Mode:   "
+    );
+
+    Serial.print(
+      demoMode
+        ?"ON"
+        :"OFF"
+    );
+
+    Serial.print(
+      " | Sim pH: "
+    );
+
+    Serial.println(
+      demoPhValue,
+      2
+    );
+
+    Serial.print(
+      "Syringe A:   "
+    );
+
+    Serial.print(
+      syringeARemainingML,
+      1
+    );
+
+    Serial.print(
+      "mL / "
+    );
+
+    Serial.print(
+      syringeACapacityML,
+      1
+    );
+
+    Serial.println(
+      "mL remaining"
+    );
+
+    Serial.print(
+      "Syringe B:   "
+    );
+
+    Serial.print(
+      syringeBRemainingML,
+      1
+    );
+
+    Serial.print(
+      "mL / "
+    );
+
+    Serial.print(
+      syringeBCapacityML,
+      1
+    );
+
+    Serial.println(
+      "mL remaining"
+    );
+
+    Serial.print(
+      "Feeder:      "
+    );
+
+    Serial.print(
+      feederActive
+        ?"FEEDING"
+        :"IDLE"
+    );
+
+    Serial.print(
+      " | Feeds: "
+    );
+
+    Serial.println(
+      feedCount
+    );
+
+    Serial.println(
+      "================================"
+    );
+  }
+
+  // ========================
+  // LCD DISPLAY
+  // ========================
+
+  void displayTemperature() {
+
+    lcd.clear();
+
+    lcd.setCursor(0,0);
+
+    lcd.print("Temp:");
+
+    lcd.print(
+      temperatureC,
+      1
+    );
+
+    lcd.print("C");
+
+    lcd.setCursor(0,1);
+
+    lcd.print(
+      tempStatus
+    );
+  }
+
+  void displayPH() {
+
+    lcd.clear();
+
+    lcd.setCursor(0,0);
+
+    lcd.print("pH:");
+
+    lcd.print(
+      phValue,
+      2
+    );
+
+    lcd.setCursor(0,1);
+
+    lcd.print(
+      phStatus
+    );
+  }
+
+  void displayTurbidity() {
+
+    lcd.clear();
+
+    lcd.setCursor(0,0);
+
+    lcd.print("Turb:");
+
+    lcd.print(
+      turbidityNtu,
+      1
+    );
+
+    lcd.print(
+      " NTU"
+    );
+
+    lcd.setCursor(0,1);
+
+    lcd.print(
+      turbidityStatus
+    );
+  }
+
+  void displayTDS() {
+
+    lcd.clear();
+
+    lcd.setCursor(0,0);
+
+    lcd.print("TDS:");
+
+    lcd.print(
+      tdsPpm,
+      0
+    );
+
+    lcd.print(
+      " ppm"
+    );
+
+    lcd.setCursor(0,1);
+
+    lcd.print(
+      tdsStatus
+    );
+  }
+
+  void displayOverallStatus() {
+
+    lcd.clear();
+
+    lcd.setCursor(0,0);
+
+    lcd.print(
+      "Water Status"
+    );
+
+    lcd.setCursor(0,1);
+
+    lcd.print(
+      overallStatus
+    );
+  }
