@@ -5,17 +5,32 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Alert, SensorReading, Tank
 from app.services.decision_engine import PARAMETERS
 from app.services.thresholds import effective_threshold_segments_by_tank
+from app.services.analytics_insights import AnalyticsInsightAccumulator
+
+
+WATER_QUALITY_BUCKET_SECONDS = 30 * 60
 
 
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _floor_bucket(value: datetime, bucket_seconds: int) -> datetime:
+    """Return the UTC clock boundary containing value."""
+    epoch = int(_aware(value).timestamp())
+    return datetime.fromtimestamp(epoch - epoch % bucket_seconds, tz=timezone.utc)
+
+
+def _overlapping_bucket_count(start: datetime, end: datetime, bucket_seconds: int) -> int:
+    aligned_start = _floor_bucket(start, bucket_seconds)
+    return max(0, ceil((end - aligned_start).total_seconds() / bucket_seconds))
 
 
 def _empty_accumulator() -> dict[str, Any]:
@@ -175,6 +190,14 @@ def build_fleet_analytics(
     duration = end - start
     previous_start = start - duration
     bucket_count = ceil(duration.total_seconds() / bucket_seconds)
+    water_quality_start = _floor_bucket(start, WATER_QUALITY_BUCKET_SECONDS)
+    previous_water_quality_start = _floor_bucket(previous_start, WATER_QUALITY_BUCKET_SECONDS)
+    water_quality_bucket_count = _overlapping_bucket_count(
+        start, end, WATER_QUALITY_BUCKET_SECONDS
+    )
+    previous_water_quality_bucket_count = _overlapping_bucket_count(
+        previous_start, start, WATER_QUALITY_BUCKET_SECONDS
+    )
     tank_stmt = select(Tank).order_by(Tank.name)
     if not include_retired:
         tank_stmt = tank_stmt.where(Tank.retired_at.is_(None))
@@ -182,6 +205,9 @@ def build_fleet_analytics(
     scope_tank_ids = {tank.id for tank in tanks}
     tank_names = {tank.id: tank.name for tank in tanks}
     selected = set(selected_tank_ids)
+    interpretation_ids = selected_tank_ids or [tank.id for tank in tanks]
+    interpretation = AnalyticsInsightAccumulator(start, end, tanks, selected_tank_ids,
+        effective_threshold_segments_by_tank(db, interpretation_ids, start, end))
 
     fleet_current: dict[int, dict[str, Any]] = {}
     fleet_previous: dict[int, dict[str, Any]] = {}
@@ -195,34 +221,70 @@ def build_fleet_analytics(
     previous_stats = {parameter: _empty_stat() for parameter in PARAMETERS}
     current_intervals: dict[int, set[int]] = defaultdict(set)
     previous_intervals: dict[int, set[int]] = defaultdict(set)
-    tank_bucket_presence: dict[int, set[int]] = defaultdict(set)
+    reporting_bucket_presence: dict[int, set[int]] = defaultdict(set)
 
     columns = [
         SensorReading.tank_id,
+        SensorReading.timestamp,
         SensorReading.received_at,
         *[getattr(SensorReading, parameter) for parameter in PARAMETERS],
+        SensorReading.device_id,
+        SensorReading.is_mock,
     ]
     rows = db.execute(
         select(*columns)
         .where(
-            SensorReading.received_at >= previous_start,
-            SensorReading.received_at < end,
+            or_(
+                and_(
+                    SensorReading.timestamp >= previous_start,
+                    SensorReading.timestamp < end,
+                ),
+                and_(
+                    SensorReading.received_at >= previous_start,
+                    SensorReading.received_at < end,
+                ),
+            ),
             SensorReading.tank_id.in_(scope_tank_ids),
         )
-        .order_by(SensorReading.received_at)
+        .order_by(SensorReading.timestamp, SensorReading.received_at)
         .execution_options(yield_per=5_000)
     )
     for row in rows:
         tank_id = int(row[0])
-        stamp = _aware(row[1])
+        observation_at = _aware(row[1])
+        received_at = _aware(row[2])
         values = {
-            parameter: float(row[index + 2]) if row[index + 2] is not None else None
+            parameter: float(row[index + 3]) if row[index + 3] is not None else None
             for index, parameter in enumerate(PARAMETERS)
         }
-        is_current = stamp >= start
-        period_start = start if is_current else previous_start
-        index = int((stamp - period_start).total_seconds() // bucket_seconds)
-        if index < 0 or index >= bucket_count:
+        interpretation.add(tank_id, observation_at, received_at, values, (row[-2], row[-1]))
+
+        # Reporting health describes when the backend accepted a report, even
+        # when that report contains a historical observation timestamp.
+        if previous_start <= received_at < end:
+            receipt_interval = int(received_at.timestamp() // 30)
+            if received_at >= start:
+                current_intervals[tank_id].add(receipt_interval)
+                reporting_index = int((received_at - start).total_seconds() // bucket_seconds)
+                if 0 <= reporting_index < bucket_count:
+                    reporting_bucket_presence[tank_id].add(reporting_index)
+            else:
+                previous_intervals[tank_id].add(receipt_interval)
+
+        # Water-quality history follows when the sensor observation occurred.
+        if not previous_start <= observation_at < end:
+            continue
+        is_current = observation_at >= start
+        period_start = water_quality_start if is_current else previous_water_quality_start
+        index = int(
+            (_floor_bucket(observation_at, WATER_QUALITY_BUCKET_SECONDS) - period_start)
+            .total_seconds()
+            // WATER_QUALITY_BUCKET_SECONDS
+        )
+        period_bucket_count = (
+            water_quality_bucket_count if is_current else previous_water_quality_bucket_count
+        )
+        if index < 0 or index >= period_bucket_count:
             continue
         target = fleet_current if is_current else fleet_previous
         accumulator = target.setdefault(index, _empty_accumulator())
@@ -237,10 +299,7 @@ def build_fleet_analytics(
                 value,
             )
 
-        interval = int(stamp.timestamp() // 30)
         if is_current:
-            current_intervals[tank_id].add(interval)
-            tank_bucket_presence[tank_id].add(index)
             diagnostic_accumulator = diagnostic_tank_current[tank_id].setdefault(
                 index, _empty_accumulator()
             )
@@ -252,8 +311,6 @@ def build_fleet_analytics(
                 tank_accumulator["count"] += 1
                 tank_accumulator["contributors"].add(tank_id)
                 _add_values(tank_accumulator, values)
-        else:
-            previous_intervals[tank_id].add(interval)
 
     stats: dict[str, dict[str, float | None]] = {}
     for parameter in PARAMETERS:
@@ -361,7 +418,7 @@ def build_fleet_analytics(
     gap_count = 0
     for tank in tanks:
         in_gap = False
-        presence = tank_bucket_presence[tank.id]
+        presence = reporting_bucket_presence[tank.id]
         for index in range(bucket_count):
             missing = index not in presence
             if missing and not in_gap:
@@ -415,21 +472,31 @@ def build_fleet_analytics(
             "start": start,
             "end": end,
             "bucket_seconds": bucket_seconds,
+            "water_quality_bucket_seconds": WATER_QUALITY_BUCKET_SECONDS,
             "timezone": "Asia/Manila",
         },
         "tanks": [{"id": tank.id, "name": tank.name, "lifecycle": tank.lifecycle} for tank in tanks],
         "fleet_series": _point_series(
-            fleet_current, start, bucket_seconds, bucket_count
+            fleet_current,
+            water_quality_start,
+            WATER_QUALITY_BUCKET_SECONDS,
+            water_quality_bucket_count,
         ),
         "previous_fleet_series": _point_series(
-            fleet_previous, previous_start, bucket_seconds, bucket_count
+            fleet_previous,
+            previous_water_quality_start,
+            WATER_QUALITY_BUCKET_SECONDS,
+            previous_water_quality_bucket_count,
         ),
         "tank_series": [
             {
                 "tank_id": tank_id,
                 "tank_name": tank_names[tank_id],
                 "series": _point_series(
-                    tank_current[tank_id], start, bucket_seconds, bucket_count
+                    tank_current[tank_id],
+                    water_quality_start,
+                    WATER_QUALITY_BUCKET_SECONDS,
+                    water_quality_bucket_count,
                 ),
             }
             for tank_id in selected_tank_ids
@@ -463,4 +530,5 @@ def build_fleet_analytics(
             else None,
             "primary_driver_by_metric": primary_driver_by_metric,
         },
+        "decision_support_insights": interpretation.finish(alert_events),
     }

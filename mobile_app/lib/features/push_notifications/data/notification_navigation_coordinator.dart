@@ -33,6 +33,13 @@ class NotificationNavigationCoordinator {
   var _processing = false;
   var _started = false;
   var _disposed = false;
+  var _navigationSuspended = false;
+
+  /// Console routes retain the existing pending-tap slot without changing delivery.
+  void setNavigationSuspended(bool suspended) {
+    _navigationSuspended = suspended;
+    if (!suspended) unawaited(_drainPendingIntent());
+  }
 
   void start() {
     if (_started || _disposed) return;
@@ -101,6 +108,7 @@ class NotificationNavigationCoordinator {
 
   Future<void> _drainPendingIntent() async {
     if (_disposed ||
+        _navigationSuspended ||
         _processing ||
         !_hasPendingIntent ||
         !_authenticatedShellReady ||

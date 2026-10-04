@@ -44,7 +44,7 @@ describe('alert history', () => {
 
   it('uses Mark handled wording and explains that it does not confirm recovery', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
-      if (path === '/fleet') return [];
+      if (path === '/fleet') return [{ id: 4, name: 'Tank Four' }];
       return [{
         id: 2,
         tank_id: 4,
@@ -67,7 +67,7 @@ describe('alert history', () => {
 
   it('renders an automatic resolution from the API', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
-      if (path === '/fleet') return [];
+      if (path === '/fleet') return [{ id: 4, name: 'Tank Four' }];
       return [{
         id: 1,
         tank_id: 4,
@@ -88,7 +88,7 @@ describe('alert history', () => {
 
   it('uses the global toast after an alert is marked as handled', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
-      if (path === '/fleet') return [];
+      if (path === '/fleet') return [{ id: 4, name: 'Tank Four' }];
       if (path === '/alerts/2/resolve') return {};
       return [{
         id: 2,

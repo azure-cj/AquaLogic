@@ -43,3 +43,4 @@ web/dist/
 web/.vite/
 web/tsconfig.tsbuildinfo
 web/.env
+.operator-review/

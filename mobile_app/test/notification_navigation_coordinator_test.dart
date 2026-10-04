@@ -10,6 +10,35 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'console suspends push navigation and resumes the retained tap once',
+    () async {
+      final auth = _FakeAuthService(AuthStatus.authenticated);
+      final push = _FakePushNotificationService();
+      final navigations = <PushNotificationIntent?>[];
+      final coordinator = NotificationNavigationCoordinator(
+        authService: auth,
+        pushNotificationService: push,
+        navigate: (intent) {
+          navigations.add(intent);
+          return true;
+        },
+      )..start();
+      coordinator.onAuthenticatedShellReady();
+      coordinator.setNavigationSuspended(true);
+      push.opens.add(_openEvent('water_quality_alert', '42'));
+      await Future<void>.delayed(Duration.zero);
+      expect(navigations, isEmpty);
+      coordinator.setNavigationSuspended(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(navigations.single?.recordId, '42');
+      coordinator.setNavigationSuspended(false);
+      expect(navigations, hasLength(1));
+      await coordinator.dispose();
+      await push.dispose();
+      auth.dispose();
+    },
+  );
+  test(
     'parses supported string-only event payloads and verifies event keys',
     () {
       final cases =

@@ -25,3 +25,82 @@ class AlertRead(BaseModel):
     @classmethod
     def normalize_timestamps(cls, value: datetime | None) -> datetime | None:
         return make_timestamp_explicit_utc(value)
+
+
+class AlertContextTank(BaseModel):
+    id: int
+    display_name: str
+    lifecycle: Literal["active", "retired"]
+
+
+class AlertContextReading(BaseModel):
+    reading_id: int
+    value: float | None
+    unit: str
+    observed_at: datetime
+    received_at: datetime
+    reporting_freshness: Literal["fresh", "stale"]
+
+
+class AlertContextThreshold(BaseModel):
+    parameter: str
+    unit: str
+    warning_min: float | None
+    warning_max: float | None
+    critical_min: float | None
+    critical_max: float | None
+    enabled: bool
+    source: Literal["tank", "global"]
+    updated_at: datetime | None
+
+    @field_validator("updated_at", mode="after")
+    @classmethod
+    def normalize_timestamp(cls, value: datetime | None) -> datetime | None:
+        return make_timestamp_explicit_utc(value)
+
+
+class OperatorGuidance(BaseModel):
+    code: str
+    direction: Literal["above", "below", "unavailable"]
+    explanation: str
+    checks: list[str]
+    advisory: str
+
+
+class SpeciesContextReading(BaseModel):
+    reading_id: int
+    observed_at: datetime
+    received_at: datetime
+
+
+class SpeciesContextRow(BaseModel):
+    species_id: int
+    name: str
+    stored_min: float | None
+    stored_max: float | None
+    result: Literal["within", "outside", "unavailable"]
+    reason: str
+
+
+class SpeciesContext(BaseModel):
+    parameter: str
+    basis: Literal["current_assignments_latest_reading"]
+    status: Literal["available", "unavailable", "unsupported"]
+    reason: str | None
+    reading: SpeciesContextReading | None
+    counts: dict[str, int]
+    species: list[SpeciesContextRow]
+    unit: str
+    advisory: str
+
+
+class AlertContextRead(BaseModel):
+    alert: AlertRead
+    tank: AlertContextTank
+    evaluated_at: datetime
+    linked_reading: AlertContextReading | None
+    linked_threshold: AlertContextThreshold | None
+    latest_reading: AlertContextReading | None
+    current_threshold: AlertContextThreshold | None
+    guidance: OperatorGuidance
+    species_context: SpeciesContext | None = None

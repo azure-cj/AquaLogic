@@ -116,11 +116,12 @@ def test_public_view_reports_stale_readings_without_leaking_private_ids(
 ):
     ensure_default_thresholds(db_session)
     tank = _create_tank(client, auth_headers, name="Stale Display")
+    observed_at = datetime.now(timezone.utc)
     db_session.add(
         SensorReading(
             tank_id=tank["id"],
-            timestamp=(stale_at := datetime.now(timezone.utc) - timedelta(minutes=10)),
-            received_at=stale_at,
+            timestamp=observed_at,
+            received_at=observed_at - timedelta(minutes=10),
             temperature=25.0,
             ph=7.1,
             turbidity=2.0,

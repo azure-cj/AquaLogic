@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:aqualogic/features/alerts/models/alert_context.dart';
 import 'package:aqualogic/app/theme/app_colors.dart';
 import 'package:aqualogic/features/alerts/data/alert_mutation_service.dart';
 import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
@@ -21,12 +23,16 @@ class AlertDetailScreen extends StatefulWidget {
     required this.snapshot,
     this.repository,
     this.onAlertResolved,
+    this.onOpenTank,
+    this.onOpenEquipment,
   });
 
   final AlertInfo alert;
   final SensorSnapshot snapshot;
   final AlertRepository? repository;
   final ValueChanged<AlertInfo>? onAlertResolved;
+  final ValueChanged<String>? onOpenTank;
+  final ValueChanged<String>? onOpenEquipment;
 
   @override
   State<AlertDetailScreen> createState() => _AlertDetailScreenState();
@@ -36,6 +42,46 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   late AlertInfo _alert = widget.alert;
   ApiFailure? _resolveFailure;
   bool _resolving = false;
+  AlertContext? _context;
+  bool _contextLoading = false;
+  bool _contextFailed = false;
+  int _contextRequest = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadContext());
+  }
+
+  Future<void> _loadContext() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final request = ++_contextRequest;
+    setState(() {
+      _contextLoading = true;
+      _contextFailed = false;
+    });
+    try {
+      final detail = await repository.loadAlertContext(
+        alertId: _alert.id,
+        snapshot: widget.snapshot,
+      );
+      if (!mounted || request != _contextRequest) return;
+      final lifecycleChanged = _alert.isActive && !detail.alert.isActive;
+      setState(() {
+        _context = detail;
+        _alert = detail.alert;
+        _contextLoading = false;
+      });
+      if (lifecycleChanged) widget.onAlertResolved?.call(detail.alert);
+    } catch (_) {
+      if (!mounted || request != _contextRequest) return;
+      setState(() {
+        _contextFailed = true;
+        _contextLoading = false;
+      });
+    }
+  }
 
   @override
   void didUpdateWidget(covariant AlertDetailScreen oldWidget) {
@@ -44,6 +90,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       _alert = widget.alert;
       _resolveFailure = null;
       _resolving = false;
+      _context = null;
+      unawaited(_loadContext());
     }
   }
 
@@ -160,12 +208,45 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                 ],
               ),
             ),
+            if (_contextLoading) const LinearProgressIndicator(),
+            if (_contextFailed)
+              SoftCard(
+                child: Column(
+                  children: [
+                    const Text('Alert context could not be loaded.'),
+                    TextButton(
+                      onPressed: _loadContext,
+                      child: const Text('Retry context'),
+                    ),
+                  ],
+                ),
+              ),
+            if (!_contextFailed && _context != null)
+              _ContextCard(detail: _context!),
+            if (widget.onOpenTank != null)
+              OutlinedButton(
+                onPressed: () => widget.onOpenTank!(_alert.tankId),
+                child: const Text('View tank'),
+              ),
+            if (widget.onOpenEquipment != null &&
+                _context?.tankLifecycle == 'active')
+              OutlinedButton(
+                onPressed: () => widget.onOpenEquipment!(_alert.tankId),
+                child: const Text('View equipment'),
+              ),
             if (_resolveFailure != null)
               _ResolveFailureNotice(failure: _resolveFailure!),
-            if (_alert.isActive && repository != null)
+            if (_alert.isActive &&
+                repository != null &&
+                _context?.tankLifecycle != 'retired')
               FilledButton.icon(
                 key: const ValueKey('alert-detail-mark-handled'),
-                onPressed: _resolving ? null : _confirmAndResolve,
+                onPressed:
+                    _resolving ||
+                        _contextLoading ||
+                        (_contextFailed && repository.isLiveData)
+                    ? null
+                    : _confirmAndResolve,
                 icon: _resolving
                     ? const SizedBox(
                         width: 17,
@@ -190,7 +271,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                   : _alert.lifecycle == AlertLifecycle.handled
                   ? 'An operator marked this alert handled. This acknowledges a response and does not confirm that the water condition recovered.'
                   : _alert.lifecycle == AlertLifecycle.resolvedAutomatically
-                  ? 'The backend resolved this alert automatically. That does not indicate an operator marked it handled.'
+                  ? 'The backend resolved this alert automatically, possibly after a normal reading or threshold disabling. This does not indicate an operator marked it handled and does not confirm water recovery.'
                   : 'The backend reports this alert as resolved. No additional resolution detail is available.',
               icon: _alert.isActive
                   ? LucideIcons.info
@@ -243,6 +324,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         _resolveFailure = null;
       });
       widget.onAlertResolved?.call(resolvedAlert);
+      await _loadContext();
       return;
     }
     setState(() {
@@ -373,4 +455,112 @@ class _AlertInfoRow extends StatelessWidget {
 String _tankInitial(String tankName) {
   final trimmed = tankName.trim();
   return trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
+}
+
+class _ContextCard extends StatelessWidget {
+  const _ContextCard({required this.detail});
+  final AlertContext detail;
+
+  Widget _reading(String label, AlertContextReading? reading) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      Text(
+        reading == null
+            ? 'Reading unavailable.'
+            : '${reading.value ?? 'Unavailable'} ${reading.unit} • Reading #${reading.id}',
+      ),
+      if (reading != null)
+        Text(
+          'Observed ${formatLocalTimestamp(reading.observedAt)}\nReceived ${formatLocalTimestamp(reading.receivedAt)}',
+        ),
+      const SizedBox(height: 12),
+    ],
+  );
+  Widget _bounds(String label, AlertContextThreshold? threshold) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      Text(
+        threshold == null
+            ? 'Bounds unavailable.'
+            : '${threshold.source == 'tank' ? 'Tank override' : 'Global default'} • ${threshold.enabled ? 'Enabled' : 'Currently disabled'}\nWarning bounds: ${threshold.warningMin ?? 'No lower bound'} – ${threshold.warningMax ?? 'No upper bound'} ${threshold.unit}\nCritical bounds: ${threshold.criticalMin ?? 'No lower bound'} – ${threshold.criticalMax ?? 'No upper bound'} ${threshold.unit}',
+      ),
+      const SizedBox(height: 12),
+    ],
+  );
+  @override
+  Widget build(BuildContext context) => SoftCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Tank ${detail.tankLifecycle}'),
+        _reading('Reading linked to this alert', detail.linkedReading),
+        _bounds('Associated historical bounds', detail.linkedThreshold),
+        const Text(
+          'Historical bounds are reconstructed at receipt time, not an immutable detection snapshot. Active alerts can link to subsequent abnormal readings.',
+        ),
+        const SizedBox(height: 12),
+        _reading('Latest received reading', detail.latestReading),
+        Text(
+          'Reporting ${detail.latestReading?.reportingFreshness ?? 'unavailable'}. Recent receipt does not prove the observation is current.',
+        ),
+        const SizedBox(height: 12),
+        _bounds('Current configured bounds', detail.currentThreshold),
+        if (detail.speciesContext case final species?) ...[
+          const Text(
+            'Stored species preferences',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Current assignments and latest received reading, including for historical alerts.',
+          ),
+          Text(
+            '${species.counts['assigned']} distinct species assigned • ${species.counts['evaluable']} evaluable • ${species.counts['within']} within • ${species.counts['outside']} outside • ${species.counts['unavailable']} unavailable',
+          ),
+          if (species.readingId != null)
+            Text(
+              'Reading #${species.readingId}\nObserved ${formatLocalTimestamp(species.observedAt!)}\nReceived ${formatLocalTimestamp(species.receivedAt!)}',
+            ),
+          if (species.reason != null)
+            Text(
+              'Comparison ${species.status}: ${species.reason!.replaceAll('_', ' ')}.',
+            ),
+          if (species.status == 'unsupported')
+            const Text(
+              'Stored species preferences do not support turbidity comparisons.',
+            ),
+          Material(
+            color: Colors.transparent,
+            child: ExpansionTile(
+              title: const Text('View individual stored preferences'),
+              children: [
+                for (final row in species.species)
+                  ListTile(
+                    title: Text(row.name),
+                    subtitle: Text(
+                      '${row.minimum ?? 'No lower bound'} – ${row.maximum ?? 'No upper bound'} ${species.unit}\n${row.result} • ${row.reason.replaceAll('_', ' ')}',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Text(species.advisory),
+          const SizedBox(height: 12),
+        ],
+        const Text(
+          'Suggested checks',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Text(detail.explanation),
+        for (final check in detail.checks)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('• $check'),
+          ),
+        const SizedBox(height: 12),
+        Text(detail.advisory),
+      ],
+    ),
+  );
 }

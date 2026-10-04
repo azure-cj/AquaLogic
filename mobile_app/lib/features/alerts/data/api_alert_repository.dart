@@ -1,3 +1,5 @@
+import 'package:aqualogic/features/alerts/data/alert_context_dto.dart';
+import 'package:aqualogic/features/alerts/models/alert_context.dart';
 import 'package:aqualogic/features/alerts/data/alert_api_models.dart';
 import 'package:aqualogic/features/alerts/data/mock_alert_repository.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
@@ -138,6 +140,30 @@ class ApiAlertRepository implements AlertRepository {
       }
       if (!page.hasNext) return null;
       pageNumber++;
+    }
+  }
+
+  @override
+  Future<AlertContext> loadAlertContext({
+    required String alertId,
+    required SensorSnapshot snapshot,
+  }) async {
+    final id = int.tryParse(alertId);
+    if (id == null || id <= 0) throw ApiFailure.fromStatus(404);
+    try {
+      final response = await apiClient.get(
+        '/alerts/$id/context',
+        authenticated: true,
+      );
+      final dto = AlertContextDto.fromJson(response.body);
+      if (dto.alert.id != id) {
+        throw const FormatException('Context alert ID mismatch.');
+      }
+      return dto.toDomain(
+        _mapAlert(dto.alert, {dto.alert.tankId: dto.tankName}),
+      );
+    } on FormatException {
+      throw _unreadable('alert context');
     }
   }
 

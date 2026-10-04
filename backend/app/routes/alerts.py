@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import require_staff
 from app.models import Alert, Tank, User
-from app.schemas.alert import AlertRead
+from app.schemas.alert import AlertRead, AlertContextRead
+from app.services.alert_context import build_alert_context
 from app.services.auth_security import audit_event
 from app.services.tank_lifecycle import require_active_tank, tank_or_404
 
@@ -18,6 +19,15 @@ def _get_alert_or_404(db: Session, alert_id: int) -> Alert:
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     return alert
+
+
+@router.get("/alerts/{alert_id}/context", response_model=AlertContextRead)
+def alert_context(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+) -> dict:
+    return build_alert_context(db, _get_alert_or_404(db, alert_id))
 
 
 @router.get("/alerts", response_model=list[AlertRead])

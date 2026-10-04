@@ -16,6 +16,37 @@ export function formatAnalyticsDate(value: string | number) {
   }).format(new Date(value));
 }
 
+export function formatAnalyticsBucketRange(
+  value: string | number,
+  bucketSeconds: number,
+  timezone = MANILA_TIMEZONE,
+) {
+  const start = new Date(value);
+  const end = new Date(start.getTime() + bucketSeconds * 1_000);
+  const dateKey = (date: Date) => new Intl.DateTimeFormat('en', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    timeZone: timezone,
+  }).format(date);
+  const startLabel = new Intl.DateTimeFormat('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(start);
+  const endLabel = new Intl.DateTimeFormat('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(end);
+  const endTime = new Intl.DateTimeFormat('en-PH', {
+    timeStyle: 'short',
+    timeZone: timezone,
+  }).format(end);
+
+  return `${startLabel} – ${dateKey(start) === dateKey(end) ? endTime : endLabel}`;
+}
+
 export function activeThreshold(
   segments: ThresholdSegment[],
   metric: MetricKey,
@@ -95,9 +126,15 @@ export function analyticsCsv(
     'critical_alerts',
   ];
   const rows: unknown[][] = [columns];
-  const alertBuckets = new Map(
-    data.alert_series.map((bucket) => [new Date(bucket.timestamp).getTime(), bucket]),
-  );
+  const alertBuckets = new Map<number, { warning: number; critical: number }>();
+  const bucketMilliseconds = data.window.water_quality_bucket_seconds * 1_000;
+  data.alert_events.forEach((event) => {
+    const eventTime = new Date(event.timestamp).getTime();
+    const bucketTime = Math.floor(eventTime / bucketMilliseconds) * bucketMilliseconds;
+    const bucket = alertBuckets.get(bucketTime) ?? { warning: 0, critical: 0 };
+    bucket[event.severity] += 1;
+    alertBuckets.set(bucketTime, bucket);
+  });
 
   const addSeries = (
     scope: string,

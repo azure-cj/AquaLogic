@@ -133,6 +133,7 @@ def test_alert_creation_enqueues_once_per_alert_identity(client, auth_headers, d
     assert events[0].source_id == str(alert.id)
     assert "Alert event lifecycle" in events[0].body
     assert "Temperature" in events[0].body
+    assert "details and suggested checks" in events[0].body
     assert _delivery_count(db_session, events[0].id) == 1
 
     # Escalation and later abnormal readings update this Alert identity only.

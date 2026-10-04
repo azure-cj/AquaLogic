@@ -1,19 +1,19 @@
 import { api } from '@/shared/api/client';
+import { DecisionSupportInsights, trendOverview } from './DecisionSupportInsights';
+import { AnalyticsResultsNotes, TankComparison } from './TankComparison';
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
   Panel,
-  Notice,
 } from '@/shared/components/admin-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
-  AlertTriangle,
-  CalendarRange,
   Download,
   Info,
   Layers3,
+  RefreshCw,
   Search,
 } from 'lucide-react';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
@@ -40,6 +40,7 @@ import {
   AnalyticsBucket,
   AnalyticsRange,
   AnalyticsResponse,
+  DecisionSupportCard,
   MetricKey,
   metricOptions,
   ThresholdSegment,
@@ -47,25 +48,22 @@ import {
 import {
   activeThreshold,
   analyticsCsv,
+  formatAnalyticsBucketRange,
   formatAnalyticsDate,
   MANILA_TIMEZONE,
   thresholdZones,
 } from './utils';
-
 const ranges: AnalyticsRange[] = ['24h', '7d', '30d', 'custom'];
 const buckets: AnalyticsBucket[] = ['auto', '15m', '1h', '6h', '1d'];
 const metrics = metricOptions.map((option) => option.key);
 const tankColors = ['#4169a1', '#8a6a3d', '#7659a5'];
 type VisibleMetricKey = (typeof metricOptions)[number]['key'];
-
 const localInputValue = (date: Date) => {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 };
-
 const validMetric = (value: string | null): value is VisibleMetricKey =>
   metrics.includes(value as VisibleMetricKey);
-
 const boundLabel = (
   minimum: number | null,
   maximum: number | null,
@@ -76,7 +74,6 @@ const boundLabel = (
   if (maximum != null) return `above ${maximum} ${unit}`;
   return 'not configured';
 };
-
 function InfoLabel({ label, explanation }: { label: string; explanation: string; }) {
   return (
     <span className="metric-label" title={explanation}>
@@ -84,7 +81,6 @@ function InfoLabel({ label, explanation }: { label: string; explanation: string;
     </span>
   );
 }
-
 function AlertMarker({
   cx,
   cy,
@@ -119,8 +115,7 @@ function AlertMarker({
     </g>
   );
 }
-
-type ChartRow = {
+export type ChartRow = {
   timestamp: number;
   fleet: number | null;
   previous: number | null;
@@ -128,8 +123,7 @@ type ChartRow = {
   samples: number;
   [key: `tank-${number}`]: number | null;
 };
-
-function chartRows(data: AnalyticsResponse, metric: MetricKey): ChartRow[] {
+export function chartRows(data: AnalyticsResponse, metric: MetricKey): ChartRow[] {
   return data.fleet_series.map((point, index) => {
     const row: ChartRow = {
       timestamp: new Date(point.timestamp).getTime(),
@@ -144,7 +138,6 @@ function chartRows(data: AnalyticsResponse, metric: MetricKey): ChartRow[] {
     return row;
   });
 }
-
 function chartDomain(
   rows: ChartRow[],
   metric: MetricKey,
@@ -175,22 +168,34 @@ function chartDomain(
   const padding = Math.max((maximum - minimum) * 0.12, Math.abs(maximum) * 0.03, 0.1);
   return [minimum - padding, maximum + padding] as [number, number];
 }
-
-function ChartTooltip({
+export function ChartTooltip({
   active,
   payload,
   label,
   unit,
+  bucketSeconds,
+  windowStart,
+  windowEnd,
+  timezone,
 }: {
   active?: boolean;
   payload?: Array<{ name: string; value: number | null; color?: string; payload?: ChartRow; }>;
   label?: number;
   unit: string;
+  bucketSeconds: number;
+  windowStart: string;
+  windowEnd: string;
+  timezone?: string;
 }) {
   if (!active || !payload?.length || label == null) return null;
+  const partialBucket =
+    label < new Date(windowStart).getTime() ||
+    label + bucketSeconds * 1_000 > new Date(windowEnd).getTime();
+  const contributors = payload[0]?.payload?.contributors ?? 0;
   return (
     <div className="analytics-tooltip analytics-trend-tooltip">
-      <strong>{formatAnalyticsDate(label)}</strong>
+      <strong>{formatAnalyticsBucketRange(label, bucketSeconds, timezone)}</strong>
+      {partialBucket && <span className="analytics-tooltip-note">Partial bucket in selected range</span>}
       {payload
         .filter((item) => item.value != null)
         .map((item) => (
@@ -200,13 +205,12 @@ function ChartTooltip({
           </span>
         ))}
       <small>
-        {payload[0]?.payload?.contributors ?? 0} contributing tank(s) ·{' '}
+        {contributors} contributing tank{contributors === 1 ? '' : 's'} ·{' '}
         {payload[0]?.payload?.samples ?? 0} samples
       </small>
     </div>
   );
 }
-
 function AlertChartTooltip({
   active,
   payload,
@@ -235,7 +239,6 @@ function AlertChartTooltip({
     </div>
   );
 }
-
 function ThresholdOverlays({
   segments,
   metric,
@@ -288,7 +291,6 @@ function ThresholdOverlays({
     </>
   );
 }
-
 function TrendChart({
   data,
   metric,
@@ -356,7 +358,15 @@ function TrendChart({
           tickFormatter={(value) => Number(value).toFixed(1)}
         />
         <Tooltip
-          content={<ChartTooltip unit={selected.unit} />}
+          content={
+            <ChartTooltip
+              unit={selected.unit}
+              bucketSeconds={data.window.water_quality_bucket_seconds}
+              windowStart={data.window.start}
+              windowEnd={data.window.end}
+              timezone={data.window.timezone}
+            />
+          }
           cursor={{ stroke: '#58747d', strokeWidth: 1.25, strokeDasharray: '3 3' }}
           offset={6}
           isAnimationActive={false}
@@ -418,7 +428,6 @@ function TrendChart({
     </ResponsiveContainer>
   );
 }
-
 function MetricPreview({
   data,
   metric,
@@ -464,11 +473,11 @@ function MetricPreview({
     </button>
   );
 }
-
 export default function AnalyticsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tankSearch, setTankSearch] = useState('');
+  const [selectedFinding, setSelectedFinding] = useState<DecisionSupportCard | null>(null);
   const range = ranges.includes(searchParams.get('range') as AnalyticsRange)
     ? searchParams.get('range') as AnalyticsRange
     : '24h';
@@ -491,8 +500,14 @@ export default function AnalyticsPage() {
     .slice(0, 3);
   const defaultEnd = localInputValue(new Date());
   const defaultStart = localInputValue(new Date(Date.now() - 86_400_000));
-  const customStart = searchParams.get('start') ?? defaultStart;
-  const customEnd = searchParams.get('end') ?? defaultEnd;
+  const inputFromUrl = (value: string | null, fallback: string) => {
+    if (!value) return fallback;
+    const parsed = new Date(value);
+    if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || !Number.isFinite(parsed.getTime())) return value;
+    return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 23);
+  };
+  const customStart = inputFromUrl(searchParams.get('start'), defaultStart);
+  const customEnd = inputFromUrl(searchParams.get('end'), defaultEnd);
   const selectedDurationSeconds = range === 'custom'
     ? (new Date(customEnd).getTime() - new Date(customStart).getTime()) / 1_000
     : { '24h': 86_400, '7d': 604_800, '30d': 2_592_000 }[range];
@@ -507,7 +522,6 @@ export default function AnalyticsPage() {
       selectedDurationSeconds > 0 &&
       Math.ceil(selectedDurationSeconds / selectedBucketSeconds) <= 1_000
     );
-
   const tanksQuery = useQuery({
     queryKey: ['analytics-tanks'],
     queryFn: () => api<Array<{ id: number; name: string; }>>('/tanks'),
@@ -516,7 +530,6 @@ export default function AnalyticsPage() {
   const selectedTankIds = tanksQuery.isSuccess
     ? rawTankIds.filter((tankId) => knownTankIds.has(tankId))
     : rawTankIds;
-
   const setState = (changes: Record<string, string | null>) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -527,7 +540,6 @@ export default function AnalyticsPage() {
       return next;
     }, { replace: true });
   };
-
   useEffect(() => {
     if (!tanksQuery.isSuccess) return;
     const normalized = selectedTankIds.join(',');
@@ -537,7 +549,6 @@ export default function AnalyticsPage() {
   // setState intentionally reads the latest URL state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tanksQuery.isSuccess, selectedTankIds.join(','), rawTankIds.join(',')]);
-
   useEffect(() => {
     const changes: Record<string, string | null> = {};
     if (searchParams.has('range') && !ranges.includes(searchParams.get('range') as AnalyticsRange)) {
@@ -557,7 +568,6 @@ export default function AnalyticsPage() {
   // Normalize only when parsed URL state changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, bucket, metric, compareMetric, validBucket]);
-
   const requestQuery = useMemo(() => {
     const params = new URLSearchParams({ range, bucket });
     if (range === 'custom') {
@@ -569,7 +579,6 @@ export default function AnalyticsPage() {
     selectedTankIds.forEach((tankId) => params.append('tank_id', String(tankId)));
     return params.toString();
   }, [range, bucket, customStart, customEnd, selectedTankIds.join(',')]);
-
   const validCustomRange =
     range !== 'custom' ||
     (
@@ -589,7 +598,6 @@ export default function AnalyticsPage() {
   const hasAnyReadings = data?.fleet_series.some((point) =>
     metrics.some((key) => point.values[key] != null),
   ) ?? false;
-
   const openAlert = (event: AnalyticsAlert) => {
     const timestamp = new Date(event.timestamp);
     const after = new Date(timestamp.getTime() - 15 * 60_000).toISOString();
@@ -600,14 +608,12 @@ export default function AnalyticsPage() {
       `&created_before=${encodeURIComponent(before)}`,
     );
   };
-
   const toggleTank = (tankId: number) => {
     const next = selectedTankIds.includes(tankId)
       ? selectedTankIds.filter((value) => value !== tankId)
       : [...selectedTankIds, tankId].slice(0, 3);
     setState({ tanks: next.join(',') || null });
   };
-
   const exportData = () => {
     if (!data || !hasAnyReadings) return;
     const content = analyticsCsv(data, compareMetric ? [metric, compareMetric] : [metric]);
@@ -620,10 +626,6 @@ export default function AnalyticsPage() {
     anchor.click();
     URL.revokeObjectURL(url);
   };
-
-  const lowest = data?.uptime.find(
-    (item) => item.tank_id === data.insights.lowest_uptime_tank_id,
-  );
   const driverId = data?.insights.primary_driver_by_metric[metric];
   const driver = data?.tanks.find((tank) => tank.id === driverId);
   const metricChange = stats?.absolute_change;
@@ -634,25 +636,39 @@ export default function AnalyticsPage() {
         new Date(new Date(data.window.end).getTime() - 1).toISOString(),
       )
     : undefined;
-
   return (
     <section className="analytics-page">
       <PageHeader
         eyebrow="Performance"
         title="Fleet analytics"
-        description="Diagnose water-quality trends, threshold events, and reporting health."
+        description="Review water-quality trends, notable changes, and data availability."
         actions={
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={exportData}
-            disabled={!hasAnyReadings}
-          >
-            <Download size={16} /> Export CSV
-          </button>
+          <div className="analytics-page-actions">
+            {query.dataUpdatedAt > 0 && (
+              <span className="analytics-updated-at" aria-live="polite">
+                Updated at {formatAnalyticsDate(query.dataUpdatedAt)}
+              </span>
+            )}
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => void query.refetch()}
+              disabled={!data || query.isFetching || !validCustomRange || !validBucket}
+              aria-label="Refresh analytics"
+            >
+              <RefreshCw size={16} aria-hidden="true" /> Refresh
+            </button>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={exportData}
+              disabled={!hasAnyReadings}
+            >
+              <Download size={16} /> Export CSV
+            </button>
+          </div>
         }
       />
-
       <Panel className="analytics-controls">
         <div className="analytics-control-grid">
           <label className="field">
@@ -675,7 +691,7 @@ export default function AnalyticsPage() {
             </select>
           </label>
           <label className="field">
-            <span>Resolution</span>
+            <span>Alert and reporting chart intervals</span>
             <select
               value={bucket}
               onChange={(event) =>
@@ -764,6 +780,7 @@ export default function AnalyticsPage() {
               <span>From</span>
               <input
                 type="datetime-local"
+                step="any"
                 value={customStart}
                 onChange={(event) => setState({ start: event.target.value })}
               />
@@ -772,6 +789,7 @@ export default function AnalyticsPage() {
               <span>To</span>
               <input
                 type="datetime-local"
+                step="any"
                 value={customEnd}
                 onChange={(event) => setState({ end: event.target.value })}
               />
@@ -782,26 +800,6 @@ export default function AnalyticsPage() {
           </div>
         )}
       </Panel>
-
-      <div className="metric-tabs" role="tablist" aria-label="Water quality metric">
-        {metricOptions.map((option) => (
-          <button
-            key={option.key}
-            role="tab"
-            aria-selected={metric === option.key}
-            className={metric === option.key ? 'active' : ''}
-            onClick={() =>
-              setState({
-                metric: option.key === 'temperature' ? null : option.key,
-                compare: compareMetric === option.key ? null : compareMetric,
-              })
-            }
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
       {!validCustomRange ? (
         <Panel>
           <EmptyState
@@ -821,21 +819,39 @@ export default function AnalyticsPage() {
         </Panel>
       ) : data ? (
         <>
-          {data.thresholds_vary_by_tank && (
-            <Notice tone="warning">
-              Effective thresholds vary by tank. Shared threshold bands are hidden for this view; select one tank to see its historical threshold bands.
-            </Notice>
-          )}
-          {data.threshold_scope === 'tank' && data.threshold_tank_id != null && (
-            <Notice>
-              Threshold bands show the effective history for {data.tanks.find((tank) => tank.id === data.threshold_tank_id)?.name ?? 'the selected tank'}; the fleet average remains visible for context.
-            </Notice>
-          )}
+          <div className={`analytics-overview${data.decision_support_insights ? '' : ' analytics-overview-no-findings'}`}>
+          <div className="analytics-chart-column">
+          <Panel
+            title={`${selected.label} trend`}
+            description={`Fleet average and selected tanks · ${selected.unit} · readings grouped every ${data.window.water_quality_bucket_seconds / 60} minutes`}
+            className="chart-panel main-trend-panel"
+            action={
+              <div className="metric-tabs" role="tablist" aria-label="Water quality metric">
+                      {metricOptions.map((option) => (
+                        <button
+                          key={option.key}
+                          role="tab"
+                          aria-selected={metric === option.key}
+                          className={metric === option.key ? 'active' : ''}
+                          onClick={() =>
+                            setState({
+                              metric: option.key === 'temperature' ? null : option.key,
+                              compare: compareMetric === option.key ? null : compareMetric,
+                            })
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+            }
+          >
+          <p className="analytics-operator-summary">{trendOverview(data.decision_support_insights, metric)}</p>
           <div className="analytics-stats">
             <div>
               <InfoLabel
                 label="Fleet average"
-                explanation="Average of all readings reported by all tanks in this period."
+                explanation="Average of readings observed across all tanks during this period."
               />
               <strong>{stats?.average?.toFixed(2) ?? '—'} <em>{selected.unit}</em></strong>
               {showPrevious && (
@@ -858,25 +874,14 @@ export default function AnalyticsPage() {
               />
               <strong>{stats?.maximum?.toFixed(2) ?? '—'} <em>{selected.unit}</em></strong>
             </div>
-            <div>
-              <InfoLabel
-                label="Reporting uptime"
-                explanation="Unique 30-second reporting intervals divided by expected intervals."
-              />
-              <strong>{data.uptime_comparison.current.toFixed(1)}%</strong>
-              <em className={data.uptime_comparison.change < 0 ? 'trend-down' : 'trend-up'}>
-                {data.uptime_comparison.change < 0 ? '↓' : '↑'}{' '}
-                {Math.abs(data.uptime_comparison.change).toFixed(1)}% vs previous
-              </em>
-            </div>
           </div>
-
-          <Panel
-            title={`${selected.label} trend`}
-            description={`Fleet context and selected tanks · ${selected.unit}`}
-            className="chart-panel main-trend-panel"
-            action={
-              <div className="chart-legend" aria-label="Trend chart legend">
+            <TrendChart
+              data={data}
+              metric={metric}
+              showPrevious={showPrevious}
+              onAlert={openAlert}
+            />
+            <div className="analytics-trend-legend-footer"><div className="chart-legend" aria-label="Trend chart legend">
                 <span><i className="legend-line fleet-line" /> Fleet average</span>
                 <span title="Configured warning bounds active at the end of this period">
                   <i className="legend-zone warning-zone" />
@@ -904,17 +909,32 @@ export default function AnalyticsPage() {
                 </span>
                 <span><i className="legend-dot warning-dot" /> Warning alert</span>
                 <span><i className="legend-dot critical-dot" /> Critical alert</span>
-              </div>
-            }
-          >
-            <TrendChart
-              data={data}
-              metric={metric}
-              showPrevious={showPrevious}
-              onAlert={openAlert}
-            />
+              </div></div>
+          {data.thresholds_vary_by_tank && (
+            <p className="analytics-threshold-note">
+              Configured ranges differ by tank. Select one tank to see the range history on the graph.
+            </p>
+          )}
+          {data.threshold_scope === 'tank' && data.threshold_tank_id != null && (
+            <p className="analytics-threshold-note">
+              The graph shows the configured range history for {data.tanks.find((tank) => tank.id === data.threshold_tank_id)?.name ?? 'the selected tank'}; the fleet average remains visible for context.
+            </p>
+          )}
+          <div className="analytics-chart-context">
+            {metricChange != null && <span>{selected.label} {metricChange >= 0 ? 'up' : 'down'} {Math.abs(metricChange).toFixed(2)} {selected.unit} vs previous period{stats?.percent_change != null ? ` (${Math.abs(stats.percent_change).toFixed(1)}%)` : ''}.</span>}
+            {driver && <span>Largest {selected.label.toLowerCase()} deviation: {driver.name}.</span>}
+          </div>
           </Panel>
-
+          </div>
+          <DecisionSupportInsights insights={data.decision_support_insights} metric={metric} onEvidence={(card) => {
+            setSelectedFinding({ ...card });
+            document.querySelector('.tank-comparison-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }} />
+          </div>
+          <TankComparison data={data} metric={metric} selectedFinding={selectedFinding} onGraph={(tankId, parameter) => {
+            setState({ tanks: String(tankId), metric: parameter, compare: null });
+            document.querySelector('.main-trend-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }} />
           {compareMetric && (
             <Panel
               title={`${metricOptions.find((item) => item.key === compareMetric)!.label} comparison`}
@@ -930,64 +950,9 @@ export default function AnalyticsPage() {
               />
             </Panel>
           )}
-
-          <div className="metric-previews" aria-label="Other water-quality parameters">
-            {metricOptions
-              .filter((option) => option.key !== metric)
-              .map((option) => (
-                <MetricPreview
-                  key={option.key}
-                  data={data}
-                  metric={option.key}
-                  onSelect={() =>
-                    setState({
-                      metric: option.key === 'temperature' ? null : option.key,
-                      compare: compareMetric === option.key ? metric : compareMetric,
-                    })
-                  }
-                />
-              ))}
-          </div>
-
-          <Panel
-            title="Operational insight"
-            description="Deterministic summary of the selected period"
-            className="insight-panel"
-          >
-            <div className="insight-grid">
-              <div>
-                <AlertTriangle size={18} aria-hidden="true" />
-                <strong>{data.insights.alert_count}</strong>
-                <span>threshold alert{data.insights.alert_count === 1 ? '' : 's'}</span>
-              </div>
-              <div>
-                <CalendarRange size={18} aria-hidden="true" />
-                <strong>{data.insights.reporting_gap_count}</strong>
-                <span>contiguous reporting gap{data.insights.reporting_gap_count === 1 ? '' : 's'}</span>
-              </div>
-              <div>
-                <strong>{lowest?.tank_name ?? 'Insufficient data'}</strong>
-                <span>{lowest ? `lowest uptime at ${lowest.uptime}%` : 'no reporting tank to rank'}</span>
-              </div>
-              <div>
-                <strong>{driver?.name ?? 'Insufficient data'}</strong>
-                <span>{driver ? `largest ${selected.label.toLowerCase()} deviation` : 'no tank variance available'}</span>
-              </div>
-            </div>
-            {metricChange != null && (
-              <p className="period-comparison">
-                {selected.label} changed {metricChange >= 0 ? 'up' : 'down'} by{' '}
-                {Math.abs(metricChange).toFixed(2)} {selected.unit} from the previous period
-                {stats?.percent_change != null
-                  ? ` (${Math.abs(stats.percent_change).toFixed(1)}%)`
-                  : ''}.
-              </p>
-            )}
-          </Panel>
-
           <div className="analytics-grid">
             <Panel
-              title="Alert frequency"
+              title="Alert activity"
               description={`${data.alert_counts.warning} warning · ${data.alert_counts.critical} critical`}
               className="chart-panel"
               action={
@@ -1026,41 +991,36 @@ export default function AnalyticsPage() {
                 <EmptyState title="No alerts" message="No alerts were recorded in this range." />
               )}
             </Panel>
-            <Panel
-              title="Tank reporting uptime"
-              description="Lowest uptime first · unique 30-second intervals"
-            >
-              <div className="uptime-list">
-                {data.uptime.map((item) => (
-                  <Link
-                    className={`uptime-row uptime-${item.status}`}
-                    key={item.tank_id}
-                    to={`/admin/tanks?tank_id=${item.tank_id}`}
-                  >
-                    <span className="uptime-value-row">
-                      <strong>{item.tank_name}</strong>
-                      <small>{item.uptime}%</small>
-                    </span>
-                    <span
-                      className="progress-track"
-                      role="progressbar"
-                      aria-label={`${item.tank_name} reporting uptime`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={item.uptime}
-                    >
-                      <i style={{ width: `${item.uptime}%` }} />
-                    </span>
-                    <span className="uptime-detail">
-                      <b>{item.status.replace('_', ' ')}</b>
-                      {item.reported_intervals.toLocaleString()} of{' '}
-                      {item.expected_intervals.toLocaleString()} intervals
-                    </span>
-                  </Link>
-                ))}
-              </div>
+            <Panel title="Data availability" description="Fleet reporting completeness">
+              <p className="analytics-operator-summary">{!data.uptime.length ? 'No reporting data available.' : data.uptime.every((item) => item.status === 'healthy') ? 'Reporting was mostly complete during this period.' : 'Reporting was incomplete for some tanks during this period.'}</p>
+              <p className="analytics-context-note">Missing reports can leave gaps in the water-quality picture.</p>
+              <p className="analytics-fleet-availability"><strong>{data.uptime_comparison.current.toFixed(1)}%</strong> of expected reporting received across the fleet</p>
+              <button className="analytics-text-action reporting-more" onClick={() => {
+                document.getElementById('comparison-tab-reporting')?.click();
+                document.querySelector('.tank-comparison-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}>View reporting details</button>
             </Panel>
           </div>
+          <details className="analytics-other-metrics"><summary>Other water-quality parameters</summary>
+          <div className="metric-previews" aria-label="Other water-quality parameters">
+            {metricOptions
+              .filter((option) => option.key !== metric)
+              .map((option) => (
+                <MetricPreview
+                  key={option.key}
+                  data={data}
+                  metric={option.key}
+                  onSelect={() =>
+                    setState({
+                      metric: option.key === 'temperature' ? null : option.key,
+                      compare: compareMetric === option.key ? metric : compareMetric,
+                    })
+                  }
+                />
+              ))}
+          </div>
+          </details>
+          <AnalyticsResultsNotes data={data} metric={metric} />
         </>
       ) : null}
     </section>

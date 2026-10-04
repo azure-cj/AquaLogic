@@ -1,6 +1,6 @@
 # Water Suitability
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-10-02
 Status: Implemented advisory water-only evaluation with deferred metrics excluded
 
 ## 1. Purpose
@@ -106,3 +106,15 @@ The approved public species projection is documented in
 - Per-species severity calibration beyond the current three statuses.
 - Persisted suitability history or suitability alerts.
 - Notification delivery or recommendation automation.
+
+## Supplementary alert species context (M2, 2026-10-02)
+
+Alert investigation now includes optional current-assignment species context
+for its parameter and latest received reading, including historical/retired
+alerts. It reuses individual comparison logic but adds observation freshness
+and a five-second future clock tolerance to this display only. The existing
+suitability endpoint is unchanged. Stored preferences are advisory and never
+merged into operational thresholds or new alerts/push. Web and mobile show
+distinct-species counts and expandable stored bounds; absent fields remain
+readable. See [M2/M3 implementation](../../M2_M3_IMPLEMENTATION.md) for reasons,
+exact gates and evidence.

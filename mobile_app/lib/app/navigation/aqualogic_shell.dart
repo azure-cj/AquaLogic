@@ -1,3 +1,5 @@
+import 'package:aqualogic/app/control/equipment_repository_scope.dart';
+import 'package:aqualogic/features/control/screens/equipment_screen.dart';
 import 'dart:async';
 
 import 'package:aqualogic/app/theme/app_colors.dart';
@@ -108,6 +110,8 @@ class AquaLogicShellState extends State<AquaLogicShell> {
         snapshot: _snapshot,
         repository: widget.alertRepository,
         onAlertResolved: _alertResolved,
+        onOpenTank: _openTankDetails,
+        onOpenEquipment: _openAlertEquipment,
         refreshTrigger: _alertRefreshTrigger,
       ),
       MoreScreen(snapshot: _snapshot, user: widget.user),
@@ -328,6 +332,40 @@ class AquaLogicShellState extends State<AquaLogicShell> {
     }
   }
 
+  Future<void> _openAlertEquipment(String tankId) async {
+    final equipment = EquipmentRepositoryScope.maybeOf(context);
+    if (equipment == null) {
+      _showHomeDestinationNotice('Equipment is unavailable.');
+      return;
+    }
+    try {
+      final tank = await widget.tankRepository.loadTankDetail(
+        tankId,
+        snapshot: _snapshot,
+      );
+      if (!mounted) return;
+      if (tank.isRetired) {
+        _showHomeDestinationNotice(
+          'Equipment is unavailable for a retired tank.',
+        );
+        return;
+      }
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => EquipmentScreen(
+            tank: tank,
+            user: widget.user,
+            repository: equipment,
+          ),
+        ),
+      );
+    } on ApiFailure catch (failure) {
+      _showHomeDestinationNotice(failure.message);
+    } catch (_) {
+      _showHomeDestinationNotice('Equipment could not be loaded. Retry.');
+    }
+  }
+
   Future<void> _openAlertDetail(AlertInfo alert) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -336,6 +374,8 @@ class AquaLogicShellState extends State<AquaLogicShell> {
           snapshot: _snapshot,
           repository: widget.alertRepository,
           onAlertResolved: _alertResolved,
+          onOpenTank: _openTankDetails,
+          onOpenEquipment: _openAlertEquipment,
         ),
       ),
     );
@@ -352,6 +392,8 @@ class AquaLogicShellState extends State<AquaLogicShell> {
         initialReferenceId: referenceId,
         initialStream: stream,
         onAlertResolved: _alertResolved,
+        onOpenTank: _openTankDetails,
+        onOpenEquipment: _openAlertEquipment,
         refreshTrigger: _alertRefreshTrigger,
       ),
     ),

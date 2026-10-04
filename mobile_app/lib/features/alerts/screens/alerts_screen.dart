@@ -29,6 +29,8 @@ class AlertsScreen extends StatefulWidget {
     this.initialStream = AlertStream.waterQuality,
     this.initialView = AlertView.active,
     this.onAlertResolved,
+    this.onOpenTank,
+    this.onOpenEquipment,
     this.refreshTrigger = 0,
   });
 
@@ -38,6 +40,8 @@ class AlertsScreen extends StatefulWidget {
   final AlertStream initialStream;
   final AlertView initialView;
   final ValueChanged<AlertInfo>? onAlertResolved;
+  final ValueChanged<String>? onOpenTank;
+  final ValueChanged<String>? onOpenEquipment;
   final int refreshTrigger;
 
   @override
@@ -62,6 +66,8 @@ class _AlertsScreenState extends State<AlertsScreen>
   String? _referenceMessage;
   String? _resolvingAlertId;
   DateTime? _lastSuccessfulLoadAt;
+  Future<void>? _refreshInFlight;
+  var _refreshingPage = false;
 
   @override
   void initState() {
@@ -248,7 +254,20 @@ class _AlertsScreenState extends State<AlertsScreen>
     }
   }
 
-  Future<void> _refreshLoaded() async {
+  Future<void> _refreshLoaded() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final refresh = _performLoadedRefresh();
+    _refreshInFlight = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_refreshInFlight, refresh)) _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _performLoadedRefresh() async {
+    if (!mounted) return;
+    setState(() => _refreshingPage = true);
     final requests = <Future<void>>[
       _loadWaterQuality(history: false),
       _loadMonitoring(history: false),
@@ -261,7 +280,11 @@ class _AlertsScreenState extends State<AlertsScreen>
         _view == AlertView.history && _stream == AlertStream.monitoring) {
       requests.add(_loadMonitoring(history: true));
     }
-    await Future.wait(requests);
+    try {
+      await Future.wait(requests);
+    } finally {
+      if (mounted) setState(() => _refreshingPage = false);
+    }
   }
 
   Future<void> _retryCurrent() => _stream == AlertStream.waterQuality
@@ -306,6 +329,13 @@ class _AlertsScreenState extends State<AlertsScreen>
               .where((alert) => alert.severity == AlertSeverity.warning)
               .length
         : null;
+    final refreshingSelectedCollection =
+        water.refreshing || monitoring.refreshing;
+    final refreshLabel = _refreshingPage
+        ? 'Refreshing alerts and monitoring data'
+        : _stream == AlertStream.waterQuality
+        ? 'Refreshing water-quality alerts'
+        : 'Refreshing monitoring incidents';
 
     return Scaffold(
       // Alerts is rendered both inside the authenticated shell and as a
@@ -321,6 +351,13 @@ class _AlertsScreenState extends State<AlertsScreen>
         ),
         onRefresh: _refreshLoaded,
         children: [
+          if (_refreshingPage || refreshingSelectedCollection)
+            _AlertsRefreshingNotice(
+              label: refreshLabel,
+              detail: _refreshingPage
+                  ? 'Showing the last loaded results while updates arrive.'
+                  : 'Showing the last loaded results while this source updates.',
+            ),
           _AlertSummary(
             criticalCount: criticalCount,
             warningCount: warningCount,
@@ -354,7 +391,6 @@ class _AlertsScreenState extends State<AlertsScreen>
             _WaterQualityList(
               alerts: water.items,
               loading: water.loading,
-              refreshing: water.refreshing,
               loaded: water.loaded,
               failure: water.failure,
               showHistory: _view == AlertView.history,
@@ -367,7 +403,6 @@ class _AlertsScreenState extends State<AlertsScreen>
             _MonitoringList(
               incidents: monitoring.items,
               loading: monitoring.loading,
-              refreshing: monitoring.refreshing,
               loaded: monitoring.loaded,
               failure: monitoring.failure,
               showHistory: _view == AlertView.history,
@@ -550,6 +585,8 @@ class _AlertsScreenState extends State<AlertsScreen>
           snapshot: widget.snapshot,
           repository: _repository,
           onAlertResolved: _recordResolvedAlert,
+          onOpenTank: widget.onOpenTank,
+          onOpenEquipment: widget.onOpenEquipment,
         ),
       ),
     );
@@ -876,7 +913,6 @@ class _WaterQualityList extends StatelessWidget {
   const _WaterQualityList({
     required this.alerts,
     required this.loading,
-    required this.refreshing,
     required this.loaded,
     required this.failure,
     required this.showHistory,
@@ -888,7 +924,6 @@ class _WaterQualityList extends StatelessWidget {
 
   final List<AlertInfo> alerts;
   final bool loading;
-  final bool refreshing;
   final bool loaded;
   final ApiFailure? failure;
   final bool showHistory;
@@ -908,7 +943,6 @@ class _WaterQualityList extends StatelessWidget {
     if (loaded && alerts.isEmpty) {
       return Column(
         children: [
-          if (refreshing) const _InlineRefreshingNotice(),
           EmptyState(
             title: showHistory
                 ? 'No alert history yet.'
@@ -925,7 +959,6 @@ class _WaterQualityList extends StatelessWidget {
     }
     return Column(
       children: [
-        if (refreshing) const _InlineRefreshingNotice(),
         if (failure != null)
           _SourceFailureNotice(message: failure!.message, onRetry: onRetry),
         for (var index = 0; index < alerts.length; index++) ...[
@@ -953,7 +986,6 @@ class _MonitoringList extends StatelessWidget {
   const _MonitoringList({
     required this.incidents,
     required this.loading,
-    required this.refreshing,
     required this.loaded,
     required this.failure,
     required this.showHistory,
@@ -969,7 +1001,6 @@ class _MonitoringList extends StatelessWidget {
 
   final List<MonitoringIncident> incidents;
   final bool loading;
-  final bool refreshing;
   final bool loaded;
   final ApiFailure? failure;
   final bool showHistory;
@@ -993,7 +1024,6 @@ class _MonitoringList extends StatelessWidget {
     if (loaded && incidents.isEmpty) {
       return Column(
         children: [
-          if (refreshing) const _InlineRefreshingNotice(),
           EmptyState(
             title: showHistory
                 ? 'No monitoring history yet.'
@@ -1018,7 +1048,6 @@ class _MonitoringList extends StatelessWidget {
     }
     return Column(
       children: [
-        if (refreshing) const _InlineRefreshingNotice(),
         if (failure != null)
           _SourceFailureNotice(message: failure!.message, onRetry: onRetry),
         for (var index = 0; index < incidents.length; index++) ...[
@@ -1077,31 +1106,53 @@ class _LoadingNotice extends StatelessWidget {
   );
 }
 
-class _InlineRefreshingNotice extends StatelessWidget {
-  const _InlineRefreshingNotice();
+class _AlertsRefreshingNotice extends StatelessWidget {
+  const _AlertsRefreshingNotice({required this.label, required this.detail});
+
+  final String label;
+  final String detail;
 
   @override
-  Widget build(BuildContext context) => const _NoticeCard(
-    child: Row(
-      children: [
-        SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.8,
-            color: AppColors.tealDark,
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: _NoticeCard(
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 17,
+            height: 17,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.tealDark,
+            ),
           ),
-        ),
-        SizedBox(width: 9),
-        Text(
-          'Refreshing incident data',
-          style: TextStyle(
-            color: AppColors.muted,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 10.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

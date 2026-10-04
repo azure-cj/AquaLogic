@@ -191,7 +191,7 @@ const _activeAlert = AlertInfo(
   lifecycle: AlertLifecycle.active,
 );
 
-class _FakeAlertRepository implements AlertRepository {
+class _FakeAlertRepository extends MockAlertRepository {
   _FakeAlertRepository({
     this.resolveResult,
     this.resolveError,

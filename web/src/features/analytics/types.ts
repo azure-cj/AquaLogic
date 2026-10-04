@@ -80,11 +80,17 @@ export type TankUptime = {
 };
 
 export type AnalyticsResponse = {
+  decision_support_insights?: {
+    cards: DecisionSupportCard[];
+    limitations: Array<{ tank_id: number; tank_name: string; parameter: string; rule: string; reason: string; samples: number; interval_coverage?: number; excluded?: number }>;
+    advisory: string;
+  } | null;
   window: {
     range: AnalyticsRange;
     start: string;
     end: string;
     bucket_seconds: number;
+    water_quality_bucket_seconds: number;
     timezone: string;
   };
   tanks: Array<{ id: number; name: string; lifecycle: 'active' | 'retired'; }>;
@@ -112,4 +118,12 @@ export type AnalyticsResponse = {
     lowest_uptime_tank_id: number | null;
     primary_driver_by_metric: Record<MetricKey, number | null>;
   };
+};
+
+export type DecisionSupportCard = {
+  id: string; rule: 'within_range' | 'repeated_alerts' | 'increasing' | 'decreasing' | 'little_change';
+  parameter: MetricKey; scope: 'tank'; tank_id: number; tank_name: string;
+  title: string; explanation: string; window_start: string; window_end: string;
+  observation_start: string | null; observation_end: string | null; samples: number; unit: string;
+  evidence: Record<string, number | string>; qualifications: string[]; checks: string[]; related_alert_ids: number[];
 };

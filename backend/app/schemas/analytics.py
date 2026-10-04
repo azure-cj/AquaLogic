@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ class AnalyticsWindow(BaseModel):
     start: datetime
     end: datetime
     bucket_seconds: int
+    water_quality_bucket_seconds: int
     timezone: str = "Asia/Manila"
 
 
@@ -104,6 +105,33 @@ class AnalyticsInsights(BaseModel):
     primary_driver_by_metric: Dict[str, Optional[int]]
 
 
+class DecisionSupportCard(BaseModel):
+    id: str
+    rule: Literal["within_range", "repeated_alerts", "increasing", "decreasing", "little_change"]
+    parameter: Literal["temperature", "ph", "turbidity", "tds"]
+    scope: Literal["tank"]
+    tank_id: int
+    tank_name: str
+    title: str
+    explanation: str
+    window_start: datetime
+    window_end: datetime
+    observation_start: datetime | None
+    observation_end: datetime | None
+    samples: int
+    unit: str
+    evidence: dict[str, Any]
+    qualifications: list[str]
+    checks: list[str]
+    related_alert_ids: list[int]
+
+
+class DecisionSupportInsights(BaseModel):
+    cards: list[DecisionSupportCard]
+    limitations: list[dict[str, Any]]
+    advisory: str
+
+
 class AnalyticsResponse(BaseModel):
     window: AnalyticsWindow
     tanks: List[TankOption]
@@ -122,3 +150,4 @@ class AnalyticsResponse(BaseModel):
     uptime_comparison: UptimeComparison
     uptime_thresholds: UptimeThresholds
     insights: AnalyticsInsights
+    decision_support_insights: DecisionSupportInsights | None = None

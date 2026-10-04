@@ -200,6 +200,11 @@ void main() {
       expect(find.byType(AlertDetailScreen), findsOneWidget);
       expect(find.text('Backend alert record 901'), findsOneWidget);
       expect(find.text('Handled'), findsWidgets);
+      await tester.scrollUntilVisible(
+        find.textContaining('does not confirm that the water condition'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(
         find.textContaining('does not confirm that the water condition'),
         findsWidgets,
@@ -618,7 +623,7 @@ void main() {
       await tester.tap(find.text('View alert').first);
       await tester.pumpAndSettle();
       expect(find.text('Backend alert record 901'), findsOneWidget);
-      expect(alertRepository.lookupIds, ['901']);
+      expect(alertRepository.lookupIds, ['901', '901']);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
 
@@ -654,8 +659,13 @@ void main() {
       await tester.tap(find.text('View alert').first);
       await tester.pumpAndSettle();
       expect(find.text('Backend alert record 901'), findsOneWidget);
-      expect(alertRepository.lookupIds, ['901', '901']);
+      expect(alertRepository.lookupIds, ['901', '901', '901', '901', '901']);
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('alert-detail-mark-handled')),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.byKey(const ValueKey('alert-detail-mark-handled')));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -666,8 +676,19 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(alertRepository.resolveCalls, 1);
+      await tester.scrollUntilVisible(
+        find.text('Operator acknowledgement'),
+        -200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Handled'), findsWidgets);
       expect(find.text('Operator acknowledgement'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.textContaining('water condition recovered'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(find.textContaining('water condition recovered'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();

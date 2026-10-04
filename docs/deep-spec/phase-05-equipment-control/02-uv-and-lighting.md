@@ -1,7 +1,7 @@
 # UV and Lighting Controls
 
 Status: Implemented v1 controls; production hardware hardening deferred  
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-27
 
 ## Purpose
 
@@ -43,13 +43,21 @@ Lighting schedules are device-resident:
 1. AquaLogic validates the schedule payload.
 2. The backend creates one expiring command.
 3. The bridge claims the command before making one ESP32 request.
-4. The ESP32 stores and executes the schedule locally.
+4. The ESP32 accepts the schedule in volatile RAM and evaluates it locally.
+   The current firmware derives its time of day from `millis()` since boot,
+   rather than a wall clock.
 5. AquaLogic displays the latest schedule state reported during bridge refresh.
 
 A successful schedule command confirms that the ESP32 accepted the
 configuration request. It does not confirm every future scheduled execution.
 The backend does not run a lighting scheduler and does not create a separate
 command for each scheduled on/off event.
+
+The current firmware's schedule clock is a synthetic 24-hour cycle based on
+uptime. Schedule transitions do not align with local clock time and shift after
+a reboot. Schedule values also return to their disabled defaults after a
+reboot because they are not persisted. A synchronized clock and persistent
+schedule storage are needed for reliable daily operation.
 
 For a physical move, disable the intended source schedule, deactivate the old
 device registration, provision a new destination identity, verify the physical
