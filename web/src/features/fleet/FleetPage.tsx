@@ -363,7 +363,7 @@ export function Fleet() {
             ) : recentAlerts.length ? (
               <div className="alert-feed">
                 {recentAlerts.map((alert) => (
-                  <Link to="/admin/alerts" className="alert-feed-item" key={alert.id}>
+                  <Link to={`/admin/alerts?alert_id=${alert.id}`} className="alert-feed-item" key={alert.id}>
                     <span className={`alert-symbol alert-${alert.severity}`} aria-hidden="true">
                       <AlertTriangle size={16} />
                     </span>

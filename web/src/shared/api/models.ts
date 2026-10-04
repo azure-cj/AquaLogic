@@ -70,6 +70,7 @@ export type Fish = {
 export type Alert = {
   id: number;
   tank_id: number;
+  reading_id?: number | null;
   parameter: string;
   severity: 'warning' | 'critical';
   message: string;
@@ -326,3 +327,47 @@ export type SpeciesSuitabilityResponse = {
   species_counts: Record<SpeciesSuitabilityStatus, number>;
   species: SpeciesSuitabilitySpecies[];
 };
+export interface AlertContextReading {
+  reading_id: number;
+  value: number | null;
+  unit: string;
+  observed_at: string;
+  received_at: string;
+  reporting_freshness: 'fresh' | 'stale';
+}
+
+export interface AlertContextThreshold {
+  parameter: string;
+  unit: string;
+  warning_min: number | null;
+  warning_max: number | null;
+  critical_min: number | null;
+  critical_max: number | null;
+  enabled: boolean;
+  source: 'tank' | 'global';
+  updated_at: string | null;
+}
+
+export interface AlertContext {
+  species_context?: AlertSpeciesContext | null;
+  alert: Alert;
+  tank: { id: number; display_name: string; lifecycle: 'active' | 'retired' };
+  evaluated_at: string;
+  linked_reading: AlertContextReading | null;
+  linked_threshold: AlertContextThreshold | null;
+  latest_reading: AlertContextReading | null;
+  current_threshold: AlertContextThreshold | null;
+  guidance: { code: string; direction: 'above' | 'below' | 'unavailable'; explanation: string; checks: string[]; advisory: string };
+}
+
+export interface AlertSpeciesContext {
+  parameter: string;
+  basis: 'current_assignments_latest_reading';
+  status: 'available' | 'unavailable' | 'unsupported';
+  reason: string | null;
+  unit: string;
+  reading: { reading_id: number; observed_at: string; received_at: string } | null;
+  counts: { assigned: number; evaluable: number; within: number; outside: number; unavailable: number };
+  species: Array<{ species_id: number; name: string; stored_min: number | null; stored_max: number | null; result: string; reason: string }>;
+  advisory: string;
+}

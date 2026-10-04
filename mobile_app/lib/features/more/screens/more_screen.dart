@@ -1,4 +1,6 @@
 import 'package:aqualogic/app/auth/auth_scope.dart';
+import 'package:aqualogic/app/console/console_repository_scope.dart';
+import 'package:aqualogic/features/console/screens/console_entry_screen.dart';
 import 'package:aqualogic/app/alerts/alert_repository_scope.dart';
 import 'package:aqualogic/app/control/equipment_repository_scope.dart';
 import 'package:aqualogic/app/fish/fish_repository_scope.dart';
@@ -79,6 +81,26 @@ class MoreScreen extends StatelessWidget {
           MoreTileGroup(
             key: const ValueKey('more-app-data-group'),
             children: [
+              MoreTile(
+                key: const ValueKey('more-tank-console'),
+                icon: LucideIcons.monitor,
+                title: 'Tank Console',
+                subtitle: 'Mounted aquarium display · prototype',
+                grouped: true,
+                onTap: () {
+                  final console = ConsoleRepositoryScope.maybeOf(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ConsoleEntryScreen(
+                        createRepository:
+                            console?.createRepository ??
+                            createPrototypeConsoleRepository,
+                        onActiveChanged: console?.onActiveChanged,
+                      ),
+                    ),
+                  );
+                },
+              ),
               MoreTile(
                 icon: LucideIcons.refreshCw,
                 title: isLiveData ? 'Data status' : 'Sync / local data',

@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-09-27
+Last reviewed: 2026-10-02
 
 ## Read first
 
@@ -225,3 +225,14 @@ do not make the committed deletion appear to have failed. It does not clear
 device-resident schedules or physical equipment. Follow the decommissioning and
 move/reprovisioning procedures in
 [`../WORKFLOWS.md#moving-equipment-to-another-tank`](../WORKFLOWS.md#moving-equipment-to-another-tank).
+
+## M2/M3 operator support (2026-10-02)
+
+`alert_species_context.py` derives parameter-specific current assignment
+preferences with a supplementary observation/receipt display gate. Existing
+suitability and monitoring semantics are unchanged. `analytics_insights.py`
+receives the Analytics stream, uses batched threshold segments, and returns
+additive historical cards/limitations without storing raw observation lists
+or querying history per sample. See [exact contracts and heuristics](../M2_M3_IMPLEMENTATION.md).
+The opt-in review launcher is separate from standard startup and accepts only
+its dedicated synthetic SQLite database; production remains PostgreSQL.

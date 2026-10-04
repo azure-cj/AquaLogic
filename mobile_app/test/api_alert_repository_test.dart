@@ -14,6 +14,134 @@ final _clients = <MockClient>[];
 final _apiClients = <ApiClient>[];
 
 void main() {
+  test(
+    'optional species context maps stored rows and rejects malformed additive data',
+    () async {
+      final species = {
+        'parameter': 'temperature',
+        'basis': 'current_assignments_latest_reading',
+        'status': 'unavailable',
+        'reason': 'stale_observation',
+        'unit': '°C',
+        'reading': {
+          'reading_id': 11,
+          'observed_at': '2026-10-01T00:00:00Z',
+          'received_at': '2026-10-02T00:00:00Z',
+        },
+        'counts': {
+          'assigned': 1,
+          'evaluable': 0,
+          'within': 0,
+          'outside': 0,
+          'unavailable': 1,
+        },
+        'species': [
+          {
+            'species_id': 1,
+            'name': 'Fictional preference',
+            'stored_min': 20,
+            'stored_max': null,
+            'result': 'unavailable',
+            'reason': 'stale_observation',
+          },
+        ],
+        'advisory':
+            "Stored species preferences provide additional context. AquaLogic alerts continue to use the tank's configured thresholds.",
+      };
+      final repository = _repository(
+        (_) async => _ok({..._context(), 'species_context': species}),
+      );
+      final detail = await repository.loadAlertContext(
+        alertId: '41',
+        snapshot: MockSensorFeed.snapshot(0),
+      );
+      expect(detail.speciesContext!.counts['unavailable'], 1);
+      expect(detail.speciesContext!.species.single.minimum, 20);
+      expect(detail.speciesContext!.species.single.maximum, isNull);
+      expect(detail.speciesContext!.readingId, 11);
+      final malformed = _repository(
+        (_) async => _ok({
+          ..._context(),
+          'species_context': {...species, 'basis': 'linked_alert_reading'},
+        }),
+      );
+      await expectLater(
+        malformed.loadAlertContext(
+          alertId: '41',
+          snapshot: MockSensorFeed.snapshot(0),
+        ),
+        throwsA(isA<ApiFailure>()),
+      );
+    },
+  );
+  test(
+    'context loads one authenticated record with authoritative lifecycle and separate reading times',
+    () async {
+      final requests = <http.Request>[];
+      final repository = _repository((request) async {
+        requests.add(request);
+        return _ok(_context());
+      });
+      final detail = await repository.loadAlertContext(
+        alertId: '41',
+        snapshot: MockSensorFeed.snapshot(0),
+      );
+      expect(requests.single.url.path, '/alerts/41/context');
+      expect(requests.single.headers['authorization'], 'Bearer test-access');
+      expect(detail.alert.lifecycle, AlertLifecycle.handled);
+      expect(detail.alert.tankName, 'Context Tank');
+      expect(detail.linkedReading!.id, 10);
+      expect(detail.latestReading!.id, 11);
+      expect(
+        detail.latestReading!.observedAt.isBefore(
+          detail.linkedReading!.observedAt,
+        ),
+        isTrue,
+      );
+      expect(detail.latestReading!.reportingFreshness, 'fresh');
+      expect(detail.currentThreshold!.enabled, isFalse);
+      expect(detail.direction, 'above');
+    },
+  );
+
+  test(
+    'context rejects mismatched records, malformed guidance and server failure without fallback',
+    () async {
+      for (final body in [
+        {..._context(), 'alert': _alert(id: 42)},
+        {
+          ..._context(),
+          'guidance': {'direction': 'guessed'},
+        },
+        {
+          ..._context(),
+          'tank': {
+            'id': 999,
+            'display_name': 'Wrong tank',
+            'lifecycle': 'active',
+          },
+        },
+      ]) {
+        final repository = _repository((_) async => _ok(body));
+        await expectLater(
+          repository.loadAlertContext(
+            alertId: '41',
+            snapshot: MockSensorFeed.snapshot(0),
+          ),
+          throwsA(isA<ApiFailure>()),
+        );
+      }
+      final unavailable = _repository((_) async => _response(503, {}));
+      await expectLater(
+        unavailable.loadAlertContext(
+          alertId: '41',
+          snapshot: MockSensorFeed.snapshot(0),
+        ),
+        throwsA(isA<ApiFailure>()),
+      );
+    },
+  );
+
   tearDown(() {
     for (final client in _apiClients) {
       client.close();
@@ -614,3 +742,54 @@ http.Response _response(int status, Object? body) => http.Response(
 );
 
 http.Response _notFound() => _response(404, {'detail': 'Not found'});
+
+Map<String, Object?> _context() => {
+  'alert': _alert(id: 41, isResolved: true, resolutionSource: 'operator'),
+  'tank': {'id': 2, 'display_name': 'Context Tank', 'lifecycle': 'active'},
+  'evaluated_at': '2026-10-02T00:00:00Z',
+  'linked_reading': {
+    'reading_id': 10,
+    'value': 29,
+    'unit': '°C',
+    'observed_at': '2026-10-01T00:00:00Z',
+    'received_at': '2026-10-01T23:58:00Z',
+    'reporting_freshness': 'stale',
+  },
+  'latest_reading': {
+    'reading_id': 11,
+    'value': 25,
+    'unit': '°C',
+    'observed_at': '2026-09-30T00:00:00Z',
+    'received_at': '2026-10-02T00:00:00Z',
+    'reporting_freshness': 'fresh',
+  },
+  'linked_threshold': {
+    'unit': '°C',
+    'warning_min': 20,
+    'warning_max': 28,
+    'critical_min': 18,
+    'critical_max': 30,
+    'enabled': true,
+    'source': 'global',
+  },
+  'current_threshold': {
+    'unit': '°C',
+    'warning_min': 20,
+    'warning_max': 28,
+    'critical_min': 18,
+    'critical_max': 30,
+    'enabled': false,
+    'source': 'tank',
+  },
+  'guidance': {
+    'code': 'temperature.above.v1',
+    'direction': 'above',
+    'explanation': 'Review linked measurement.',
+    'checks': [
+      'Confirm the measurement.',
+      'Inspect heater if installed.',
+      'Verify circulation.',
+    ],
+    'advisory': 'Handling does not confirm water recovery.',
+  },
+};

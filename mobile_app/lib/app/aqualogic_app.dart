@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:aqualogic/app/auth/auth_scope.dart';
+import 'package:aqualogic/app/console/console_repository_scope.dart';
 import 'package:aqualogic/app/auth/auth_gate.dart';
 import 'package:aqualogic/app/alerts/alert_repository_scope.dart';
 import 'package:aqualogic/app/control/equipment_repository_scope.dart';
@@ -42,6 +43,7 @@ class AquaLogicApp extends StatefulWidget {
     this.pushNotificationService,
     this.pushDeviceRegistrationRepository,
     this.pushInstallationIdStore,
+    this.consoleRepositoryFactory,
   });
 
   final AuthService? authService;
@@ -53,6 +55,7 @@ class AquaLogicApp extends StatefulWidget {
   final PushNotificationService? pushNotificationService;
   final PushDeviceRegistrationRepository? pushDeviceRegistrationRepository;
   final PushInstallationIdStore? pushInstallationIdStore;
+  final ConsoleRepositoryFactory? consoleRepositoryFactory;
 
   @override
   State<AquaLogicApp> createState() => _AquaLogicAppState();
@@ -208,32 +211,38 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
           ),
         ),
       ),
-      home: AuthScope(
-        authService: _authService,
-        child: HomeRepositoryScope(
-          repository: _homeRepository,
-          child: TankRepositoryScope(
-            repository: _tankRepository,
-            child: AlertRepositoryScope(
-              repository: _alertRepository,
-              child: FishRepositoryScope(
-                repository: _fishRepository,
-                child: EquipmentRepositoryScope(
-                  repository: _equipmentRepository,
-                  child: SplashScreen(
-                    minimumDisplayDuration: _startupPreview
-                        ? Duration(seconds: 6)
-                        : Duration(milliseconds: 600),
-                    next: AuthGate(
-                      animateInitialState: false,
-                      onAuthenticatedShellReady:
-                          _notificationNavigationCoordinator == null
-                          ? null
-                          : (shell) {
-                              _authenticatedShell = shell;
-                              _notificationNavigationCoordinator
-                                  ?.onAuthenticatedShellReady();
-                            },
+      home: ConsoleRepositoryScope(
+        createRepository:
+            widget.consoleRepositoryFactory ?? createPrototypeConsoleRepository,
+        onActiveChanged: (active) =>
+            _notificationNavigationCoordinator?.setNavigationSuspended(active),
+        child: AuthScope(
+          authService: _authService,
+          child: HomeRepositoryScope(
+            repository: _homeRepository,
+            child: TankRepositoryScope(
+              repository: _tankRepository,
+              child: AlertRepositoryScope(
+                repository: _alertRepository,
+                child: FishRepositoryScope(
+                  repository: _fishRepository,
+                  child: EquipmentRepositoryScope(
+                    repository: _equipmentRepository,
+                    child: SplashScreen(
+                      minimumDisplayDuration: _startupPreview
+                          ? Duration(seconds: 6)
+                          : Duration(milliseconds: 600),
+                      next: AuthGate(
+                        animateInitialState: false,
+                        onAuthenticatedShellReady:
+                            _notificationNavigationCoordinator == null
+                            ? null
+                            : (shell) {
+                                _authenticatedShell = shell;
+                                _notificationNavigationCoordinator
+                                    ?.onAuthenticatedShellReady();
+                              },
+                      ),
                     ),
                   ),
                 ),

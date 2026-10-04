@@ -1,9 +1,28 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-04
 
 ## Completed and working locally
+
+### Chrome UI preview (2026-10-04)
+
+An explicit `mobile_app/lib/main_preview.dart` entry provides simulated login,
+the existing mock repositories and Tank Console access for browser UI review.
+Normal Android/Railway authentication and push composition remain unchanged.
+This is a UI preview, not real browser authentication. See
+[`../mobile_app/README.md`](../mobile_app/README.md) for the run command/accounts.
+
+### Tank Console UI prototype (2026-10-04)
+
+Phase 1 adds More → Tank Console inside the existing Flutter APK, with an
+isolated mock repository, landscape dashboard, tracked command states,
+independent Local/Cloud availability, read-only pumps and scoped Android
+orientation/fullscreen/keep-awake handling. Notification navigation waits until
+console exit. No firmware, backend, gateway or local networking changes belong
+to this feature. Physical Android verification and UI approval remain pending;
+ESP32 integration and safety enforcement are deferred to Phase 2. Details and
+review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
 
 ### Backend
 
@@ -918,3 +937,155 @@ and swiped-away app states.
 When work changes status, update this file with a short dated note and link to
 the implementation report, decision, issue, or relevant source files. Do not
 use this document as a detailed task log.
+## Validation checkpoint — 2026-10-02 (M0/M1 operator alert detail)
+
+M1 is implemented locally: staff/admin derived alert context, deterministic
+conservative checks for temperature/pH/turbidity/TDS, shared web detail drawer,
+mobile context DTO/repository/loading/retry/navigation, authoritative handling
+refresh, and concise creation push copy. No database migration, deployment,
+Analytics rewrite, hardware change or later milestone was included.
+
+Initial checkout validation passed 217 backend, 118 web and 198 Flutter tests.
+Final backend suite passed 234 tests with the existing Firebase token
+deprecation warning. Final web suite passed 123 tests; focused detail/history
+checks, typecheck and build passed. Flutter suite passed 203 tests, analysis
+reported no issues, and focused 320-pixel screenshot checks passed. Web detail
+was visually inspected at desktop and 320-pixel widths using synthetic fixture
+data; mobile captures use bundled fonts and synthetic data. Physical Android
+push-tap verification of this version is pending.
+
+M0 located the completed half-hour/manual-Refresh Analytics source at `a035e44`
+on main; this branch starts from older `ced73a6` and preserves existing local
+Analytics changes. New detail Analytics navigation stays disabled until those
+versions are reconciled. Existing modifications and untracked assets were
+preserved. See [baseline, contract, limitations and demo](M0_M1_OPERATOR_GUIDANCE.md).
+
+## 2026-10-02 — M2/M3 operator decision support and isolated review
+
+- Completed Analytics a035e44 was reconciled as a focused delta, preserving the
+  existing branch changes and M0/M1. Fixed half-hour observation buckets,
+  partial tooltips, contributor wording, Refresh/successful update time and
+  receipt-based reporting are retained. M1 Analytics navigation is enabled.
+- Optional current-assignment/latest-reading species context is implemented
+  for temperature/pH/TDS, with unsupported turbidity, individual stored bounds,
+  distinct counts, dual-time display gate and five-second clock tolerance.
+  Web/mobile show expandable context and accept older absent-field responses.
+- Additive Analytics historical interpretation supports named-tank direction,
+  little change, within-range observation proportion and created alert records,
+  with bounded streamed accumulation, batched threshold history, deterministic
+  ordering, four visible cards/expansion, qualifications and explicit limits.
+- Dedicated opt-in real FastAPI/React synthetic review is running at loopback
+  web 5180/API 8800 (launcher chooses alternatives if occupied). Verified startup,
+  stop/reset/restart, admin/staff reads across twelve computed scenarios,
+  freshly reset species counts/expiry gates, and hardware/push write rejection.
+  Scenario index and exact-window manifest support the user's manual inspection.
+- Full validation: backend 277 passed (existing Firebase token deprecation
+  warning), web 131 passed, Flutter 205 passed, web typecheck/build passed,
+  Flutter analysis reported no issues. Latest threshold-revision disclosure
+  refinement passed the 30-case focused Analytics suite after the full run.
+- PostgreSQL dialect compilation and one separate disposable PostgreSQL 18
+  integration test passed. Installed tools were found outside PATH; a dedicated
+  loopback 55432 cluster tested real admin/staff login, species freshness,
+  streaming, tank override history, recurrence and retired handling guards.
+  Its test tables were removed and cluster stopped; the existing server and
+  Railway production were untouched.
+- Desktop and 320px actual local API/UI visual checks passed; document width
+  remained 320px. Narrow species drawer and expanded historical cards were
+  captured under evidence/operator-guidance. Flutter narrow expansion was also
+  checked. No deployment, commit, migration, firmware or bridge change.
+- Physical Android push-tap validation remains pending from M1. See
+  [implementation](M2_M3_IMPLEMENTATION.md) and [review/runbook and separate
+  production smoke checks](M2_M3_REVIEW_RUNBOOK.md).
+
+## 2026-10-02 - Operator UI design pass
+
+Web Analytics now places the main trend chart before historical findings. Findings
+use padded two-column cards (one column on narrow screens), metric labels,
+prominent observation percentages with one decimal at most, and expandable
+evidence. Fully within-range observations and their little-change findings are
+grouped separately; abnormal little-change findings remain in the primary list.
+Bounds-change disclosures remain visible. View graph selects the tank/metric
+and scrolls to the chart while retaining the timeframe.
+
+The shared alert drawer compares linked/latest readings, puts numbered suggested
+checks before expandable historical bounds/species detail, and uses the existing
+fixed drawer footer for navigation and handling. Unsupported turbidity species
+context uses one explanation. API calculations and alert lifecycle are unchanged.
+
+Validation: web typecheck/build and 133 tests passed. Actual synthetic API/UI
+checked at 1440px and 320px, in light and dark appearance; narrow document width
+remained 320px. Screenshots are under evidence/operator-guidance/ui-*.png.
+This pass covers the web views shown in the review screenshots.
+
+
+### 2026-10-02: Approved Analytics hybrid layout
+
+The chart-led overview and compact three-tank findings rail replace the earlier
+large findings-card grid. Metric tabs and observation summaries live with the
+main chart; its legend and threshold-scope explanation sit below it.
+
+Tank comparison provides Observation evidence, Reporting, and Alert records
+tabs. Rows retain tank/parameter scope, evidence counts, bounds-change notices,
+unavailable values, and expandable full qualifications. Eight rows show initially;
+additional rows remain available. Receipt coverage remains distinct from
+observation percentages. Selected-tank findings and fleet totals retain their
+existing API scopes. View graph retains the timeframe.
+
+The lower alert chart and three-tank reporting preview use their own content
+heights. Narrow tables stack into labelled rows; light and dark themes use the
+existing semantic tokens. Backend calculations and alert lifecycle are unchanged.
+
+Validation: 137 tests across 27 web test files, typecheck, and production build
+passed. Actual synthetic UI checked at 1440px and 320px, including dark appearance,
+evidence-to-graph navigation, reporting/alert tabs, and no browser console errors.
+Narrow document width remained 320px. Screenshots: docs/evidence/analytics-concepts/
+implemented-*.png. This is a local web change, with no deployment.
+
+
+### 2026-10-02: Operator-friendly Analytics copy and disclosure
+
+Current Analytics uses Key findings, Water quality, Data availability, Alerts,
+Readings in range, Readings analyzed, and View details. Findings lead with plain
+language and exact reading counts. Chart summaries use API-qualified tank
+findings only; insufficient evidence never becomes a stable trend.
+
+How this is calculated retains original finding text, all evidence values,
+qualifications, exclusions, interval coverage and observation dates. Range-change
+warnings and nonzero range exclusions remain visible in expanded results.
+Reporting details retain current/previous percentages and receipt interval counts.
+About these results appears after other parameters, explains fixed half-hour
+observation buckets, partial buckets, threshold history, receipt-time coverage,
+and reporting gaps. Current-parameter limitations appear first; other parameters'
+notes remain available in a nested disclosure. No API/backend calculation or
+semantics changed in this pass; no firmware/bridge/pump/monitoring changes.
+
+Validation: focused Analytics suite 20 tests passed; full web suite 140 tests in
+27 files passed; typecheck, production build and git diff --check passed.
+Browser checked pH counts (29 in range, 12 outside, 41 analyzed), disclosures,
+reporting tab and responsive 320px layout without horizontal document overflow.
+Console errors: none. Screenshots: evidence/analytics-concepts/operator-*.png.
+
+
+### 2026-10-03: Analytics information consolidation
+
+Current hierarchy follows one fact, one primary place. Key findings groups
+similar results across tanks (at most three distinct categories), with three
+initial tank links and disclosure for more. Routine within-range findings stay
+in the table when noteworthy categories are available. No finding is discarded:
+all original cards, qualifications, checks, values and limitations remain in the
+technical evidence surface.
+
+Water quality rows hold range percentages and analyzed counts; per-tank receipt
+availability belongs only in the Data availability tab. Expanded water-quality
+rows show one essential evidence set, dates, exclusions when relevant, and
+range-change/late-arrival notes. The standalone availability card summarizes
+fleet completeness without a repeated tank list. About these results opens to
+four short notes; View technical details contains methodology, interval rules,
+full per-parameter evidence and limitations. Graphs and backend rules unchanged.
+
+Validation: 21 focused Analytics tests and 141 full web tests in 27 files passed.
+Typecheck, production build and git diff --check passed. Hash comparison confirmed
+backend Python files and Analytics types/utilities unchanged during this pass.
+Browser confirmed compact details, grouped temperature findings, access to exact
+pH evidence/limitations and no console errors. Screenshot:
+evidence/analytics-concepts/consolidated-overview.png.

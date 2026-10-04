@@ -719,6 +719,8 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(find.text('About AquaLogic'), 180);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('About AquaLogic'));
     await tester.pumpAndSettle();
     expect(
@@ -803,7 +805,7 @@ void main() {
   });
 }
 
-class _EmptyAlertRepository implements AlertRepository {
+class _EmptyAlertRepository extends MockAlertRepository {
   const _EmptyAlertRepository();
 
   @override

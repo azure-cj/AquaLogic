@@ -1,6 +1,6 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -125,6 +125,17 @@ function renderPage(path = '/admin/analytics') {
 }
 
 describe('fleet analytics', () => {
+  it('displays ISO custom URL dates in local inputs and keeps the exact API interval', async () => {
+    vi.mocked(api).mockImplementation(async (path) => path === '/tanks' ? [{ id: 1, name: 'Tank A' }] : response());
+    renderPage('/admin/analytics?range=custom&start=2026-07-26T00%3A00%3A00Z&end=2026-07-26T05%3A00%3A00Z&tanks=1&metric=ph');
+    await screen.findByRole('heading', { name: 'pH trend' });
+    const start = screen.getByLabelText('From') as HTMLInputElement;
+    const end = screen.getByLabelText('To') as HTMLInputElement;
+    expect(start.value).not.toBe(''); expect(end.value).not.toBe('');
+    expect(new Date(start.value).toISOString()).toBe('2026-07-26T00:00:00.000Z');
+    await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => path.includes('start=2026-07-26T00%3A00%3A00.000Z') && path.includes('tank_id=1'))).toBe(true));
+  });
+
   it('shows the API half-hour interval and sample count without regrouping chart points', () => {
     const data = response();
     const bucketTimestamp = '2026-10-01T06:00:00Z';
@@ -260,11 +271,11 @@ describe('fleet analytics', () => {
     );
     expect(screen.queryByRole('tab', { name: 'Dissolved oxygen' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Ammonia' })).not.toBeInTheDocument();
-    const progress = await screen.findByRole('progressbar', {
-      name: 'Tank A reporting uptime',
-    });
-    expect(progress).toHaveAttribute('aria-valuenow', '42.5');
-    expect(progress.closest('a')).toHaveAttribute('href', '/admin/tanks?tank_id=1');
+    expect(screen.queryByRole('link', { name: /Tank A.*Very limited data/ })).not.toBeInTheDocument();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: 'View reporting details' }));
+    expect(screen.getByRole('tab', { name: /Data availability/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('table', { name: 'Fleet data availability' })).toHaveTextContent('Very limited data');
     expect(screen.getByLabelText('Alert severity legend')).toHaveTextContent('Warning');
     expect(screen.getByRole('button', { name: /Export CSV/i })).toBeEnabled();
     await waitFor(() =>

@@ -129,8 +129,8 @@ def ingest_reading(
                     tank_id=tank_id,
                     title="Water-quality alert",
                     body=(
-                        f"{tank_name}: {parameter.replace('_', ' ').title()} has a new "
-                        f"{severity.value} water-quality alert. Open AquaLogic for details."
+                        f"{tank_name}: {parameter.replace('_', ' ').title()} {severity.value}. "
+                        "Open AquaLogic for details and suggested checks."
                     ),
                     now=reading.received_at,
                 )

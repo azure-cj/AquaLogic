@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -467,3 +467,41 @@ use a hosted species-photo URL through the existing `photo_url` field.
   is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current
   `backend/app/websockets/sensor_stream.py` is only a placeholder.
+# Operator alert context — 2026-10-02
+
+`GET /alerts/{alert_id}/context` requires staff/admin authentication and returns
+`alert` (unchanged AlertRead), `tank` (`id`, `display_name`, `lifecycle`),
+`evaluated_at`, nullable `linked_reading` and `latest_reading`, nullable
+`linked_threshold` and `current_threshold`, and `guidance` (`code`, `direction`,
+`explanation`, `checks`, `advisory`). Readings contain `reading_id`, `value`,
+`unit`, `observed_at`, `received_at`, and `reporting_freshness` (`fresh`/`stale`).
+Thresholds contain `parameter`, `unit`, warning/critical min/max, `enabled`,
+`source` (`tank`/`global`) and `updated_at`. Direction is `above`, `below` or
+`unavailable`; catalogue codes are versioned as `<parameter>.<direction>.v1`.
+
+Latest is selected by server receipt time with reading ID as tie-breaker.
+Historical bounds are reconstructed at the linked reading's receipt time;
+they are not immutable detection snapshots. Fresh reporting does not establish
+current observation time. Retired history remains readable; handling retains
+the existing active-tank guard. List and resolve contracts are unchanged.
+See [M0/M1 implementation record](M0_M1_OPERATOR_GUIDANCE.md).
+
+## M2/M3 additive operator context (2026-10-02)
+
+Alert context optionally includes typed `species_context`: current assignments
+and latest received reading, distinct-species counts, stored individual bounds
+and within/outside/unavailable results, basis/timestamps/reasons/advisory.
+Temperature/pH/TDS use inclusive one-sided preferences; turbidity is unsupported.
+The supplementary display gate requires observation and receipt age <=90s, with
+a five-second observation clock tolerance. It changes no monitoring engine or
+existing suitability endpoint. Older clients may ignore the field.
+
+Fleet Analytics optionally includes `decision_support_insights` with cards,
+limitations and advisory. Cards identify named tank scope, rule/stable ID,
+observation and selected intervals, sample/evidence/coverage, qualifications,
+shared checks and actual alert references. Existing response fields and fleet
+totals retain their scope. See [M2/M3 contract and exact heuristics](M2_M3_IMPLEMENTATION.md).
+Water-quality buckets are fixed 1800 seconds via `water_quality_bucket_seconds`;
+`bucket_seconds` remains the requested alert/reporting resolution. Web URL uses
+`tanks`/`metric`; API uses repeated `tank_id`. Custom ISO URLs preserve exact
+instants in local date controls. APIs remain staff/admin and additive; no migration.

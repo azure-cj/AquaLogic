@@ -1,3 +1,4 @@
+import { AlertDetailDrawer } from './AlertDetailDrawer';
 import { metricOptions } from '@/features/analytics/types';
 import { tankNameForAlert } from '@/features/fleet/utils';
 import { api } from '@/shared/api/client';
@@ -72,10 +73,13 @@ export function Alerts() {
   alertQueryParams.set('page_size', String(ALERTS_PAGE_SIZE));
   const alertQuery = alertQueryParams.toString();
   useEffect(() => {
-    if (query !== urlParams.toString()) {
-      setUrlParams(filters, { replace: true });
+    const next = new URLSearchParams(query);
+    if (urlParams.has('alert_id')) next.set('alert_id', urlParams.get('alert_id')!);
+    if (historyMode === 'monitoring') next.set('view', 'monitoring');
+    if (next.toString() !== urlParams.toString()) {
+      setUrlParams(next, { replace: true });
     }
-  }, [query, setUrlParams, urlParams]);
+  }, [query, historyMode, setUrlParams, urlParams]);
   const alerts = useQuery({
     queryKey: ['alerts', alertQuery],
     queryFn: () => api<AlertHistoryPage>(`/alerts/history?${alertQuery}`),
@@ -90,7 +94,7 @@ export function Alerts() {
     mutationFn: (id: number) => api(`/alerts/${id}/resolve`, { method: 'PUT' }),
     onSuccess: () => {
       notify.success('Alert marked as handled.');
-      client.invalidateQueries({ queryKey: ['alerts'] });
+      for (const key of ['alerts', 'alert-context', 'tank-operations', 'tank-alert-history', 'fleet']) client.invalidateQueries({ queryKey: [key] });
     },
     onError: () => {
       notify.error('The alert could not be marked as handled.');
@@ -108,6 +112,7 @@ export function Alerts() {
 
   return (
     <section>
+      <AlertDetailDrawer alertId={/^[1-9]\d*$/.test(urlParams.get('alert_id') ?? '') ? Number(urlParams.get('alert_id')) : null} onClose={() => { const next = new URLSearchParams(urlParams); next.delete('alert_id'); setUrlParams(next); }} />
       <PageHeader
         eyebrow="Fleet history"
         title="Alert history"
@@ -222,6 +227,7 @@ export function Alerts() {
                 <span>
                   <strong>{alert.parameter.replaceAll('_', ' ')}</strong>
                   <small>{alert.message}</small>
+                  <button className="text-link" type="button" onClick={() => { const next = new URLSearchParams(urlParams); next.set('alert_id', String(alert.id)); setUrlParams(next); }}>View details</button>
                 </span>
                 <span>{tankNameForAlert(alert, fleet.data ?? [])}</span>
                 <StatusBadge value={alert.severity} />
@@ -241,7 +247,8 @@ export function Alerts() {
                     <button
                       className="button button-secondary button-small"
                       type="button"
-                      disabled={resolve.isPending && resolve.variables === alert.id}
+                      disabled={(resolve.isPending && resolve.variables === alert.id) || !fleet.data?.some((tank) => tank.id === alert.tank_id)}
+                      title={!fleet.data?.some((tank) => tank.id === alert.tank_id) ? 'Open details to verify tank lifecycle before handling.' : undefined}
                       onClick={() => resolve.mutate(alert.id)}
                       aria-label={`Mark ${alert.parameter.replaceAll('_', ' ')} alert handled; this does not confirm water recovery`}
                     >

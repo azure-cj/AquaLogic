@@ -686,7 +686,6 @@ function SummaryPumpCard({ pumpA, pumpB, tankId }: { pumpA: PumpActuatorState | 
           <p className="actuator-kicker">Pump controls</p>
           <h3>Syringe pumps</h3>
         </div>
-        <span className="actuator-state is-unknown"><Power size={14} aria-hidden="true" />Pump page</span>
       </div>
       <div className="actuator-summary-pump-list">
         <span><strong>pH Up</strong><small>Pump A · {pumpStatus(pumpA)}</small></span>

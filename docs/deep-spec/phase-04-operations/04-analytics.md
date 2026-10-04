@@ -1,6 +1,6 @@
 # Analytics
 
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
 Status: Implemented split observation-time and receipt-time analytics
 
 ## 1. Purpose
@@ -163,3 +163,20 @@ an authenticated operational record available in the monitoring-outage view.
 - Predictive analytics, forecasting, and business-intelligence modules.
 - WebSocket or push-based live analytics updates.
 - Analytics controls for dissolved oxygen or ammonia.
+
+## Reconciled half-hour Analytics and interpretation (2026-10-02)
+
+Completed work from `a035e44` was reconciled as a focused delta over this older
+checkout and its preserved changes. Water observations use fixed :00/:30
+half-hour intervals independently of alert/report bucket selection. Partial
+intervals remain graphed and labeled in interval tooltips. Refresh reports the
+last successful update. Receipt-time reporting is unchanged.
+
+Additive `decision_support_insights` drives “What this period shows”: named
+tank findings for direction, little sustained change, observation proportions
+in warning operating bounds effective at observation time, and counts of
+created alert records. Four cards plus expandable remainder, limitations,
+qualifications and navigation support investigation without changing graphs
+or fleet totals. No forecast, health score or recovery claim is introduced.
+See [exact deterministic rules and order](../../M2_M3_IMPLEMENTATION.md) and
+[isolated synthetic review](../../M2_M3_REVIEW_RUNBOOK.md).

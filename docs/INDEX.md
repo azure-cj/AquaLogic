@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-04
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -24,6 +24,9 @@ link back here rather than duplicate a competing project status.
 | [`WORKFLOWS.md`](WORKFLOWS.md) | Local setup, validation, database, browser, and deployment workflows |
 
 ## Operational documentation
+
+- [Tank Console Phase 1](TANK_CONSOLE_PHASE_1.md): isolated Flutter prototype,
+  command/connection semantics, display restoration and Android review checklist.
 
 - [`operations/hardware/`](operations/hardware/): the hardware contract, bridge
   integration notes, and safe local hardware-test runbook.
@@ -119,3 +122,11 @@ They are intentionally kept separate from current status in this index.
 Browser screenshots and other validation artifacts are evidence, not current
 behavioral specifications. See [`evidence/`](evidence/) and interpret artifacts
 with the validation notes in `DEVELOPMENT_STATUS.md`.
+- [M0/M1 operator guidance implementation](M0_M1_OPERATOR_GUIDANCE.md): baseline
+  branch discrepancy, derived alert context, web/mobile detail, validation and
+  completion demo (2026-10-02).
+
+- [M2/M3 implementation](M2_M3_IMPLEMENTATION.md): reconciled Analytics, current
+  species context, deterministic historical interpretation and release limits.
+- [M2/M3 isolated review runbook](M2_M3_REVIEW_RUNBOOK.md): opt-in real API/UI,
+  synthetic scenario index/manifest, start/stop/reset and separate smoke checks.

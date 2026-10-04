@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
 
 ## Read first
 
@@ -259,3 +259,115 @@ npm test -- --run src/features/tanks/ActuatorControlPanel.test.tsx
 
 Use the existing `@/` import alias and feature-first structure when adding a
 page. Keep route-specific code lazy-loaded through `web/src/app/route-loaders.ts`.
+# Alert detail update — 2026-10-02
+
+`features/alerts/AlertDetailDrawer.tsx` is shared by alert history and tank
+active/history entries. Fleet alert links pass `alert_id` to alert history;
+filter synchronization preserves that parameter. Context loads only on open.
+Handling refreshes detail and operational caches. Staff equipment navigation
+uses the tank Control access explanation; administrator navigation uses the
+existing actuator workspace. Analytics is disabled pending version
+reconciliation described in [M0/M1](../M0_M1_OPERATOR_GUIDANCE.md).
+
+## M2/M3 investigation UI (2026-10-02)
+
+The shared alert drawer adds optional current species counts/individual stored
+preferences and enables the verified tanks/metric Analytics URL. Reconciled
+Analytics retains fixed half-hour observations, partial tooltips and Refresh.
+`DecisionSupportInsights.tsx` renders four named-tank historical cards plus
+expansion/limitations and graph/real-alert navigation. Absent additive fields
+remain readable. `vite.review.config.ts` is used only by the isolated launcher;
+normal Vercel API routing remains intact. See [implementation](../M2_M3_IMPLEMENTATION.md).
+
+## 2026-10-02 - Operator UI design pass
+
+Web Analytics now places the main trend chart before historical findings. Findings
+use padded two-column cards (one column on narrow screens), metric labels,
+prominent observation percentages with one decimal at most, and expandable
+evidence. Fully within-range observations and their little-change findings are
+grouped separately; abnormal little-change findings remain in the primary list.
+Bounds-change disclosures remain visible. View graph selects the tank/metric
+and scrolls to the chart while retaining the timeframe.
+
+The shared alert drawer compares linked/latest readings, puts numbered suggested
+checks before expandable historical bounds/species detail, and uses the existing
+fixed drawer footer for navigation and handling. Unsupported turbidity species
+context uses one explanation. API calculations and alert lifecycle are unchanged.
+
+Validation: web typecheck/build and 133 tests passed. Actual synthetic API/UI
+checked at 1440px and 320px, in light and dark appearance; narrow document width
+remained 320px. Screenshots are under evidence/operator-guidance/ui-*.png.
+This pass covers the web views shown in the review screenshots.
+
+
+### 2026-10-02: Approved Analytics hybrid layout
+
+The chart-led overview and compact three-tank findings rail replace the earlier
+large findings-card grid. Metric tabs and observation summaries live with the
+main chart; its legend and threshold-scope explanation sit below it.
+
+Tank comparison provides Observation evidence, Reporting, and Alert records
+tabs. Rows retain tank/parameter scope, evidence counts, bounds-change notices,
+unavailable values, and expandable full qualifications. Eight rows show initially;
+additional rows remain available. Receipt coverage remains distinct from
+observation percentages. Selected-tank findings and fleet totals retain their
+existing API scopes. View graph retains the timeframe.
+
+The lower alert chart and three-tank reporting preview use their own content
+heights. Narrow tables stack into labelled rows; light and dark themes use the
+existing semantic tokens. Backend calculations and alert lifecycle are unchanged.
+
+Validation: 137 tests across 27 web test files, typecheck, and production build
+passed. Actual synthetic UI checked at 1440px and 320px, including dark appearance,
+evidence-to-graph navigation, reporting/alert tabs, and no browser console errors.
+Narrow document width remained 320px. Screenshots: docs/evidence/analytics-concepts/
+implemented-*.png. This is a local web change, with no deployment.
+
+
+### 2026-10-02: Operator-friendly Analytics copy and disclosure
+
+Current Analytics uses Key findings, Water quality, Data availability, Alerts,
+Readings in range, Readings analyzed, and View details. Findings lead with plain
+language and exact reading counts. Chart summaries use API-qualified tank
+findings only; insufficient evidence never becomes a stable trend.
+
+How this is calculated retains original finding text, all evidence values,
+qualifications, exclusions, interval coverage and observation dates. Range-change
+warnings and nonzero range exclusions remain visible in expanded results.
+Reporting details retain current/previous percentages and receipt interval counts.
+About these results appears after other parameters, explains fixed half-hour
+observation buckets, partial buckets, threshold history, receipt-time coverage,
+and reporting gaps. Current-parameter limitations appear first; other parameters'
+notes remain available in a nested disclosure. No API/backend calculation or
+semantics changed in this pass; no firmware/bridge/pump/monitoring changes.
+
+Validation: focused Analytics suite 20 tests passed; full web suite 140 tests in
+27 files passed; typecheck, production build and git diff --check passed.
+Browser checked pH counts (29 in range, 12 outside, 41 analyzed), disclosures,
+reporting tab and responsive 320px layout without horizontal document overflow.
+Console errors: none. Screenshots: evidence/analytics-concepts/operator-*.png.
+
+
+### 2026-10-03: Analytics information consolidation
+
+Current hierarchy follows one fact, one primary place. Key findings groups
+similar results across tanks (at most three distinct categories), with three
+initial tank links and disclosure for more. Routine within-range findings stay
+in the table when noteworthy categories are available. No finding is discarded:
+all original cards, qualifications, checks, values and limitations remain in the
+technical evidence surface.
+
+Water quality rows hold range percentages and analyzed counts; per-tank receipt
+availability belongs only in the Data availability tab. Expanded water-quality
+rows show one essential evidence set, dates, exclusions when relevant, and
+range-change/late-arrival notes. The standalone availability card summarizes
+fleet completeness without a repeated tank list. About these results opens to
+four short notes; View technical details contains methodology, interval rules,
+full per-parameter evidence and limitations. Graphs and backend rules unchanged.
+
+Validation: 21 focused Analytics tests and 141 full web tests in 27 files passed.
+Typecheck, production build and git diff --check passed. Hash comparison confirmed
+backend Python files and Analytics types/utilities unchanged during this pass.
+Browser confirmed compact details, grouped temperature findings, access to exact
+pH evidence/limitations and no console errors. Screenshot:
+evidence/analytics-concepts/consolidated-overview.png.

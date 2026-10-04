@@ -63,3 +63,12 @@ dashboard counts, and alert badge are the current notification surface.
 
 Acknowledged, reopened, recurring-alert aggregation, and external notification
 delivery states are not introduced in this phase.
+# Alert investigation detail — 2026-10-02
+
+The derived staff/admin context endpoint and web/mobile detail explain the
+reading currently linked to an alert, its reconstructed historical limits,
+latest received reading/current limits, and deterministic advisory checks.
+Handling acknowledges a response without confirming recovery. System resolution
+may reflect a normal reading or threshold disabling. Retired history is readable
+and cannot be handled. No evaluator or persistence changes were required.
+See [M0/M1 record](../../M0_M1_OPERATOR_GUIDANCE.md).

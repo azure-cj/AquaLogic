@@ -1,3 +1,4 @@
+import 'package:aqualogic/features/alerts/models/alert_context.dart';
 import 'package:aqualogic/features/alerts/models/alert_info.dart';
 import 'package:aqualogic/features/demo/demo_data.dart';
 import 'package:aqualogic/features/sensors/data/mock_sensor_feed.dart';
@@ -28,6 +29,11 @@ abstract class AlertRepository {
     required SensorSnapshot snapshot,
     required String incidentId,
     required bool history,
+  });
+
+  Future<AlertContext> loadAlertContext({
+    required String alertId,
+    required SensorSnapshot snapshot,
   });
 
   Future<AlertInfo> resolveAlert(String alertId);
@@ -119,6 +125,38 @@ class MockAlertRepository implements AlertRepository {
     return null;
   }
 
+  static final _handled = Expando<Map<String, AlertInfo>>();
+
+  @override
+  Future<AlertContext> loadAlertContext({
+    required String alertId,
+    required SensorSnapshot snapshot,
+  }) async {
+    final alert =
+        _handled[this]?[alertId] ??
+        await findWaterQualityAlert(snapshot: snapshot, alertId: alertId);
+    if (alert == null) throw StateError('Mock alert not found.');
+    return AlertContext(
+      alert: alert,
+      tankLifecycle: 'active',
+      evaluatedAt: DateTime.now().toUtc(),
+      linkedReading: null,
+      latestReading: null,
+      linkedThreshold: null,
+      currentThreshold: null,
+      code: 'demo.unavailable.v1',
+      direction: 'unavailable',
+      explanation: 'Demo context: linked readings and bounds are unavailable.',
+      checks: const [
+        'Confirm the measurement.',
+        'Review the configured thresholds.',
+        'Inspect the tank and available reporting information.',
+      ],
+      advisory:
+          'Demo advisory checks. Handling does not confirm water recovery.',
+    );
+  }
+
   @override
   Future<AlertInfo> resolveAlert(String alertId) async {
     final alert = await findWaterQualityAlert(
@@ -128,11 +166,13 @@ class MockAlertRepository implements AlertRepository {
     if (alert == null) {
       throw StateError('Mock alert not found.');
     }
-    return alert.copyWith(
+    final handled = alert.copyWith(
       lifecycle: AlertLifecycle.handled,
       resolvedAt: DateTime.now().toUtc(),
       resolutionSource: AlertResolutionSource.operator,
     );
+    (_handled[this] ??= <String, AlertInfo>{})[alertId] = handled;
+    return handled;
   }
 }
 

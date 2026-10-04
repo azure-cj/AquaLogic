@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
 Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are deployed, and the M6.6 physical tap checks passed
-Last reviewed: 2026-09-26
+Last reviewed: 2026-10-04
 
 ## Read first
 
@@ -11,6 +11,19 @@ Last reviewed: 2026-09-26
 - [`../DEVELOPMENT_STATUS.md`](../DEVELOPMENT_STATUS.md)
 
 ## Current boundary
+
+For Chrome UI review, run `flutter run -d chrome -t lib/main_preview.dart` from
+`mobile_app`. This explicit entry uses mock login/repositories, marks simulated
+UI and injects no push service. The normal `main.dart` authentication and Android
+behavior are unchanged. Development-only preview accounts and the browser
+authentication boundary are documented in
+[`../../mobile_app/README.md`](../../mobile_app/README.md).
+
+Tank Console Mode is an additional, isolated UI prototype entered through More.
+Its readings, Local/Cloud connections and lighting/UV/feeder commands are all
+simulated; pumps are read-only. No direct ESP32 networking exists. See
+[`../TANK_CONSOLE_PHASE_1.md`](../TANK_CONSOLE_PHASE_1.md) for architecture,
+display-session restoration, notification deferral and physical-device checks.
 
 The Flutter app is an Android-first client. Authentication, Home, Tanks, Alerts,
 Monitoring, species, and read-only equipment talk directly to the Railway
@@ -568,3 +581,23 @@ flutter pub get
 flutter analyze
 flutter test
 ```
+# Alert detail update — 2026-10-02
+
+Alerts use a separate `AlertContext` model, strict DTO parser and authenticated
+repository method. Detail loads context while preserving the summary, offers
+retry on failure, and adopts the authoritative lifecycle. Successful handling
+reloads context and keeps existing list/Home reconciliation. Shell callbacks
+provide tank and supported read-only equipment navigation from all detail
+entry points, including push. No full mobile Analytics or new push events were
+added. Physical push-tap verification remains pending for this version.
+See [M0/M1](../M0_M1_OPERATOR_GUIDANCE.md).
+
+## M2 species alert context (2026-10-02)
+
+Optional typed species context in the alert DTO/domain/detail shows current
+assignments/latest reading basis, distinct counts, expandable individual stored
+preferences, reason/timestamps and the shared advisory. Older responses remain
+readable, existing mock guidance stays explicitly demo/unavailable and existing
+alert handling/push reference flows remain unchanged. M3 is web-only. See
+[implementation](../M2_M3_IMPLEMENTATION.md). Physical Android push-tap validation
+remains pending.

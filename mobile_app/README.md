@@ -17,6 +17,34 @@ Debug builds default to the Android emulator host alias (`10.0.2.2:8000`); pass
 
 ## Development
 
+### Chrome UI preview
+
+Use the explicit preview entry point to inspect the UI without running a backend:
+
+```powershell
+flutter run -d chrome -t lib/main_preview.dart
+```
+
+Sign in with either development-only account:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Owner | `owner@aqualogic.local` | `owner123` |
+| Staff | `staff@aqualogic.local` | `staff123` |
+
+The preview displays a **SIMULATED UI** banner and selects the existing mock
+repositories. It uses no Railway credentials, Firebase push, or hardware.
+Open **More → Tank Console → Enter Console Mode** to review the console. Resize
+the browser to a wide phone-sized viewport; Android orientation/immersive/awake
+behavior requires physical-device verification.
+
+This preview is separate from real authentication. The native session code reads
+refresh-cookie response headers and sends the refresh Cookie header directly;
+it is not a browser session implementation. Changing the API URL alone does not
+make that flow compatible with Chrome.
+
+### Normal development
+
 ```powershell
 flutter pub get
 flutter analyze

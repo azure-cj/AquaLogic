@@ -1,11 +1,26 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-04
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-04 — Keep Tank Console Phase 1 isolated and simulated
+
+**Decision:** Add console routes inside the existing Flutter APK using an
+injectable `ConsoleRepository` and one authoritative equipment snapshot in
+`ConsoleState`. Only the deterministic mock is selected; the ESP32 adapter
+remains unavailable. Pumps expose no writable operation. Typed command IDs and
+ACCEPTED/RUNNING/COMPLETED/REJECTED/UNKNOWN outcomes separate submission from
+confirmed equipment feedback. Local and Cloud availability are independent.
+
+**Reason:** The mounted-phone interface can be reviewed without changing
+Railway functionality or bypassing unreviewed hardware safety. Native display
+settings are saved/restored per console session. Push navigation waits until
+exit while retaining the existing pending-intent behavior. See
+[`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md) for the current boundary and
+physical-device review; actual local control remains Phase 2.
 ## 2026-10-01 — Add opt-in pagination to alert history
 
 **Decision:** Let alert-history callers request stable newest-first pages using
@@ -1140,3 +1155,107 @@ Use this format:
 
 **Consequences:** What this makes easier, harder, or deferred.
 ```
+## 2026-10-02 — Derived operator guidance and preserved Analytics branch
+
+Implement M1 as staff/admin derived alert context with a shared deterministic
+catalogue and web/mobile detail. Do not change threshold evaluation, persistence,
+hardware, push event triggers or acknowledgement semantics. Historical bounds
+use receipt-time revisions and are explicitly reconstructed; latest received
+and linked readings remain distinct. Missing context never produces invented
+live client advice.
+
+The completed fixed-half-hour/manual-Refresh Analytics version exists at
+`a035e44` on main, while this branch begins at `ced73a6` with preserved local
+Analytics changes. No reconstruction or replacement was performed; new detail
+Analytics navigation stays disabled until branch reconciliation. See
+[implementation/baseline record](M0_M1_OPERATOR_GUIDANCE.md).
+
+## 2026-10-02 — M2/M3 current species preferences and historical evidence
+
+Reconciled only the completed half-hour Analytics delta from a035e44 over the
+older branch, preserving M0/M1 and unrelated work. Species alert context uses
+current assignments/latest receipt selection and a separate dual-time display
+gate; it never changes tank threshold evaluation. Analytics interpretation uses
+bounded streamed per-tank half-hour evidence, batched effective threshold history,
+conservative engineering heuristics and explicit limitations. Individual tank
+findings remain separate from fleet totals. No migrations or new dependencies.
+
+Isolated review is explicitly opt-in with dedicated SQLite/media, loopback ports,
+synthetic accounts/fictional preferences, disabled push/random generation/hardware
+writes, and verified reset/stop identities. A separately initialized disposable
+PostgreSQL 18 cluster passed the opt-in integration check and was stopped.
+Production and physical Android push remain separate pending checks. See [implementation](M2_M3_IMPLEMENTATION.md)
+and [review runbook](M2_M3_REVIEW_RUNBOOK.md).
+
+
+### 2026-10-02: Approved Analytics hybrid layout
+
+The chart-led overview and compact three-tank findings rail replace the earlier
+large findings-card grid. Metric tabs and observation summaries live with the
+main chart; its legend and threshold-scope explanation sit below it.
+
+Tank comparison provides Observation evidence, Reporting, and Alert records
+tabs. Rows retain tank/parameter scope, evidence counts, bounds-change notices,
+unavailable values, and expandable full qualifications. Eight rows show initially;
+additional rows remain available. Receipt coverage remains distinct from
+observation percentages. Selected-tank findings and fleet totals retain their
+existing API scopes. View graph retains the timeframe.
+
+The lower alert chart and three-tank reporting preview use their own content
+heights. Narrow tables stack into labelled rows; light and dark themes use the
+existing semantic tokens. Backend calculations and alert lifecycle are unchanged.
+
+Validation: 137 tests across 27 web test files, typecheck, and production build
+passed. Actual synthetic UI checked at 1440px and 320px, including dark appearance,
+evidence-to-graph navigation, reporting/alert tabs, and no browser console errors.
+Narrow document width remained 320px. Screenshots: docs/evidence/analytics-concepts/
+implemented-*.png. This is a local web change, with no deployment.
+
+
+### 2026-10-02: Operator-friendly Analytics copy and disclosure
+
+Current Analytics uses Key findings, Water quality, Data availability, Alerts,
+Readings in range, Readings analyzed, and View details. Findings lead with plain
+language and exact reading counts. Chart summaries use API-qualified tank
+findings only; insufficient evidence never becomes a stable trend.
+
+How this is calculated retains original finding text, all evidence values,
+qualifications, exclusions, interval coverage and observation dates. Range-change
+warnings and nonzero range exclusions remain visible in expanded results.
+Reporting details retain current/previous percentages and receipt interval counts.
+About these results appears after other parameters, explains fixed half-hour
+observation buckets, partial buckets, threshold history, receipt-time coverage,
+and reporting gaps. Current-parameter limitations appear first; other parameters'
+notes remain available in a nested disclosure. No API/backend calculation or
+semantics changed in this pass; no firmware/bridge/pump/monitoring changes.
+
+Validation: focused Analytics suite 20 tests passed; full web suite 140 tests in
+27 files passed; typecheck, production build and git diff --check passed.
+Browser checked pH counts (29 in range, 12 outside, 41 analyzed), disclosures,
+reporting tab and responsive 320px layout without horizontal document overflow.
+Console errors: none. Screenshots: evidence/analytics-concepts/operator-*.png.
+
+
+### 2026-10-03: Analytics information consolidation
+
+Current hierarchy follows one fact, one primary place. Key findings groups
+similar results across tanks (at most three distinct categories), with three
+initial tank links and disclosure for more. Routine within-range findings stay
+in the table when noteworthy categories are available. No finding is discarded:
+all original cards, qualifications, checks, values and limitations remain in the
+technical evidence surface.
+
+Water quality rows hold range percentages and analyzed counts; per-tank receipt
+availability belongs only in the Data availability tab. Expanded water-quality
+rows show one essential evidence set, dates, exclusions when relevant, and
+range-change/late-arrival notes. The standalone availability card summarizes
+fleet completeness without a repeated tank list. About these results opens to
+four short notes; View technical details contains methodology, interval rules,
+full per-parameter evidence and limitations. Graphs and backend rules unchanged.
+
+Validation: 21 focused Analytics tests and 141 full web tests in 27 files passed.
+Typecheck, production build and git diff --check passed. Hash comparison confirmed
+backend Python files and Analytics types/utilities unchanged during this pass.
+Browser confirmed compact details, grouped temperature findings, access to exact
+pH evidence/limitations and no console errors. Screenshot:
+evidence/analytics-concepts/consolidated-overview.png.

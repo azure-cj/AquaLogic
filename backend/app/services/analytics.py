@@ -12,6 +12,10 @@ from app.config import settings
 from app.models import Alert, SensorReading, Tank
 from app.services.decision_engine import PARAMETERS
 from app.services.thresholds import effective_threshold_segments_by_tank
+from app.services.analytics_insights import AnalyticsInsightAccumulator
+
+
+WATER_QUALITY_BUCKET_SECONDS = 30 * 60
 
 
 WATER_QUALITY_BUCKET_SECONDS = 30 * 60
@@ -204,6 +208,9 @@ def build_fleet_analytics(
     scope_tank_ids = {tank.id for tank in tanks}
     tank_names = {tank.id: tank.name for tank in tanks}
     selected = set(selected_tank_ids)
+    interpretation_ids = selected_tank_ids or [tank.id for tank in tanks]
+    interpretation = AnalyticsInsightAccumulator(start, end, tanks, selected_tank_ids,
+        effective_threshold_segments_by_tank(db, interpretation_ids, start, end))
 
     fleet_current: dict[int, dict[str, Any]] = {}
     fleet_previous: dict[int, dict[str, Any]] = {}
@@ -224,6 +231,8 @@ def build_fleet_analytics(
         SensorReading.timestamp,
         SensorReading.received_at,
         *[getattr(SensorReading, parameter) for parameter in PARAMETERS],
+        SensorReading.device_id,
+        SensorReading.is_mock,
     ]
     rows = db.execute(
         select(*columns)
@@ -251,6 +260,7 @@ def build_fleet_analytics(
             parameter: float(row[index + 3]) if row[index + 3] is not None else None
             for index, parameter in enumerate(PARAMETERS)
         }
+        interpretation.add(tank_id, observation_at, received_at, values, (row[-2], row[-1]))
 
         # Reporting health describes when the backend accepted a report, even
         # when that report contains a historical observation timestamp.
@@ -523,4 +533,5 @@ def build_fleet_analytics(
             else None,
             "primary_driver_by_metric": primary_driver_by_metric,
         },
+        "decision_support_insights": interpretation.finish(alert_events),
     }
