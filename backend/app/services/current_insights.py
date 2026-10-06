@@ -279,12 +279,14 @@ class TankWindow:
             if in_fit:
                 values, times = self.buckets[mock][parameter][key]
                 values.append(value)
-                times.add(observed)
+                if len(times) < MIN_BUCKET_READINGS:
+                    times.add(observed)
                 self.fit_sources[mock][parameter].add(source)
             if in_stability:
                 values, times = self.stability_buckets[mock][parameter][key]
                 values.append(value)
-                times.add(observed)
+                if len(times) < MIN_BUCKET_READINGS:
+                    times.add(observed)
                 self.stability_sources[mock][parameter].add(source)
             if in_day:
                 self.day_sources[mock][parameter].add(source)

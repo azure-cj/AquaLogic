@@ -1,10 +1,34 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-10-06 — Time-boxed production showcase exception (Goal 3 review #2)
+
+**Decision:** The owner authorizes production scenario generation only with a
+parsed UTC `EXHIBIT_DEMO_UNTIL` strictly in the future and at most seven days
+ahead at startup. DEBUG remains forbidden. Expiry checks each cycle/before
+writes terminate the loop permanently, logging once. `DEMO_EXHIBIT_DATE`
+defaults to 2026-10-13; its pH plateau covers the whole date and following day.
+Inference algorithms and constants remain unchanged.
+
+**Reason:** Exhibit insights need continuous seeded/live curves without
+indefinite production mock generation or collisions with hardware.
+
+**Consequences:** Reserved SHOW-* scenario codes, lifecycle locks, and retired/
+active-device exclusion apply. `app.cli.exhibit_demo` creates private showcase
+tanks, common-name species links and bulk mock history, without users,
+thresholds, devices or historic alerts/pushes. Existing species values remain;
+replacement refuses real/device history. Cleanup uses the shared tank deletion
+service, preflights hardware, and leaves species and non-SHOW tanks. Live
+showcase alerts retain ordinary staff push behavior. Follow the
+[runbook](WORKFLOWS.md#exhibit-runbook); unset flags and redeploy before cleanup
+after expiry. Bucket timestamp sets now retain only three distinct observations,
+while every value stays for exact medians. App services own the shared curves
+and reference species, with no app-to-seed imports. No schema/dependency changes.
 
 ## 2026-10-06 — Complementary demo warming roles and bounded insight caching
 

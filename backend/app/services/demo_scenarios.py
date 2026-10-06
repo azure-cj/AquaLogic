@@ -2,23 +2,24 @@
 
 The pH exhibit phase repeats every 28 days, with quiet history followed by
 three elevated days. A bounded periodic curve cannot stay above its own
-rolling baseline indefinitely; the exhibit phase is anchored explicitly.
+rolling baseline indefinitely; DEMO_EXHIBIT_DATE anchors the exhibit phase.
 """
 from datetime import datetime, timezone
 from hashlib import sha256
 from math import cos, pi, sin
+from app.config import settings
 
 SCENARIOS = {
-    'DISPLAY-01': 'stable',
-    'DISPLAY-02': 'warming',
-    'BREED-01': 'stable',
-    'BREED-02': 'unstable_ph',
-    'SERVICE-01': 'offline',
-    'RACK-01': 'species_conflict',
-    'RACK-02': 'warming',
+    'SHOW-STABLE': 'stable',
+    'SHOW-WARM-A': 'warming',
+    'SHOW-BREED': 'stable',
+    'SHOW-PH': 'unstable_ph',
+    'SHOW-OFFLINE': 'offline',
+    'SHOW-SPECIES': 'species_conflict',
+    'SHOW-WARM-B': 'warming',
 }
 PARAMETERS = ('temperature', 'ph', 'turbidity', 'tds', 'dissolved_oxygen', 'ammonia')
-VARIABILITY_EPOCH = datetime(2026, 10, 6, tzinfo=timezone.utc)
+VARIABILITY_EPOCH = datetime.combine(settings.demo_exhibit_date, datetime.min.time(), timezone.utc)
 # Fixed hash seed supplies reproducible per-tank phases; smooth harmonics keep
 # the resulting scatter continuous between 30-second samples.
 _NOISE_PHASES = {code: tuple(2 * pi * int.from_bytes(sha256(('ci-v1:' + code).encode()).digest()[i:i + 4],
@@ -59,7 +60,7 @@ def scenario_value(tank_code, parameter, t):
     noise = sin(2 * pi * hours / 1.3 + first_phase) + .5 * sin(2 * pi * hours / .7 + second_phase)
     if parameter == 'temperature':
         if role == 'warming':
-            phase = (hours + (4 if tank_code == 'RACK-02' else 0)) % 8
+            phase = (hours + (4 if tank_code == 'SHOW-WARM-B' else 0)) % 8
             # Default upper warning bound is 28 C. A 6.5-hour ascent from
             # mid-range to the bound, followed by a continuous 1.5-hour reset.
             return 24.8 + (3.2 * phase / 6.5 if phase < 6.5 else
@@ -70,14 +71,14 @@ def scenario_value(tank_code, parameter, t):
     if parameter == 'ph':
         if role == 'unstable_ph':
             return 7.4 + _ph_amplitude(seconds) * sin(2 * pi * hours + first_phase)
-        return (7.35 if tank_code in ('DISPLAY-02', 'BREED-01') else 6.9) + .003 * noise
+        return (7.35 if tank_code in ('SHOW-WARM-A', 'SHOW-BREED') else 6.9) + .003 * noise
     if parameter == 'tds':
         # Four-day evaporation cycle, continuous six-hour water-change reset.
         phase = hours % 96
-        base = 190 if tank_code in ('DISPLAY-02', 'BREED-01', 'BREED-02') else 120
+        base = 190 if tank_code in ('SHOW-WARM-A', 'SHOW-BREED', 'SHOW-PH') else 120
         return base + (24 * phase / 90 if phase < 90 else 4 * (96 - phase))
     if parameter == 'turbidity':
         return 2.8 + .15 * sin(2 * pi * hours / 6)
     if parameter == 'dissolved_oxygen':
         return 6.3 + .05 * sin(2 * pi * hours / 24)
-    return .35 if tank_code == 'DISPLAY-02' else .7 if tank_code == 'BREED-01' else .09
+    return .35 if tank_code == 'SHOW-WARM-A' else .7 if tank_code == 'SHOW-BREED' else .09

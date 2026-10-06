@@ -9,7 +9,7 @@ from app.services.current_insights import build_current_insights
 from app.services.decision_engine import ensure_default_thresholds
 from app.services.demo_sensor import write_demo_cycle
 from seed import seed_dashboard_demo as demo
-from seed.demo_scenarios import PARAMETERS, SCENARIOS, VARIABILITY_EPOCH, scenario_value
+from app.services.demo_scenarios import PARAMETERS, SCENARIOS, VARIABILITY_EPOCH, scenario_value
 from seed.seed_fish import seed_fish_species
 from seed.seed_tanks import seed_tanks
 
@@ -38,22 +38,22 @@ def test_curves_are_deterministic_plausible_and_continuous(code):
 def test_warming_curves_have_half_cycle_phase_offset():
     for hour in range(24):
         t = VARIABILITY_EPOCH + timedelta(hours=hour)
-        assert scenario_value('DISPLAY-02', 'temperature', t + timedelta(hours=4)) == scenario_value(
-            'RACK-02', 'temperature', t)
+        assert scenario_value('SHOW-WARM-A', 'temperature', t + timedelta(hours=4)) == scenario_value(
+            'SHOW-WARM-B', 'temperature', t)
 
 
 def test_scenario_rejects_unknown_tanks_and_parameters():
     with pytest.raises(KeyError):
         scenario_value('HARDWARE-01', 'temperature', VARIABILITY_EPOCH)
     with pytest.raises(ValueError):
-        scenario_value('DISPLAY-01', 'oxygen', VARIABILITY_EPOCH)
+        scenario_value('SHOW-STABLE', 'oxygen', VARIABILITY_EPOCH)
 
 
 def test_demo_cycle_never_writes_active_device_unmapped_offline_or_retired_tanks(db_session):
     tanks = [Tank(name=name, location='Synthetic', tank_code=code, retired_at=retired)
-             for name, code, retired in [('Real hardware', 'DISPLAY-01', None),
-                 ('Unmapped', 'REAL-01', None), ('Offline', 'SERVICE-01', None),
-                 ('Retired', 'DISPLAY-02', VARIABILITY_EPOCH), ('Allowed', 'BREED-02', None)]]
+             for name, code, retired in [('Real hardware', 'SHOW-STABLE', None),
+                 ('Unmapped', 'REAL-01', None), ('Offline', 'SHOW-OFFLINE', None),
+                 ('Retired', 'SHOW-WARM-A', VARIABILITY_EPOCH), ('Allowed', 'SHOW-PH', None)]]
     db_session.add_all(tanks)
     db_session.flush()
     db_session.add_all([RegisteredDevice(id='active', tank_id=tanks[0].id, key_hash='a' * 64),
@@ -68,12 +68,12 @@ def test_demo_cycle_never_writes_active_device_unmapped_offline_or_retired_tanks
     assert reading.is_mock is True
     assert reading.device_id is None
     for parameter in PARAMETERS:
-        assert getattr(reading, parameter) == scenario_value('BREED-02', parameter, VARIABILITY_EPOCH)
+        assert getattr(reading, parameter) == scenario_value('SHOW-PH', parameter, VARIABILITY_EPOCH)
 
 
 def test_demo_cycle_rechecks_device_after_candidate_selection(db_session, monkeypatch):
     from app.services import demo_sensor
-    tank = Tank(name='New device', location='Synthetic', tank_code='DISPLAY-01')
+    tank = Tank(name='New device', location='Synthetic', tank_code='SHOW-STABLE')
     db_session.add(tank)
     db_session.commit()
     original = demo_sensor.lock_tank_for_mutation
@@ -92,7 +92,7 @@ def test_seed_does_not_fill_unmapped_or_active_device_tanks(db_session):
     seed_tanks(db_session)
     seed_fish_species(db_session)
     db_session.flush()
-    hardware = db_session.scalar(select(Tank).where(Tank.tank_code == 'DISPLAY-01'))
+    hardware = db_session.scalar(select(Tank).where(Tank.tank_code == 'SHOW-STABLE'))
     unmapped = Tank(name='Customer', location='Synthetic', tank_code='CUSTOM-01')
     db_session.add(unmapped)
     db_session.add(RegisteredDevice(id='real', tank_id=hardware.id, key_hash='d' * 64))
@@ -139,21 +139,21 @@ def test_seeded_roles_at_24_evenly_spaced_times_across_day(db_session, monkeypat
         response = build_current_insights(db_session, now=now)
         tanks = {tank['tank_id']: {p['parameter']: p for p in tank['parameters']} for tank in response['tanks']}
         crossings = []
-        for code in ('DISPLAY-02', 'RACK-02'):
+        for code in ('SHOW-WARM-A', 'SHOW-WARM-B'):
             crossing = tanks[ids[code]]['temperature']['projection']['status'] == 'crossing_projected'
             coverage[code] += crossing
             crossings.append(crossing)
         coverage['combined'] += any(crossings)
-        unstable = tanks[ids['BREED-02']]['ph']['stability']
+        unstable = tanks[ids['SHOW-PH']]['ph']['stability']
         coverage['unstable_ph'] += unstable['status'] == 'more_variable'
         assert unstable['ratio'] == pytest.approx(2.5, abs=.02)
-        stable = tanks[ids['DISPLAY-01']]['temperature']
+        stable = tanks[ids['SHOW-STABLE']]['temperature']
         assert stable['trend']['status'] == 'steady'
         assert stable['stability']['status'] == 'typical'
         assert stable['species_range']['status'] == 'ok'
-        assert tanks[ids['RACK-01']]['temperature']['species_range']['conflict'] == dict(
+        assert tanks[ids['SHOW-SPECIES']]['temperature']['species_range']['conflict'] == dict(
             min_species='Discus', min=28., max_species='Corydoras Catfish', max=27.)
-        assert any(item['type'] == 'more_variable' and item['tank_id'] == ids['BREED-02']
+        assert any(item['type'] == 'more_variable' and item['tank_id'] == ids['SHOW-PH']
                    for item in response['attention'])
     print('24-hour scenario coverage:', dict(coverage))
     assert coverage['combined'] / 24 >= .8

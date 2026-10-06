@@ -38,6 +38,7 @@ from app.services.tank_lifecycle import (
 )
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
 from app.services.thresholds import resolve_effective_thresholds
+from app.services.tank_deletion import stage_retired_tank_deletion, remove_local_hero_image
 
 
 router = APIRouter(prefix="/tanks", tags=["tanks"])
@@ -51,21 +52,7 @@ HERO_IMAGE_TYPES = {
 
 
 def _remove_local_hero_image(image_url: str | None) -> None:
-    if not image_url or not image_url.startswith("/api/media/tanks/"):
-        return
-    relative_name = image_url.removeprefix("/api/media/")
-    target = (Path(settings.media_root) / relative_name).resolve()
-    media_root = Path(settings.media_root).resolve()
-    if media_root not in target.parents or not target.is_file():
-        return
-    try:
-        target.unlink()
-    except OSError:
-        logger.warning(
-            "Tank-owned hero image cleanup failed after the database change: %s",
-            relative_name,
-            exc_info=True,
-        )
+    remove_local_hero_image(image_url, settings.media_root, log=logger)
 
 
 def _get_tank_or_404(db: Session, tank_id: int) -> Tank:
@@ -429,14 +416,8 @@ def delete_tank(tank_id: int, request: Request, db: Session = Depends(get_db), c
     # used by retirement and device writes before checking/deleting the row so
     # concurrent delete/retire attempts cannot observe contradictory state.
     tank = lock_tank_for_mutation(db, tank_id)
-    if tank.retired_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Tank must be retired before permanent deletion",
-        )
-    hero_image_url = tank.hero_image_url
+    hero_image_url = stage_retired_tank_deletion(db, tank)
     audit_event(db, request, "tank.delete", "success", actor_user_id=current_user.id, target_type="tank", target_id=tank.id)
-    db.delete(tank)
     db.commit()
     _remove_local_hero_image(hero_image_url)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

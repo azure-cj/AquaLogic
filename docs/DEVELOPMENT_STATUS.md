@@ -1,11 +1,56 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
-### Analytics insights Goal 3 (2026-10-06; backend review #2 checkpoint)
+### Goal 3 review #2 fixes and exhibit mode (2026-10-06)
+
+The same `feat/current-insights-stability-demo` branch now includes the owner's
+time-boxed production exhibit exception. Shared curves and reference species
+live under app services; no app module imports local seed modules. All scenario
+codes use SHOW-*. `DEMO_EXHIBIT_DATE` defaults to 2026-10-13; the pH plateau
+covers that entire UTC date and the next day. Arbitrary-date tests check
+00:30, 12:00 and 23:30 on both days. Inference algorithms/constants are unchanged;
+bucket timestamp sets cap at three, while all values remain for exact medians.
+
+Production still rejects DEBUG. Demo flags require a parsed future UTC
+`EXHIBIT_DEMO_UNTIL` at most seven days ahead; the writer checks expiry and exits
+permanently, logging once. Existing active-device, retirement and scenario-map
+guards remain locked against lifecycle/device changes.
+`python -m app.cli.exhibit_demo seed --days 10` creates only private SHOW tanks,
+missing reference species/common-name links, and bulk mock history. It touches
+no users, thresholds, devices or non-SHOW tanks and runs no historic decision
+engine. Reruns refuse existing history unless `--replace`; replacement refuses
+real/device history. Cleanup uses the deletion service shared with the tank
+route, preflights hardware and leaves species. Status prints counts/latest UTC
+observations and expiry. Local seeding preserves older colliding tank names.
+See the [exhibit runbook](WORKFLOWS.md#exhibit-runbook) for Railway setup/removal
+and ordinary staff push behavior for live showcase alerts.
+
+Validation: full backend `python -m pytest -q` passed (416 passed, no skips,
+one existing Firebase deprecation warning), with the existing opt-in PostgreSQL
+test enabled against a separately initialized disposable local cluster.
+Focused exhibit/local-seed checks passed (34). The fresh 14-day SQLite local
+seed created 281,904 readings and its rerun added zero rows; authenticated cold
+endpoint timing was 2.8701 s, cache hits 0.0120/0.0118 s. These are local ASGI
+measurements including authentication/response serialization, without network
+or server-startup costs. The existing PostgreSQL Alembic chain upgraded through
+0019 on disposable databases. PostgreSQL CLI seed/status/rerun refusal,
+replacement, active-device refusal and cleanup passed against a migrated
+disposable database: 201,587 showcase readings at 30-second cadence, with
+existing species/threshold values and the real tank/reading/device preserved.
+At 24 hourly evaluations on each of 2026-10-13 and 2026-10-14, SHOW-WARM-A and
+SHOW-WARM-B each project 12/24 (50%), combined 24/24 (100%). SHOW-PH is
+more_variable 24/24; stable trend/variability/species and the species conflict
+also match their targets 24/24. The local seed retains reporting gaps, giving
+12/24 and 8/24 warming coverage, combined 20/24 (83.3%) on October 13.
+AST audits prove every module constant and
+inference function unchanged except timestamp retention in TankWindow.
+No push/deployment/PR is performed; Goals 4–6 remain pending at review #2.
+
+### Analytics insights Goal 3 (2026-10-06; initial backend review #2 checkpoint)
 
 `feat/current-insights-stability-demo` branches from the unmerged Goal 2
 `feat/current-insights-projection`. Stability now compares median absolute

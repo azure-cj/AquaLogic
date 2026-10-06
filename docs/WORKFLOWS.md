@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 ## First-time setup
 
@@ -26,11 +26,13 @@ script in production.
 when no administrator exists. On a fresh local SQLite database it creates
 14 days of history at a 30-second cadence, using bulk batches of 5,000 rows,
 with existing normal/warning/critical/offline states and five demo alerts.
-Only mapped, active demo tanks without active registered devices are filled;
+Scenario codes use the reserved SHOW- prefix. Only mapped, active demo tanks
+without active registered devices are filled;
 Recovery Reef has a ten-minute trailing outage and receives no live readings.
 Tanks with any existing readings are preserved, so rerunning does not duplicate
 history or backfill an existing older seed. Use a separate fresh development
-database to get the full new scenario history.
+database to get the full new scenario history. Pre-SHOW tanks with colliding
+local demo names are left intact; seeding does not adopt them into the writer.
 
 The optional live generator uses the same pure `scenario_value` curves as
 the seed and retains `is_mock=True`. `DEMO_SENSOR_ENABLED` and
@@ -51,6 +53,50 @@ environment must provide `DATABASE_URL` using PostgreSQL; a missing URL or a
 SQLite URL fails settings validation at startup. The synchronous PostgreSQL
 driver is installed from `requirements.txt`, and `postgres://` URLs are
 normalized for SQLAlchemy.
+
+### Exhibit runbook
+
+This owner-approved production exception applies only to the scenario writer.
+Keep `DEBUG=false`. Use an already migrated database and existing staff accounts;
+do not run `seed.seed_data` in production.
+
+1. On Railway set `DEMO_EXHIBIT_DATE=2026-10-13`,
+   `EXHIBIT_DEMO_UNTIL=2026-10-14T23:59:00Z`, `DEMO_SENSOR_ENABLED=true`,
+   and `DEMO_SENSOR_INSTANCE=true` on exactly one instance/worker. The deadline
+   must be in the future and at most seven days ahead at startup, so enable this
+   configuration on or after 2026-10-07 23:59 UTC (strictly before the deadline).
+   Every other instance must have its demo instance flag disabled. The writer
+   checks expiry every cycle and before each locked write, exits permanently
+   when expired, and logs its stop once.
+2. From `backend/` on the intended deployment, at least a day before the exhibit,
+   run `python -m app.cli.exhibit_demo seed --days 10`. This creates only seven
+   private SHOW-* tanks, common-name species links, missing reference species,
+   and bulk mock history at 30-second cadence. It creates no users, thresholds,
+   devices, historic alerts or pushes and leaves all non-SHOW tanks untouched.
+   Existing species values are never changed. It refuses an existing history;
+   `--replace` deletes/regenerates only mapped SHOW-* readings. It refuses
+   active hardware, real/device readings, retired or unrecognized SHOW tanks.
+   Do not change the exhibit date between seeding and live generation.
+3. Run `python -m app.cli.exhibit_demo status` to inspect codes, reading counts,
+   latest observation times and the expiry deadline. With an existing staff
+   token, inspect `GET /analytics/current-insights` (or repeat `tank_id` for
+   the SHOW tanks). Confirm fresh live measurements, the species conflict,
+   warming projections and pH variability during the exhibit window. Allow up
+   to 20 seconds for the insights cache. SHOW-OFFLINE keeps a trailing ten-minute
+   outage and receives no live writes. The pH plateau spans the entire configured
+   UTC date and the following day, with elevated history starting the prior day.
+4. After the exhibit, unset `DEMO_SENSOR_ENABLED`, `DEMO_SENSOR_INSTANCE`,
+   `EXHIBIT_DEMO_UNTIL` and `DEMO_EXHIBIT_DATE`, redeploy, then run
+   `python -m app.cli.exhibit_demo cleanup`. Cleanup preflights all SHOW-* tanks
+   under lifecycle locks, refuses any active device or unresolved actuator work,
+   and uses the shared permanent deletion service to remove only SHOW tanks and
+   their reading/alert history. Species remain. Unsetting the expiry also allows
+   production CLI startup after the deadline has passed.
+
+If push notifications are enabled, **live showcase alerts will push to staff
+devices** through the ordinary decision engine. Bulk history does not run that
+engine. Insights remain read-only. Both CLI database dialects use SQLAlchemy;
+SQLite writer locks and PostgreSQL row locks protect hardware checks.
 
 ### Production first administrator
 
@@ -389,8 +435,8 @@ after the command completes.
 
 Validate an isolated restore with `/health`, administrator login, staff read
 access, administrator-only access, public tank privacy, restored media URLs,
-and restored device/actuator mappings. Production recovery must not run demo
-seeding or demo sensor generation.
+and restored device/actuator mappings. Production recovery must not run local demo seeding or enable demo generation;
+the separate [exhibit runbook](#exhibit-runbook) is the time-boxed exception.
 
 Production PostgreSQL backups and point-in-time recovery remain the deployment
 or database-provider responsibility. Production media storage must have a
@@ -449,7 +495,8 @@ rg -n "Luna Extra High|implementation roadmap|WEB_DASHBOARD_IMPLEMENTATION_REPOR
 Deployment configuration is present in `render.yaml` and `web/vercel.json`, but
 deployment is not complete. Before a production release, provide a PostgreSQL
 `DATABASE_URL`, a unique 32-byte JWT secret, explicit CORS origins and trusted
-hosts, a public base URL, controlled image hosts, and disabled debug/demo flags.
+hosts, a public base URL, controlled image hosts, and disabled debug/demo flags
+(except the time-boxed [exhibit runbook](#exhibit-runbook)).
 The backend code validates the database mode and migration URL handling, but the
 production migration chain still needs a live PostgreSQL upgrade check. Verify
 login, refresh rotation, public QR privacy, migration, headers, CORS, RBAC, and

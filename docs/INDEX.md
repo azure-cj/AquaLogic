@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -54,6 +54,9 @@ link back here rather than duplicate a competing project status.
 - [`ANALYTICS_INSIGHTS_PLAN.md`](ANALYTICS_INSIGHTS_PLAN.md): binding contract
   and sequential branch/checkpoint workflow for bounded advisory current
   insights. Goals 1–3 backend are implemented locally and stopped for review #2;
+  Review #2 follow-up adds configurable dates, a time-boxed production SHOW-*
+  exhibit writer and scoped seed/status/cleanup CLI; the
+  [exhibit runbook](WORKFLOWS.md#exhibit-runbook) records operations.
   UI and optional backtest goals remain planned.
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):

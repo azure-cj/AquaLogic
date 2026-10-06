@@ -1,7 +1,7 @@
 # Analytics Insights Plan (re-defense / exhibit)
 
 Status: Goals 1–3 implemented locally; stopped for Claude backend review #2.
-Goals 4–6 pending. Last reviewed: 2026-10-06.
+Goals 4–6 pending. Review #2 exhibit follow-up implemented. Last reviewed: 2026-10-07.
 Owner workflow: Codex implements each
 goal on its own branch; Claude reviews the backend after Goal 2 and Goal 3 and
 does the final UI polish after Goal 5.
@@ -304,17 +304,23 @@ windows instead. Keep the exact Part A algorithms and constants. If the
 combined ≥80% target is still missed, retain plausible curves and report the
 measured coverage rather than distorting data or inference gates.
 
-Current role map: Riverbank Community (`DISPLAY-01`) and Breeder Bay
-(`BREED-01`) are stable; Guppy Gallery (`DISPLAY-02`) and Observation Point
-(`RACK-02`) warm from 24.8 to 28.0 °C over 6.5 h and cool over 1.5 h, offset
-by 4 h. Juvenile Grove (`BREED-02`) has unstable pH. Calmwater Rack (`RACK-01`)
+Current role map: Riverbank Community (`SHOW-STABLE`) and Breeder Bay
+(`SHOW-BREED`) are stable; Guppy Gallery (`SHOW-WARM-A`) and Observation Point
+(`SHOW-WARM-B`) warm from 24.8 to 28.0 °C over 6.5 h and cool over 1.5 h, offset
+by 4 h. Juvenile Grove (`SHOW-PH`) has unstable pH. Calmwater Rack (`SHOW-SPECIES`)
 uses its existing Discus (28–31 °C) and Corydoras Catfish (22–27 °C) conflict.
-Recovery Reef (`SERVICE-01`) stays offline. Other species ranges are unchanged.
+Recovery Reef (`SHOW-OFFLINE`) stays offline. Other species ranges are unchanged.
+These are local seed names; the scoped exhibit CLI uses private `Showcase · …`
+names for these codes. Reserved SHOW-* codes avoid collisions with real tanks.
+Curves live in `backend/app/services/demo_scenarios.py`; app modules never
+import local seed modules.
 
 The pH long cycle has 23 quiet days, one day of smooth increase, three high
-days, and one day of smooth recovery. Its fixed UTC exhibit epoch is
-2026-10-06; the 24-point acceptance day is that UTC day. High noise begins
-2026-10-05 and recovery begins 2026-10-08, repeating every 28 days. This
+days, and one day of smooth recovery. `DEMO_EXHIBIT_DATE` (YYYY-MM-DD, UTC,
+default 2026-10-13) anchors the epoch and the 24-point acceptance day. High
+noise begins the prior day; recovery starts two days after the configured
+date (default 2026-10-12 through 2026-10-15), repeating every 28 days. The
+plateau covers the entire configured date and following day. This
 explicit phase avoids a seed/live discontinuity; outside the exhibit phase,
 the role naturally returns to typical/steadier. A bounded recurring signal
 cannot remain more variable than its own rolling baseline indefinitely.
@@ -329,6 +335,21 @@ noise so results are reproducible.
 scenario map by `tank_code`, and never to a tank that has an active
 `RegisteredDevice`. The real hardware tank at the exhibit must receive only
 real readings.
+
+Owner-approved review #2 exception (2026-10-06): production may run the
+scenario-only writer with `EXHIBIT_DEMO_UNTIL`, an ISO UTC datetime strictly in
+the future and at most seven days ahead at startup. DEBUG remains forbidden.
+An invalid/missing deadline retains the production demo rejection. Expiry
+permanently stops the loop with one log line. See the scoped seed/status/cleanup
+commands in the [exhibit runbook](WORKFLOWS.md#exhibit-runbook). The inference
+algorithms/constants are unchanged; Goals 4–6 have not started.
+
+Review #2 measured coverage on 2026-10-13 at 24 hourly times: full 30-second
+CLI history on PostgreSQL gives SHOW-WARM-A 12/24, SHOW-WARM-B 12/24 and
+combined 24/24 (100%); pH more_variable, stable-role targets and species conflict
+each hold 24/24. The same counts hold on October 14. The local seed's retained
+reporting gaps give warming 12/24 and 8/24, combined 20/24 (83.3%). No inference
+gate or constant was adjusted.
 
 ---
 
@@ -460,7 +481,7 @@ Follow the "SHARED RULES" block in docs/ANALYTICS_INSIGHTS_PLAN.md Part B (bindi
 Tasks:
 1. Implement Part A §A3 B4 stability exactly (adjacent-bucket median absolute change, current 24 h vs previous 7 days, min coverage, spread floor, ratio labels) and enable the more_variable attention group.
 2. Demo scenarios per Part A §A6:
-   - Create backend/seed/demo_scenarios.py with a pure deterministic function scenario_value(tank_code, parameter, t) and a SCENARIOS map from tank_code to role. Map roles onto the existing demo tanks from seed/seed_tanks.py and seed/seed_dashboard_demo.py; keep the existing "Recovery Reef"/SERVICE-01 offline behavior and the existing latest normal/warning/critical states expected by tests/test_demo_seed.py (update that test only if a state must change, and explain why).
+   - Create backend/app/services/demo_scenarios.py (review #2 relocation) with a pure deterministic function scenario_value(tank_code, parameter, t) and a SCENARIOS map from tank_code to role. Map roles onto the existing demo tanks from seed/seed_tanks.py and seed/seed_dashboard_demo.py; keep the existing "Recovery Reef"/SHOW-OFFLINE offline behavior and the existing latest normal/warning/critical states expected by tests/test_demo_seed.py (update that test only if a state must change, and explain why).
    - Pick the species-conflict tank using existing seed_fish ranges; report which species and ranges you used. Do not edit species ranges unless no existing pair conflicts.
    - Extend seeded history to 14 days (DEMO_HISTORY_DAYS) at the existing 30 s cadence using scenario_value, with bulk inserts; keep seeding idempotent.
    - Change app/services/demo_sensor.py so live readings come from scenario_value for tanks in SCENARIOS only, and it NEVER writes to a tank that has an active RegisteredDevice or is not in SCENARIOS. Keep is_mock=True.

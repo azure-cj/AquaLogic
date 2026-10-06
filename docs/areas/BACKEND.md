@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 ## Read first
 
@@ -121,13 +121,23 @@ Last reviewed: 2026-10-06
 - `backend/alembic/versions/0019_sensor_reading_sample_id.py`: nullable
   device-scoped sensor-ingestion sample IDs with a database-enforced unique
   constraint; callers that omit the field keep the existing insert behavior.
-- `backend/app/services/demo_sensor.py`: opt-in local sensor generator. It
+- `backend/app/cli/exhibit_demo.py`: scoped private SHOW-* history/status/cleanup;
+  bulk history creates no users, thresholds, devices or historic alerts. Existing
+  species values are retained. Cleanup shares `app/services/tank_deletion.py`
+  with the tank route and preflights hardware. See the
+  [exhibit runbook](../WORKFLOWS.md#exhibit-runbook).
+- `backend/app/services/demo_sensor.py`: opt-in scenario sensor generator. It
   writes only active tanks in the scenario map without an active device,
   rechecking under the existing lifecycle lock shared with device provisioning
-  and retirement. Recovery Reef remains offline and all demo readings are mock.
-- `backend/seed/demo_scenarios.py`: pure UTC curves shared by seeded history
+  and retirement. SHOW-OFFLINE remains offline and all demo readings are mock.
+  Production requires a future `EXHIBIT_DEMO_UNTIL` at most seven days ahead;
+  expiry permanently stops the loop. DEBUG remains forbidden in production.
+- `backend/app/services/demo_scenarios.py`: pure UTC curves shared by seeded history
   and live readings. Roles, phase limits and measured coverage are in the
   [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+  `DEMO_EXHIBIT_DATE` defaults to 2026-10-13, with pH elevated through the next
+  day. Reference species live in `app/services/demo_species.py`, shared with
+  local seeds without app-to-seed imports.
 - `backend/seed/seed_dashboard_demo.py`: 14 days at a 30-second cadence, bulk
   inserts in batches of 5,000; preserves existing readings and is idempotent.
   The seed also skips unmapped, retired and active-device tanks. See

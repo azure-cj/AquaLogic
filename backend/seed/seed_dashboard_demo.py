@@ -5,7 +5,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
 from app.models import Alert, AlertSeverity, FishSpecies, RegisteredDevice, SensorReading, Tank, TankFish
-from seed.demo_scenarios import SCENARIOS, PARAMETERS, scenario_value
+from app.services.demo_scenarios import SCENARIOS, PARAMETERS, scenario_value
 
 DEMO_HISTORY_DAYS = 14
 DEMO_INTERVAL_SECONDS = 30
