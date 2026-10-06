@@ -141,7 +141,7 @@ void main() {
         expect(state.equipment.pumpAStatus, 'RUNNING');
         expect(state.equipment.pumpBStatus, 'IDLE');
         expect(state.cloudConnected, isNull);
-        expect(controller.canCommand, isFalse);
+        expect(controller.canCommand, isTrue);
         expect(server.requests.map((r) => r.uri.path), server.fixtures.keys);
         for (final request in server.requests) {
           expect(request.method, 'GET');
@@ -152,9 +152,6 @@ void main() {
           );
           expect(request.headers.value(HttpHeaders.cookieHeader), isNull);
         }
-        await expectLater(repository.setLight(false), throwsUnsupportedError);
-        await expectLater(repository.setUV(true), throwsUnsupportedError);
-        await expectLater(repository.feed(), throwsUnsupportedError);
         expect(server.requests.length, 6);
       } finally {
         controller.dispose();
@@ -269,7 +266,7 @@ void main() {
               controller.state?.connection == ConsoleLocalConnection.connected,
         );
         expect(controller.state!.readingsStale, isFalse);
-        expect(controller.canCommand, isFalse);
+        expect(controller.canCommand, isTrue);
       } finally {
         controller.dispose();
       }
@@ -440,7 +437,10 @@ void main() {
         expect(find.textContaining('27.3', findRichText: true), findsOneWidget);
         expect(find.text('Running'), findsOneWidget);
         expect(find.textContaining('Cloud · Unknown'), findsOneWidget);
-        expect(find.textContaining('controls disabled'), findsOneWidget);
+        expect(
+          find.textContaining('Live ESP32 · local control'),
+          findsOneWidget,
+        );
         final count = server.requests.length;
         await tester.pumpWidget(
           MaterialApp(

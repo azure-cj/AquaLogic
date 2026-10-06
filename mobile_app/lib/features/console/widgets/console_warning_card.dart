@@ -41,7 +41,7 @@ class ConsoleWarningCard extends StatelessWidget {
         : !state.isSimulated
         ? (state.quality == null
               ? 'The ESP32 has not reported a usable classification.'
-              : 'ESP32 reported ${state.quality!.label.toLowerCase()}. Live controls remain disabled.')
+              : 'ESP32 reported ${state.quality!.label.toLowerCase()}. Check water conditions before dosing.')
         : switch (state.quality) {
             ConsoleWaterQuality.normal =>
               'All four simulated parameters are within the configured range.',

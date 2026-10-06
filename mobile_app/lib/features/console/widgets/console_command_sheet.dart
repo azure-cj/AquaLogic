@@ -26,7 +26,11 @@ class ConsoleCommandSheet extends StatelessWidget {
       final pumpStatus = title == 'Pump A'
           ? state?.equipment.pumpAStatus
           : state?.equipment.pumpBStatus;
-      final command = state?.command;
+      final command =
+          state?.commands[action?.actuator] ??
+          (state?.command?.action.actuator == action?.actuator
+              ? state?.command
+              : null);
       final current = switch (action) {
         ConsoleAction.lightOn || ConsoleAction.lightOff =>
           state?.equipment.lightConfirmed != true
@@ -67,7 +71,10 @@ class ConsoleCommandSheet extends StatelessWidget {
           ? 'Turn off'
           : 'Turn on';
       final enabled =
-          controller.canCommand && actualAction != null && current != 'Unknown';
+          actualAction != null &&
+          controller.canSubmit(actualAction) &&
+          current != 'Unknown' &&
+          (actualAction != ConsoleAction.feed || current != 'Running');
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
         child: ConsoleStaggerColumn(
@@ -171,14 +178,41 @@ class ConsoleCommandSheet extends StatelessWidget {
                 height: 56,
                 child: FilledButton(
                   onPressed: enabled
-                      ? () => controller.submit(actualAction)
+                      ? () async {
+                          if (actualAction == ConsoleAction.feed &&
+                              state?.isSimulated == false) {
+                            final approved = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Feed once?'),
+                                content: const Text(
+                                  'Run one configured feed cycle. An uncertain request will not be repeated automatically.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    child: const Text('Feed once'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (approved != true || !context.mounted) return;
+                          }
+                          await controller.submit(actualAction);
+                        }
                       : null,
                   style: FilledButton.styleFrom(
                     disabledBackgroundColor: ConsoleStyle.surface,
                     disabledForegroundColor: ConsoleStyle.faint,
                   ),
                   child: Text(
-                    controller.busy
+                    command?.status.isPending == true
                         ? 'Command in progress'
                         : state?.localConnected != true
                         ? 'Local device offline'
@@ -215,15 +249,22 @@ class _CommandProgress extends StatelessWidget {
     }
     final failed =
         command.status == ConsoleCommandStatus.rejected ||
+        command.status == ConsoleCommandStatus.failed ||
         command.status == ConsoleCommandStatus.unknown;
     final reached = switch (command.status) {
       ConsoleCommandStatus.idle => 0,
       ConsoleCommandStatus.accepted => 1,
       ConsoleCommandStatus.running => 2,
       ConsoleCommandStatus.completed => 3,
+      ConsoleCommandStatus.sending => 1,
+      ConsoleCommandStatus.confirming => 2,
+      ConsoleCommandStatus.confirmed => 3,
       _ => 0,
     };
-    const steps = ['Accepted', 'Running', 'Completed'];
+    final live = command.id.startsWith('local-');
+    final steps = live
+        ? ['Sending', 'Confirming', 'Confirmed']
+        : ['Accepted', 'Running', 'Completed'];
     return ConsoleInset(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -46,7 +46,7 @@ class _ConsoleSettingsSheetState extends State<ConsoleSettingsSheet> {
                     icon: Icons.memory_rounded,
                     title: 'Local ESP32',
                     detail: state?.isSimulated == false
-                        ? 'Read-only local monitor'
+                        ? 'Direct local telemetry and control'
                         : 'Controls the tank equipment',
                     connected: state?.localConnected ?? false,
                     status: state?.isSimulated == false

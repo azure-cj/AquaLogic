@@ -1,5 +1,9 @@
 # Tank Console integration readiness
 
+Historical read-only checkpoint. [Phase 2B](TANK_CONSOLE_PHASE_2B.md) supersedes
+the command-disabled boundary; transport/readiness protections remain.
+Physical local connectivity was subsequently confirmed by the owner.
+
 Software-side hardening, 2026-10-06. All real actuator commands stay disabled.
 The external contract is root `esp32` at `248c698` (blob
 `df25c0b22407b303ed410b1d975b0e5c0da92a20`). The working source matches that

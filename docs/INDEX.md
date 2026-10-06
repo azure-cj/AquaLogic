@@ -25,6 +25,9 @@ link back here rather than duplicate a competing project status.
 
 ## Operational documentation
 
+- [Tank Console Phase 2B](TANK_CONSOLE_PHASE_2B.md): live local actuator
+  contract, status confirmation, uncertain outcomes and physical validation.
+
 - [Tank Console integration readiness](TANK_CONSOLE_INTEGRATION_READINESS.md):
   firmware fixtures, real socket failure tests and collaborator setup.
 

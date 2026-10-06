@@ -9,6 +9,22 @@ abstract interface class ConsoleHttpTransport {
 
 ConsoleHttpTransport createConsoleHttpTransport() => platform.createTransport();
 
+/// Separate capability: read clients cannot accidentally issue mutations.
+abstract interface class ConsoleCommandTransport {
+  Future<ConsoleHttpResponse> sendCommand(Uri uri);
+}
+
+class ConsoleHttpResponse {
+  const ConsoleHttpResponse(this.statusCode, this.body);
+  final int statusCode;
+  final String body;
+}
+
+class ConsoleCommandFailure implements Exception {
+  const ConsoleCommandFailure({required this.mayHaveReachedDevice});
+  final bool mayHaveReachedDevice;
+}
+
 /// Safe setup guidance, without socket details, addresses or stack traces.
 class ConsoleReadFailure implements Exception {
   const ConsoleReadFailure(this.message);

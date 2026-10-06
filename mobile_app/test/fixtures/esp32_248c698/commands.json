@@ -1,0 +1,15 @@
+{
+  "/led/on": {"led":"on"},
+  "/led/off": {"led":"off"},
+  "/uv/on": {"led":"on"},
+  "/uv/off": {"led":"off"},
+  "/feeder/feed": {"fed":true},
+  "/syringeA/dispense": {"dispensed":true},
+  "/syringeB/dispense": {"dispensed":true},
+  "/syringeA/stop": {"stopped":true},
+  "/syringeB/stop": {"stopped":true},
+  "/syringeA/retract": {"retracted":true},
+  "/syringeB/retract": {"retracted":true},
+  "/syringeA/refill-confirm": {"refill_confirmed":true},
+  "/syringeB/refill-confirm": {"refill_confirmed":true}
+}

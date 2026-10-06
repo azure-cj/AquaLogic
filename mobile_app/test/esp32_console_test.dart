@@ -516,12 +516,12 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.textContaining('Cloud · Unknown'), findsOneWidget);
-      expect(find.textContaining('controls disabled'), findsOneWidget);
+      expect(find.textContaining('Live ESP32 · local control'), findsOneWidget);
       expect(find.text('Running'), findsOneWidget);
       expect(find.text('Simulated data'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('console-light')));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Turn off'), findsNothing);
+      expect(find.text('Turn off'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

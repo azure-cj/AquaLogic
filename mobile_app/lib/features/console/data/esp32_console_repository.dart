@@ -5,8 +5,9 @@ import 'console_repository.dart';
 import 'console_configuration_store.dart';
 import 'console_http_transport.dart';
 import 'esp32_console_parser.dart';
+import 'esp32_console_commands.dart';
 
-/// Phase 2A: six allowlisted GETs, no actuator command implementation.
+/// Local telemetry and single-shot commands; firmware reports are authoritative.
 class Esp32ConsoleRepository extends ConsoleRepository {
   Esp32ConsoleRepository({
     ConsoleConfigurationStore? configurationStore,
@@ -14,6 +15,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     DateTime Function()? clock,
     this.pollInterval = const Duration(seconds: 2),
     this.staleAfter = const Duration(seconds: 10),
+    this.commandConfirmationWindow = const Duration(seconds: 12),
   }) : _store = configurationStore ?? SecureConsoleConfigurationStore(),
        _transport = transport ?? createConsoleHttpTransport(),
        _clock = clock ?? DateTime.now;
@@ -22,6 +24,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
   final DateTime Function() _clock;
   final Duration pollInterval;
   final Duration staleAfter;
+  final Duration commandConfirmationWindow;
   final _updates = StreamController<ConsoleState>.broadcast();
   ConsoleEndpoint? _endpoint;
   Future<void>? _initialization;
@@ -31,6 +34,63 @@ class Esp32ConsoleRepository extends ConsoleRepository {
   bool _disposed = false;
   int _listeners = 0;
   ConsoleState _state = _empty();
+  final _reports = <String, Map<String, dynamic>?>{};
+  Future<void>? _wire;
+  int _commandGeneration = 0;
+  late final _commands = Esp32ConsoleCommands(
+    confirmationWindow: commandConfirmationWindow,
+    state: () => _state,
+    notify: () => _emit(_state),
+    send: (action) {
+      final generation = _commandGeneration;
+      return _serial(() async {
+        if (_disposed || generation != _commandGeneration) {
+          throw const ConsoleCommandFailure(mayHaveReachedDevice: false);
+        }
+        final endpoint = _endpoint;
+        if (endpoint == null || _transport is! ConsoleCommandTransport) {
+          throw const ConsoleCommandFailure(mayHaveReachedDevice: false);
+        }
+        return (_transport as ConsoleCommandTransport).sendCommand(
+          endpoint.baseUri.resolve(action.path),
+        );
+      });
+    },
+    refresh: (action) async {
+      final endpoint = _endpoint;
+      if (_disposed || endpoint == null) return;
+      try {
+        await _read(endpoint, action.statusPath);
+      } catch (_) {
+        _reports[action.statusPath] = null;
+      }
+      if (!_disposed && endpoint == _endpoint) {
+        _emit(
+          _state.copyWith(equipment: Esp32ConsoleParser.equipment(_reports)),
+        );
+      }
+    },
+  );
+  Future<T> _serial<T>(Future<T> Function() work) {
+    final result = (_wire ?? Future<void>.value()).then((_) {
+      if (_disposed) throw StateError('Console disposed');
+      return work();
+    });
+    _wire = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<Map<String, dynamic>> _read(ConsoleEndpoint endpoint, String path) =>
+      _serial(() async {
+        final value = Esp32ConsoleParser.object(
+          await _transport.get(endpoint.baseUri.resolve(path)),
+        );
+        if (!_disposed && endpoint == _endpoint) {
+          _reports[path] = value;
+          _commands.reconcile(Esp32ConsoleParser.equipment(_reports), path);
+        }
+        return value;
+      });
   static ConsoleState _empty() => const ConsoleState(
     observedAt: null,
     temperature: null,
@@ -51,7 +111,9 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     ),
   );
   @override
-  bool get isReadOnly => true;
+  bool get isReadOnly => _transport is! ConsoleCommandTransport;
+  @override
+  bool get supportsPumpControls => !isReadOnly;
   @override
   bool get supportsLocalConfiguration => true;
   @override
@@ -90,6 +152,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
       await subscription.cancel();
       _listeners--;
       if (_listeners == 0) {
+        cancelCommands();
         _timer?.cancel();
         _timer = null;
         _freshnessTimer?.cancel();
@@ -143,12 +206,11 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     ]) {
       if (_disposed) return;
       try {
-        responses[path] = Esp32ConsoleParser.object(
-          await _transport.get(endpoint.baseUri.resolve(path)),
-        );
+        responses[path] = await _read(endpoint, path);
         if (path == '/data') received = _clock();
       } catch (error) {
         responses[path] = null;
+        _reports[path] = null;
         // Avoid six sequential timeouts when the device cannot be reached.
         if (path == '/data') {
           dataError = error;
@@ -168,13 +230,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
               ? ConsoleLocalConnection.disconnected
               : ConsoleLocalConnection.degraded,
           message: _readFailureMessage(dataError),
-          equipment: const ConsoleEquipmentState(
-            lightConfirmed: false,
-            uvConfirmed: false,
-            feederConfirmed: false,
-            pumpAStatus: 'UNKNOWN',
-            pumpBStatus: 'UNKNOWN',
-          ),
+          equipment: _unavailableEquipment(),
         ),
       );
       return;
@@ -185,7 +241,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     final ph = Esp32ConsoleParser.number(data['ph_value']);
     final tds = Esp32ConsoleParser.number(data['tds_ppm']);
     final turbidity = Esp32ConsoleParser.number(data['turbidity_ntu']);
-    final equipment = Esp32ConsoleParser.equipment(responses);
+    final equipment = Esp32ConsoleParser.equipment(_reports);
     final complete =
         temp != null &&
         ph != null &&
@@ -223,13 +279,7 @@ class Esp32ConsoleRepository extends ConsoleRepository {
           _snapshot(
             connection: ConsoleLocalConnection.disconnected,
             message: 'No recent local update. Showing last known readings.',
-            equipment: const ConsoleEquipmentState(
-              lightConfirmed: false,
-              uvConfirmed: false,
-              feederConfirmed: false,
-              pumpAStatus: 'UNKNOWN',
-              pumpBStatus: 'UNKNOWN',
-            ),
+            equipment: _unavailableEquipment(),
           ),
         );
       });
@@ -276,6 +326,14 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     return 'ESP32 unreachable. Check the address and that Android and ESP32 are on the same Wi-Fi.';
   }
 
+  ConsoleEquipmentState _unavailableEquipment() => _state.equipment.copyWith(
+    lightConfirmed: false,
+    uvConfirmed: false,
+    feederConfirmed: false,
+    pumpAStatus: 'UNKNOWN',
+    pumpBStatus: 'UNKNOWN',
+  );
+
   ConsoleState _snapshot({
     required ConsoleLocalConnection connection,
     String? message,
@@ -298,8 +356,12 @@ class Esp32ConsoleRepository extends ConsoleRepository {
   );
   void _emit(ConsoleState value) {
     if (!_disposed) {
-      _state = value;
-      _updates.add(value);
+      _state = value.copyWith(
+        command: _commands.last,
+        commands: Map.unmodifiable(_commands.latest),
+        uncertainCommands: List.unmodifiable(_commands.uncertain),
+      );
+      _updates.add(_state);
     }
   }
 
@@ -308,11 +370,13 @@ class Esp32ConsoleRepository extends ConsoleRepository {
     final endpoint = ConsoleEndpoint.parse(host);
     await _initialize();
     await _store.writeHost(endpoint.host);
+    cancelCommands();
     _timer?.cancel();
     await _inFlight;
     _timer?.cancel();
     if (_disposed) return;
     _endpoint = endpoint;
+    _reports.clear();
     _freshnessTimer?.cancel();
     _emit(_empty());
     if (_listeners > 0) {
@@ -330,26 +394,56 @@ class Esp32ConsoleRepository extends ConsoleRepository {
   Future<void> retryLocalConnection() => _poll();
   @override
   Future<ConsoleEquipmentState> getEquipmentState() async => _state.equipment;
-  Never _readOnly() => throw UnsupportedError(
-    'Live actuator controls are disabled in Phase 2A.',
-  );
   @override
-  Future<ConsoleCommand> setLight(bool enabled) async => _readOnly();
+  Future<ConsoleCommand> setLight(bool enabled) =>
+      _submit(enabled ? ConsoleAction.lightOn : ConsoleAction.lightOff);
   @override
-  Future<ConsoleCommand> setUV(bool enabled) async => _readOnly();
+  Future<ConsoleCommand> setUV(bool enabled) =>
+      _submit(enabled ? ConsoleAction.uvOn : ConsoleAction.uvOff);
   @override
-  Future<ConsoleCommand> feed() async => _readOnly();
+  Future<ConsoleCommand> feed() => _submit(ConsoleAction.feed);
   @override
-  Future<ConsoleCommand?> getCommand(String id) async => null;
+  Future<ConsoleCommand> pump(ConsoleAction action) {
+    if (!action.isPump) throw ArgumentError('Expected a pump action');
+    return _submit(action);
+  }
+
   @override
-  Stream<ConsoleCommand> watchCommand(String id) => const Stream.empty();
+  void cancelCommands() {
+    _commandGeneration++;
+    _commands.cancel();
+  }
+
+  Future<ConsoleCommand> _submit(ConsoleAction action) async {
+    if (isReadOnly) {
+      throw UnsupportedError('This transport supports monitoring only.');
+    }
+    return _commands.submit(action);
+  }
+
+  @override
+  Future<ConsoleCommand?> getCommand(String id) async => _commands.get(id);
+  @override
+  Stream<ConsoleCommand> watchCommand(String id) => Stream.multi((sink) {
+    final command = _commands.get(id);
+    if (command != null) sink.add(command);
+    final sub = _updates.stream.listen((_) {
+      final value = _commands.get(id);
+      if (value != null) sink.add(value);
+    }, onDone: sink.close);
+    sink.onCancel = sub.cancel;
+  });
   @override
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _commandGeneration++;
+    _commands.dispose();
     _timer?.cancel();
     _freshnessTimer?.cancel();
     _transport.close();
-    await _updates.close();
+    // A departing widget/test can pause event delivery. Socket/timer shutdown
+    // must not wait for a subscriber to process its final stream event.
+    unawaited(_updates.close());
   }
 }

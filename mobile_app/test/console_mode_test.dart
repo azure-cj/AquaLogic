@@ -172,7 +172,7 @@ void main() {
     expect(repository.prototypeControls, isNull);
     expect((await repository.getState()).isSimulated, isFalse);
     expect((await repository.getState()).temperature, isNull);
-    await expectLater(repository.feed(), throwsUnsupportedError);
+    expect((await repository.feed()).status, ConsoleCommandStatus.rejected);
     await repository.dispose();
   });
 

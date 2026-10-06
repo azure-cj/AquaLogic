@@ -7,6 +7,7 @@ import '../models/console_command.dart';
 import '../models/console_state.dart';
 import '../platform/console_display_session.dart';
 import '../widgets/console_command_sheet.dart';
+import '../widgets/console_pump_sheet.dart';
 import '../widgets/console_equipment_card.dart';
 import '../widgets/console_metric_card.dart';
 import '../widgets/console_panel.dart';
@@ -280,7 +281,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
               : 'Off',
           icon: Icons.light_mode_outlined,
           active: equipment.lightConfirmed && equipment.lightOn,
-          onTap: _controller.canCommand
+          onTap: !state.isSimulated || _controller.canCommand
               ? () => _controls(
                   'light',
                   'Lighting',
@@ -302,7 +303,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
               : 'Off',
           icon: Icons.flare,
           active: equipment.uvConfirmed && equipment.uvOn,
-          onTap: _controller.canCommand
+          onTap: !state.isSimulated || _controller.canCommand
               ? () => _controls(
                   'uv',
                   'UV sterilizer',
@@ -324,7 +325,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
               : 'Ready',
           icon: Icons.set_meal_outlined,
           active: equipment.feederConfirmed && equipment.feederRunning,
-          onTap: _controller.canCommand
+          onTap: !state.isSimulated || _controller.canCommand
               ? () => _controls(
                   'feeder',
                   'Feeder',
@@ -341,14 +342,19 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
           label: 'Pump A',
           status: _title(equipment.pumpAStatus),
           icon: Icons.science_outlined,
-          readOnly: true,
-          onTap: () => _controls(
-            'pump-a',
-            'Pump A',
-            Icons.science_outlined,
-            null,
-            readOnly: true,
-          ),
+          readOnly: !widget.repository.supportsPumpControls,
+          onTap: widget.repository.supportsPumpControls
+              ? () => _sheet(
+                  ConsolePumpSheet(controller: _controller, pumpA: true),
+                  'pump-a',
+                )
+              : () => _controls(
+                  'pump-a',
+                  'Pump A',
+                  Icons.science_outlined,
+                  null,
+                  readOnly: true,
+                ),
         ),
       ),
       KeyedSubtree(
@@ -358,14 +364,19 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
           label: 'Pump B',
           status: _title(equipment.pumpBStatus),
           icon: Icons.science_outlined,
-          readOnly: true,
-          onTap: () => _controls(
-            'pump-b',
-            'Pump B',
-            Icons.science_outlined,
-            null,
-            readOnly: true,
-          ),
+          readOnly: !widget.repository.supportsPumpControls,
+          onTap: widget.repository.supportsPumpControls
+              ? () => _sheet(
+                  ConsolePumpSheet(controller: _controller, pumpA: false),
+                  'pump-b',
+                )
+              : () => _controls(
+                  'pump-b',
+                  'Pump B',
+                  Icons.science_outlined,
+                  null,
+                  readOnly: true,
+                ),
         ),
       ),
     ];
@@ -566,7 +577,8 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
 
   Widget _footer(ConsoleState state) {
     const meta = TextStyle(fontSize: 13, height: 1, color: ConsoleStyle.faint);
-    final command = state.command;
+    final uncertain = state.uncertainCommands;
+    final command = uncertain.firstOrNull ?? state.command;
     return Row(
       children: [
         if (state.isSimulated) ...[
@@ -589,15 +601,17 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
         ],
         Expanded(
           child: Text(
-            !state.isSimulated
-                ? 'Live ESP32 · read only · controls disabled'
-                : command == null
-                ? 'Command idle'
+            command == null
+                ? state.isSimulated
+                      ? 'Command idle'
+                      : 'Live ESP32 · local control · device reports authoritative'
                 : 'Command ${command.status.label.toLowerCase()} — ${command.message}',
             key: const ValueKey('console-command-status'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: meta,
+            style: command?.status == ConsoleCommandStatus.unknown
+                ? meta.copyWith(color: ConsoleStyle.warning)
+                : meta,
           ),
         ),
       ],

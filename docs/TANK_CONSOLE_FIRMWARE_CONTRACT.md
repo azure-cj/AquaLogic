@@ -2,6 +2,11 @@
 
 Reviewed 2026-10-06 against commit 248c698, repository path `esp32`.
 
+Phase 2B (2026-10-07) re-inspected this unchanged source. Its enabled command
+subset and acknowledgement limits are documented in
+[TANK_CONSOLE_PHASE_2B.md](TANK_CONSOLE_PHASE_2B.md). Phase 2A references below
+describe the earlier read-only checkpoint, not the current Console capability.
+
 ## Identity and limits
 
 The newest full firmware source is the **extensionless** root file `esp32`, not a tracked `.ino` path. `esp32-config` was last changed at a946ee6 (2026-09-27), while `esp32` was updated at 248c698 (2026-10-04). `Aqualogic.ino` is the older limited sketch. A collaborator must confirm the actual Arduino sketch/binary flashed on the device; Git does not prove deployment.

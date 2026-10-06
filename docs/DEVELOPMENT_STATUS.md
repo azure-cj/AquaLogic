@@ -5,6 +5,20 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### Tank Console Phase 2B: local actuator controls (2026-10-07)
+
+Local main adds single-shot LED/UV ON/OFF, feed, and A/B normal dispense,
+stop, supervised full retract and explicit refill confirmation. Immutable
+`esp32` 248c698 and gateway/backend/web are unchanged. Status confirms resulting
+state; counters/idle confirm reported activity, never physical delivery or command
+attribution. Busy-skip acknowledgements stay uncertain. Test-dispense and
+schedule/volume editing are excluded. Commands/polling share serial transport,
+with duplicate/shared pump gates, no retries and session/config cancellation.
+Read-only physical connectivity was confirmed before this phase; new actuation
+requires the [Phase 2B physical checklist](TANK_CONSOLE_PHASE_2B.md).
+Validation results are recorded there. The owner subsequently authorized a
+local commit; no push is part of this milestone.
+
 ### UI polish follow-up: honest three-tank warming coverage (2026-10-07)
 
 On `feat/insights-ui-polish`, after Claude's b1d947b polish/departure gate,

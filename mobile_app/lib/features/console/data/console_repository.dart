@@ -22,6 +22,9 @@ abstract interface class ConsolePrototypeControls {
 
 abstract class ConsoleRepository {
   bool get isReadOnly => false;
+  bool get supportsPumpControls => false;
+  Future<ConsoleCommand> pump(ConsoleAction action) async =>
+      throw UnsupportedError('Pump controls unavailable');
   bool get supportsLocalConfiguration => false;
   String? get configuredHost => null;
   Future<void> configureHost(String host) async =>
@@ -38,5 +41,6 @@ abstract class ConsoleRepository {
   Future<ConsoleCommand?> getCommand(String id);
   Stream<ConsoleCommand> watchCommand(String id);
   Future<void> retryLocalConnection();
+  void cancelCommands() {}
   Future<void> dispose();
 }

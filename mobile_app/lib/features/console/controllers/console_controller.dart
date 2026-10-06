@@ -18,6 +18,33 @@ class ConsoleController extends ChangeNotifier {
       error == null &&
       state?.localConnected == true &&
       !busy;
+  bool canSubmit(ConsoleAction action) {
+    if (_disposed ||
+        _submitting ||
+        repository.isReadOnly ||
+        error != null ||
+        state?.localConnected != true ||
+        state?.readingsStale == true) {
+      return false;
+    }
+    if (state?.isSimulated == true) return canCommand && !action.isPump;
+    final commands = state!.commands;
+    if (action.isStop) {
+      return repository.supportsPumpControls &&
+          !(commands[action.actuator]?.action.isStop == true &&
+              commands[action.actuator]?.status.isPending == true);
+    }
+    if (commands[action.actuator]?.status.isPending == true) return false;
+    if (action.isPump &&
+        (!repository.supportsPumpControls ||
+            commands.values.any(
+              (c) => c.action.isPump && c.status.isPending,
+            ))) {
+      return false;
+    }
+    return true;
+  }
+
   bool get hasScenarios => repository.prototypeControls != null;
 
   void start() {
@@ -35,17 +62,20 @@ class ConsoleController extends ChangeNotifier {
   }
 
   Future<ConsoleCommand?> submit(ConsoleAction action) async {
-    if (!canCommand) return null;
+    if (!canSubmit(action)) return null;
     _submitting = true;
     _notify();
     try {
-      return await switch (action) {
+      final command = await switch (action) {
         ConsoleAction.lightOn => repository.setLight(true),
         ConsoleAction.lightOff => repository.setLight(false),
         ConsoleAction.uvOn => repository.setUV(true),
         ConsoleAction.uvOff => repository.setUV(false),
         ConsoleAction.feed => repository.feed(),
+        _ => repository.pump(action),
       };
+      state = await repository.getState();
+      return command;
     } catch (_) {
       error =
           'Command outcome unknown. Do not repeat the action automatically.';
@@ -78,6 +108,7 @@ class ConsoleController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    repository.cancelCommands();
     unawaited(_subscription?.cancel());
     super.dispose();
   }

@@ -83,6 +83,13 @@ alert, monitoring, or sensor data.
 
 ### Firmware
 
+Tank Console is an additional isolated mobile local client. It polls the
+immutable root `esp32` contract and issues a narrow subset of single-shot local
+commands with reported-state confirmation. Railway repositories, auth/push,
+gateway uploads and scheduling remain independent. See
+[Phase 2B](TANK_CONSOLE_PHASE_2B.md) for allowed operations and uncertainty;
+read-only connectivity has been physically confirmed by the owner.
+
 `Aqualogic.ino` and the sibling library directories contain the embedded
 starting point. Firmware integration should eventually send small, explicit
 sensor payloads and receive validated commands. It is intentionally separated

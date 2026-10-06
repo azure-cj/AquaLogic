@@ -3,6 +3,16 @@
 Status: Living decision log
 Last reviewed: 2026-10-07
 
+## 2026-10-07 — Console confirms firmware reports, never inferred delivery
+
+Phase 2B adapts to immutable `esp32` 248c698 using single-shot allowlisted GET
+commands and serial status reconciliation. LED/UV need fresh matching state;
+feed/dose counters plus idle prove reported activity, not delivery/attribution.
+Busy-skip/timeout ambiguity stays UNKNOWN without automatic retries. Exclude
+weaker test-dispense and schedule/volume editing. Normal dose safeguards remain
+firmware-owned; expose stop/retract/refill as explicit maintenance. Keep local
+transport/cloud credentials separate. See [Phase 2B](TANK_CONSOLE_PHASE_2B.md).
+
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 

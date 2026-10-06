@@ -81,6 +81,7 @@ class MockConsoleRepository extends ConsoleRepository
       ConsoleAction.lightOff => _state.equipment.lightConfirmed,
       ConsoleAction.uvOn || ConsoleAction.uvOff => _state.equipment.uvConfirmed,
       ConsoleAction.feed => _state.equipment.feederConfirmed,
+      _ => false,
     };
     final outcome = _nextOutcome;
     if (!busy) _nextOutcome = null;
@@ -152,6 +153,8 @@ class MockConsoleRepository extends ConsoleRepository
               feederRunning: false,
               feederConfirmed: true,
             );
+          default:
+            break;
         }
         _publish(_state.copyWith(equipment: equipment));
         _transition(
@@ -183,6 +186,7 @@ class MockConsoleRepository extends ConsoleRepository
         ConsoleAction.uvOn ||
         ConsoleAction.uvOff => equipment.copyWith(uvConfirmed: false),
         ConsoleAction.feed => equipment.copyWith(feederConfirmed: false),
+        _ => equipment,
       };
     }
     _publish(_state.copyWith(command: updated, equipment: equipment));

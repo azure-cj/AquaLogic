@@ -20,8 +20,10 @@ authentication boundary are documented in
 [`../../mobile_app/README.md`](../../mobile_app/README.md).
 
 Tank Console is entered through More. Production uses an isolated local ESP32
-repository for read-only telemetry/status; previews retain labeled simulation.
-All real commands remain disabled. See
+repository for telemetry/status and live LED, UV, feeder and protected pump
+operations; previews retain labeled simulation with read-only pumps. See
+[`../TANK_CONSOLE_PHASE_2B.md`](../TANK_CONSOLE_PHASE_2B.md) for command evidence,
+firmware limitations and physical validation, and
 [`../TANK_CONSOLE_PHASE_2A.md`](../TANK_CONSOLE_PHASE_2A.md) and
 [`../TANK_CONSOLE_INTEGRATION_READINESS.md`](../TANK_CONSOLE_INTEGRATION_READINESS.md)
 for setup, socket tests and remaining physical checks. Phase 1 display-session
@@ -30,8 +32,8 @@ restoration and notification-navigation deferral remain intact.
 The Flutter app is an Android-first client. Authentication, Home, Tanks, Alerts,
 Monitoring, species, and read-only equipment talk directly to the Railway
 FastAPI service through the shared authenticated `ApiClient`. Account identity
-comes from `/auth/me`; no profile-edit API is connected. The app does not
-connect directly to a sensor or device.
+comes from `/auth/me`; no profile-edit API is connected. Direct local device
+access is confined to Tank Console; the remaining app uses existing cloud flows.
 
 ## M1 authentication integration
 

@@ -10,6 +10,33 @@ enum ConsoleWaterQuality {
 
 enum ConsoleLocalConnection { connecting, connected, degraded, disconnected }
 
+class ConsolePumpState {
+  const ConsolePumpState({
+    this.active,
+    this.doseCount,
+    this.volumeMl,
+    this.remainingMl,
+    this.capacityMl,
+    this.volumeKnown,
+    this.refillRequired,
+    this.clockSynced,
+    this.nextEligibleAt,
+  });
+  final bool? active;
+  final int? doseCount;
+  final double? volumeMl, remainingMl, capacityMl;
+  final bool? volumeKnown, refillRequired, clockSynced;
+  final String? nextEligibleAt;
+  bool get validDose =>
+      volumeMl != null &&
+      capacityMl != null &&
+      volumeMl!.isFinite &&
+      capacityMl!.isFinite &&
+      volumeMl! > 0 &&
+      volumeMl! <= capacityMl! &&
+      capacityMl! <= 5;
+}
+
 class ConsoleEquipmentState {
   const ConsoleEquipmentState({
     this.lightOn = true,
@@ -20,6 +47,9 @@ class ConsoleEquipmentState {
     this.feederConfirmed = true,
     this.pumpAStatus = 'IDLE',
     this.pumpBStatus = 'IDLE',
+    this.pumpA = const ConsolePumpState(),
+    this.pumpB = const ConsolePumpState(),
+    this.feedCount,
   });
   final bool lightOn;
   final bool uvOn;
@@ -30,6 +60,8 @@ class ConsoleEquipmentState {
   // Reported motion only: an idle motor does not mean dosing is safe.
   final String pumpAStatus;
   final String pumpBStatus;
+  final ConsolePumpState pumpA, pumpB;
+  final int? feedCount;
 
   ConsoleEquipmentState copyWith({
     bool? lightOn,
@@ -40,6 +72,9 @@ class ConsoleEquipmentState {
     bool? feederConfirmed,
     String? pumpAStatus,
     String? pumpBStatus,
+    ConsolePumpState? pumpA,
+    ConsolePumpState? pumpB,
+    int? feedCount,
   }) => ConsoleEquipmentState(
     lightOn: lightOn ?? this.lightOn,
     uvOn: uvOn ?? this.uvOn,
@@ -49,6 +84,9 @@ class ConsoleEquipmentState {
     feederConfirmed: feederConfirmed ?? this.feederConfirmed,
     pumpAStatus: pumpAStatus ?? this.pumpAStatus,
     pumpBStatus: pumpBStatus ?? this.pumpBStatus,
+    pumpA: pumpA ?? this.pumpA,
+    pumpB: pumpB ?? this.pumpB,
+    feedCount: feedCount ?? this.feedCount,
   );
 }
 
@@ -65,6 +103,8 @@ class ConsoleState {
     this.cloudConnected = true,
     this.equipment = const ConsoleEquipmentState(),
     this.command,
+    this.commands = const {},
+    this.uncertainCommands = const [],
     this.isSimulated = true,
     this.localStatus,
     this.sensorStatuses = const {},
@@ -86,6 +126,8 @@ class ConsoleState {
   final bool isSimulated;
   final ConsoleEquipmentState equipment;
   final ConsoleCommand? command;
+  final Map<ConsoleActuator, ConsoleCommand> commands;
+  final List<ConsoleCommand> uncertainCommands;
   final ConsoleLocalConnection? localStatus;
   final Map<String, String> sensorStatuses;
   final String? connectionMessage;
@@ -106,6 +148,8 @@ class ConsoleState {
     DateTime? observedAt,
     ConsoleEquipmentState? equipment,
     ConsoleCommand? command,
+    Map<ConsoleActuator, ConsoleCommand>? commands,
+    List<ConsoleCommand>? uncertainCommands,
   }) => ConsoleState(
     tankName: tankName,
     temperature: temperature,
@@ -118,6 +162,8 @@ class ConsoleState {
     cloudConnected: cloudConnected ?? this.cloudConnected,
     equipment: equipment ?? this.equipment,
     command: command ?? this.command,
+    commands: commands ?? this.commands,
+    uncertainCommands: uncertainCommands ?? this.uncertainCommands,
     isSimulated: isSimulated,
     localStatus: localStatus,
     sensorStatuses: sensorStatuses,

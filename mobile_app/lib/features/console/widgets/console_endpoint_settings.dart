@@ -70,7 +70,7 @@ class _ConsoleEndpointSettingsState extends State<ConsoleEndpointSettings> {
         _message = connected
             ? (state.connectionMessage != null
                   ? 'ESP32 reached. Some data is unavailable; check equipment status.'
-                  : 'ESP32 connection verified. Local telemetry and equipment status are reachable. Live controls remain disabled.')
+                  : 'ESP32 connection verified. Local telemetry and equipment status are reachable. Local controls use firmware confirmation.')
             : state.connectionMessage ??
                   'Connection not verified. Check the address and local Wi-Fi.';
       } else {
