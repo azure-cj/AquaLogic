@@ -1,6 +1,7 @@
 import { api } from '@/shared/api/client';
-import { DecisionSupportInsights, trendOverview } from './DecisionSupportInsights';
+import { DecisionSupportInsights } from './DecisionSupportInsights';
 import { AnalyticsResultsNotes, TankComparison } from './TankComparison';
+import { TankInsightsSection } from './tank-insights/TankInsightsSection';
 import {
   EmptyState,
   ErrorState,
@@ -330,7 +331,7 @@ function TrendChart({
             <stop offset="100%" stopColor={selected.color} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="#e5edef" vertical={false} />
+        <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="timestamp"
           type="number"
@@ -629,6 +630,16 @@ export default function AnalyticsPage() {
   const driverId = data?.insights.primary_driver_by_metric[metric];
   const driver = data?.tanks.find((tank) => tank.id === driverId);
   const metricChange = stats?.absolute_change;
+  const sustained = data?.decision_support_insights?.cards
+    .filter((card) => card.parameter === metric && (card.rule === 'increasing' || card.rule === 'decreasing')).length ?? 0;
+  const historySummary = stats?.average == null
+    ? `No ${selected.label === 'pH' ? 'pH' : selected.label.toLowerCase()} readings were recorded in this period.`
+    : `${selected.label} averaged ${stats.average.toFixed(2)} ${selected.unit} across the fleet, between ${stats.minimum?.toFixed(2) ?? '—'} and ${stats.maximum?.toFixed(2) ?? '—'} ${selected.unit}${metricChange != null ? `, ${metricChange >= 0 ? 'up' : 'down'} ${Math.abs(metricChange).toFixed(2)} ${selected.unit} from the previous period` : ''}. ${sustained ? `${sustained} tank${sustained === 1 ? '' : 's'} showed a sustained rise or fall; see Key findings.` : 'No tank showed a qualified sustained rise or fall.'}`;
+  const lowestAvailability = [...(data?.uptime ?? [])].filter((item) => item.status !== 'healthy')
+    .sort((a, b) => a.uptime - b.uptime).slice(0, 3);
+  const alertsByTank = Object.entries((data?.alert_events ?? []).reduce<Record<string, number>>((counts, item) => {
+    counts[item.tank_name] = (counts[item.tank_name] ?? 0) + 1; return counts;
+  }, {})).sort((a, b) => b[1] - a[1]);
   const currentThreshold = data
     ? activeThreshold(
         data.threshold_segments,
@@ -669,6 +680,11 @@ export default function AnalyticsPage() {
           </div>
         }
       />
+      <TankInsightsSection />
+      <div className="analytics-section-heading">
+        <h2>History</h2>
+        <p>Fleet water quality, alerts and reporting over the selected timeframe.</p>
+      </div>
       <Panel className="analytics-controls">
         <div className="analytics-control-grid">
           <label className="field">
@@ -846,7 +862,7 @@ export default function AnalyticsPage() {
                     </div>
             }
           >
-          <p className="analytics-operator-summary">{trendOverview(data.decision_support_insights, metric)}</p>
+          <p className="analytics-operator-summary">{historySummary}</p>
           <div className="analytics-stats">
             <div>
               <InfoLabel
@@ -921,7 +937,6 @@ export default function AnalyticsPage() {
             </p>
           )}
           <div className="analytics-chart-context">
-            {metricChange != null && <span>{selected.label} {metricChange >= 0 ? 'up' : 'down'} {Math.abs(metricChange).toFixed(2)} {selected.unit} vs previous period{stats?.percent_change != null ? ` (${Math.abs(stats.percent_change).toFixed(1)}%)` : ''}.</span>}
             {driver && <span>Largest {selected.label.toLowerCase()} deviation: {driver.name}.</span>}
           </div>
           </Panel>
@@ -976,29 +991,42 @@ export default function AnalyticsPage() {
                           timeZone: MANILA_TIMEZONE,
                         }).format(new Date(value))
                       }
-                      tick={{ fill: '#6f8590', fontSize: 10 }}
+                      tick={{ fill: 'var(--muted)', fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
                       minTickGap={24}
                     />
-                    <YAxis allowDecimals={false} tick={{ fill: '#6f8590', fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
                     <Tooltip content={<AlertChartTooltip />} />
-                    <Bar dataKey="warning" stackId="alerts" fill="#e99a21" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="critical" stackId="alerts" fill="#dc5664" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="warning" stackId="alerts" fill="var(--warning)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="critical" stackId="alerts" fill="var(--critical)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <EmptyState title="No alerts" message="No alerts were recorded in this range." />
               )}
+              {alertsByTank.length > 0 && <p className="analytics-panel-footnote">
+                Most alert records: <strong>{alertsByTank[0][0]}</strong> ({alertsByTank[0][1]}){alertsByTank.length > 1 ? ` · ${alertsByTank.length} tanks had alerts` : ''}. Counts are records created, not separate incidents.
+              </p>}
             </Panel>
-            <Panel title="Data availability" description="Fleet reporting completeness">
-              <p className="analytics-operator-summary">{!data.uptime.length ? 'No reporting data available.' : data.uptime.every((item) => item.status === 'healthy') ? 'Reporting was mostly complete during this period.' : 'Reporting was incomplete for some tanks during this period.'}</p>
-              <p className="analytics-context-note">Missing reports can leave gaps in the water-quality picture.</p>
-              <p className="analytics-fleet-availability"><strong>{data.uptime_comparison.current.toFixed(1)}%</strong> of expected reporting received across the fleet</p>
-              <button className="analytics-text-action reporting-more" onClick={() => {
-                document.getElementById('comparison-tab-reporting')?.click();
-                document.querySelector('.tank-comparison-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}>View reporting details</button>
+            <Panel title="Data availability" description="Share of expected reports the backend received">
+              <div className="analytics-availability">
+                <p className="analytics-fleet-availability"><strong>{data.uptime_comparison.current.toFixed(1)}%</strong> of expected reporting received across the fleet
+                  {data.uptime_comparison.change !== 0 && <em> · {data.uptime_comparison.change > 0 ? 'up' : 'down'} {Math.abs(data.uptime_comparison.change).toFixed(1)} pts from the previous period</em>}</p>
+                <p className="analytics-operator-summary">{!data.uptime.length ? 'No reporting data available.' : data.uptime.every((item) => item.status === 'healthy') ? 'Reporting was mostly complete during this period.' : 'Reporting was incomplete for some tanks during this period.'}</p>
+                {lowestAvailability.length > 0 && <ul className="analytics-availability-list" aria-label="Tanks with the least complete reporting">
+                  {lowestAvailability.map((item) => <li key={item.tank_id}>
+                    <span>{item.tank_name}</span>
+                    <span className="analytics-availability-bar" aria-hidden="true"><i data-status={item.status} style={{ width: `${Math.max(2, Math.min(100, item.uptime))}%` }} /></span>
+                    <strong>{item.uptime.toFixed(1)}%</strong>
+                  </li>)}
+                </ul>}
+                <p className="analytics-context-note">Missing reports can leave gaps in the water-quality picture.</p>
+                <button className="analytics-text-action reporting-more" onClick={() => {
+                  document.getElementById('comparison-tab-reporting')?.click();
+                  document.querySelector('.tank-comparison-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}>View reporting details</button>
+              </div>
             </Panel>
           </div>
           <details className="analytics-other-metrics"><summary>Other water-quality parameters</summary>

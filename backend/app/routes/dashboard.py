@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.dependencies import require_admin, require_staff
 from app.models import Alert, MonitoringIncident, SensorReading, Tank, ThresholdConfig, ThresholdRevision, User
-from app.schemas.analytics import AnalyticsResponse
+from app.schemas.analytics import AnalyticsResponse, CurrentInsightsResponse
 from app.schemas.dashboard import FleetTankRead
 from app.schemas.threshold import ThresholdRead, ThresholdUpdate
 from app.services.analytics import build_fleet_analytics
+from app.services.current_insights import build_current_insights
 from app.services.decision_engine import status_for_reading
 from app.services.species_suitability import evaluate_tank_species_suitability
 from app.services.auth_security import audit_event
@@ -69,6 +70,19 @@ def update_threshold(parameter: str, payload: ThresholdUpdate, request: Request,
         details={"scope": "global", "parameter": parameter},
     )
     db.commit(); db.refresh(item); return item
+
+@router.get("/analytics/current-insights", response_model=CurrentInsightsResponse)
+def current_insights(
+    tank_id: list[int] = Query(default=[], max_length=20),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    if tank_id:
+        known = set(db.scalars(select(Tank.id).where(Tank.id.in_(tank_id), Tank.retired_at.is_(None))))
+        if any(value not in known for value in tank_id):
+            raise HTTPException(404, "Tank not found")
+    return build_current_insights(db, tank_id)
+
 
 @router.get("/analytics/fleet", response_model=AnalyticsResponse)
 def analytics(

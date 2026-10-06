@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import AnalyticsPage, { ChartTooltip, chartRows } from './AnalyticsPage';
 import type { AnalyticsResponse, MetricKey } from './types';
 import { analyticsCsv, formatAnalyticsBucketRange, thresholdZones } from './utils';
+import { insightsFixture } from './tank-insights/currentInsights.fixture';
 
 vi.mock('@/shared/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/shared/api/client')>();
@@ -126,7 +127,7 @@ function renderPage(path = '/admin/analytics') {
 
 describe('fleet analytics', () => {
   it('displays ISO custom URL dates in local inputs and keeps the exact API interval', async () => {
-    vi.mocked(api).mockImplementation(async (path) => path === '/tanks' ? [{ id: 1, name: 'Tank A' }] : response());
+    vi.mocked(api).mockImplementation(async (path) => path.startsWith('/analytics/current-insights') ? { ...insightsFixture(), tanks: [], attention: [] } : path === '/tanks' ? [{ id: 1, name: 'Tank A' }] : response());
     renderPage('/admin/analytics?range=custom&start=2026-07-26T00%3A00%3A00Z&end=2026-07-26T05%3A00%3A00Z&tanks=1&metric=ph');
     await screen.findByRole('heading', { name: 'pH trend' });
     const start = screen.getByLabelText('From') as HTMLInputElement;
@@ -226,6 +227,7 @@ describe('fleet analytics', () => {
   it('shows the trend resolution and refreshes only when requested', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/tanks') return [];
+      if (path.startsWith('/analytics/current-insights')) return { ...insightsFixture(), tanks: [], attention: [] };
       return response();
     });
     const user = userEvent.setup();
@@ -252,6 +254,7 @@ describe('fleet analytics', () => {
   it('uses URL state and renders diagnostic uptime rows', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/tanks') return [{ id: 1, name: 'Tank A' }];
+      if (path.startsWith('/analytics/current-insights')) return { ...insightsFixture(), tanks: [], attention: [] };
       const result = response();
       if (path.includes('tank_id=1')) {
         result.tank_series = [{
@@ -287,6 +290,7 @@ describe('fleet analytics', () => {
 
   it('limits tank comparison selection to three', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
+      if (path.startsWith('/analytics/current-insights')) return { ...insightsFixture(), tanks: [], attention: [] };
       if (path === '/tanks') {
         return [1, 2, 3, 4].map((id) => ({ id, name: `Tank ${id}` }));
       }

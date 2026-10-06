@@ -10,7 +10,7 @@ SAMPLE_TANKS = [
         "name": "Riverbank Community",
         "location": "Front Display",
         "description": "A calm planted community aquarium that welcomes visitors at the storefront entrance.",
-        "tank_code": "DISPLAY-01",
+        "tank_code": "SHOW-STABLE",
         "habitat_label": "South American community",
         "water_type": "freshwater",
         "volume_liters": 360,
@@ -23,7 +23,7 @@ SAMPLE_TANKS = [
         "name": "Guppy Gallery",
         "location": "Front Display",
         "description": "A bright livebearer display featuring a constantly changing mix of colourful guppies.",
-        "tank_code": "DISPLAY-02",
+        "tank_code": "SHOW-WARM-A",
         "habitat_label": "Livebearer community",
         "water_type": "freshwater",
         "volume_liters": 180,
@@ -36,7 +36,7 @@ SAMPLE_TANKS = [
         "name": "Breeder Bay",
         "location": "Breeding Room",
         "description": "A monitored breeding habitat used for selected livebearer pairs and fry development.",
-        "tank_code": "BREED-01",
+        "tank_code": "SHOW-WARM-C",
         "habitat_label": "Livebearer breeding habitat",
         "water_type": "freshwater",
         "volume_liters": 240,
@@ -49,7 +49,7 @@ SAMPLE_TANKS = [
         "name": "Juvenile Grove",
         "location": "Breeding Room",
         "description": "A planted grow-out aquarium that gives juvenile fish space to develop before moving to display habitats.",
-        "tank_code": "BREED-02",
+        "tank_code": "SHOW-PH",
         "habitat_label": "Juvenile grow-out habitat",
         "water_type": "freshwater",
         "volume_liters": 300,
@@ -62,7 +62,7 @@ SAMPLE_TANKS = [
         "name": "Recovery Reef",
         "location": "Service Area",
         "description": "A quiet recovery and observation aquarium used while our team completes maintenance or acclimation work.",
-        "tank_code": "SERVICE-01",
+        "tank_code": "SHOW-OFFLINE",
         "habitat_label": "Observation habitat",
         "water_type": "freshwater",
         "volume_liters": 150,
@@ -75,7 +75,7 @@ SAMPLE_TANKS = [
         "name": "Calmwater Rack",
         "location": "Rear Rack",
         "description": "A stable, low-flow rack habitat for fish that thrive in a quieter environment.",
-        "tank_code": "RACK-01",
+        "tank_code": "SHOW-SPECIES",
         "habitat_label": "Low-flow tropical habitat",
         "water_type": "freshwater",
         "volume_liters": 200,
@@ -88,7 +88,7 @@ SAMPLE_TANKS = [
         "name": "Observation Point",
         "location": "Rear Rack",
         "description": "A close-monitoring aquarium for sensitive fish and newly introduced community members.",
-        "tank_code": "RACK-02",
+        "tank_code": "SHOW-WARM-B",
         "habitat_label": "Sensitive species observation",
         "water_type": "freshwater",
         "volume_liters": 220,
@@ -119,12 +119,17 @@ def seed_tanks(db: Session) -> int:
                     Tank.tank_code == tank_data["tank_code"],
                     Tank.tank_code == f"TANK-{index:02d}",
                     Tank.name == LEGACY_TANK_NAMES[index - 1],
+                    Tank.name == tank_data["name"],
                 )
             )
         )
         if tank is None:
             db.add(Tank(**tank_data))
             created += 1
+            continue
+        if tank.tank_code != tank_data["tank_code"]:
+            # Preserve pre-SHOW local tanks and any hardware using their names.
+            # A fresh development DB supplies the full reserved scenario map.
             continue
         for field, value in tank_data.items():
             setattr(tank, field, value)

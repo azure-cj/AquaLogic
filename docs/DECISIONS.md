@@ -1,10 +1,161 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-10-07 — Three warming demos preserve the projection departure gate
+
+**Decision:** Replace SHOW-BREED with SHOW-WARM-C and use three shared curves:
+nine-hour linear rises from 24.8 to the default 28 °C warning bound, continuous
+half-hour resets and 3 h 10 min phase offsets in a 9.5 h cycle. Keep inference
+algorithms/constants and Claude's latest-vs-fit departure gate unchanged.
+
+**Reason:** Two shorter ramps cannot honestly meet the combined coverage
+target after reset departures stop projecting the old trend. Three staggered
+clean rises provide actual near-bound windows without altering inference.
+
+**Consequences/assumptions:** Anchor phases to configured exhibit midnight UTC
+and measure both complete days with actual 30-second history in the local and
+CLI seed paths. Preserve local reporting gaps and legacy fleet/alert fixtures.
+Keep the readable Breeder Bay local name; exhibit uses Showcase · Warming C.
+Use Guppy/Molly's unchanged preferred ranges, covering all C curves. Existing
+obsolete SHOW-BREED tanks/history require guarded cleanup before CLI reseeding;
+do not auto-adopt or overwrite potentially hardware-associated local history.
+Every tested warming crossing must satisfy the departure tolerance; reset
+windows exercise recent_departure suppression. See Part A §A6 and
+[the exhibit runbook](WORKFLOWS.md#exhibit-runbook).
+
+## 2026-10-07 — Staff current insights UI structure and display fallbacks
+
+**Decision:** Analytics places an independent single-tank current-insights
+section above History. An all-active-tank snapshot selects the first attention
+tank (otherwise the first active tank); a scoped query loads the selected tank.
+Only the new `insights_tank` URL key changes on selection. Queries fetch on
+mount/tank change and window focus, without polling or reconnect refetch.
+Observed, Derived and Projected remain text labels, including in chart tooltips.
+Existing components/tokens provide structure; visual polish is a later pass.
+
+**Display assumptions:** Part A's "2 significant decimals" means two decimal
+places for rates, with absolute magnitude after Rising/Falling. Ratios use one
+decimal and crossing hours use the binding half-hour/collapsed-range rules.
+For cases without specified copy, disabled thresholds, missing observations,
+turbidity species applicability, missing compliance and one-sided species ranges
+get explicit neutral text. Null compliance never becomes zero percent; an absent
+species bound is displayed as unbounded. These are display fallbacks, with no
+inference or API changes.
+
+Dashboard attention uses a three-row cap, ordered critical, offline, projected
+crossings, more-variable and species conflicts. Existing fleet counts supply
+observed open-alert context; current-insights supplies advisory rows. Rows may
+refer to the same tank for different parameters/categories: the cap counts rows,
+as the contract specifies. Short projections reuse all crossing-rounding rules.
+Failed insights, including a failed refresh with cached data, suppress advisory
+rows/indicators and show Insights unavailable while observed fleet rows remain.
+Loading/errors do not claim that no tanks need attention. The empty-state
+coverage note counts distinct tanks with any insufficient trend, once per tank.
+
+## 2026-10-07 — Expired showcase windows preserve production API availability
+
+**Decision:** A parsed, expired `EXHIBIT_DEMO_UNTIL` with leftover demo flags
+allows production startup and emits one cleanup warning. The demo generator
+starts no thread at expiry and its existing write guard continues to reject
+expired writes. Missing/malformed deadlines, future deadlines over seven days,
+and DEBUG remain rejected. Equality with the deadline counts as expired.
+
+**Reason:** Railway restarts after the exhibit must not take the API down
+because an operator has not yet removed the exhibit environment variables.
+
+**Consequences:** The warning asks operators to remove `DEMO_SENSOR_*` and
+`EXHIBIT_DEMO_UNTIL`; the [exhibit runbook](WORKFLOWS.md#exhibit-runbook) still
+requires normal post-exhibit cleanup. No inference, hardware, schema,
+authorization, alert or notification policy changes.
+
+## 2026-10-06 — Time-boxed production showcase exception (Goal 3 review #2)
+
+**Decision:** The owner authorizes production scenario generation only with a
+parsed UTC `EXHIBIT_DEMO_UNTIL` strictly in the future and at most seven days
+ahead at startup. DEBUG remains forbidden. Expiry checks each cycle/before
+writes terminate the loop permanently, logging once. `DEMO_EXHIBIT_DATE`
+defaults to 2026-10-13; its pH plateau covers the whole date and following day.
+Inference algorithms and constants remain unchanged.
+
+**Reason:** Exhibit insights need continuous seeded/live curves without
+indefinite production mock generation or collisions with hardware.
+
+**Consequences:** Reserved SHOW-* scenario codes, lifecycle locks, and retired/
+active-device exclusion apply. `app.cli.exhibit_demo` creates private showcase
+tanks, common-name species links and bulk mock history, without users,
+thresholds, devices or historic alerts/pushes. Existing species values remain;
+replacement refuses real/device history. Cleanup uses the shared tank deletion
+service, preflights hardware, and leaves species and non-SHOW tanks. Live
+showcase alerts retain ordinary staff push behavior. Follow the
+[runbook](WORKFLOWS.md#exhibit-runbook); unset flags and redeploy before cleanup
+after expiry. Bucket timestamp sets now retain only three distinct observations,
+while every value stays for exact medians. App services own the shared curves
+and reference species, with no app-to-seed imports. No schema/dependency changes.
+
+## 2026-10-06 — Complementary demo warming roles and bounded insight caching
+
+**Decision:** Keep all Part A inference constants and gates unchanged. Following
+the owner's Goal 3 correction, use two warming demo tanks with half-cycle
+offsets and test combined projected-crossing coverage of at least 80% at 24
+evenly spaced times across a day. Report each tank's coverage. The former
+single-tank 60% target is superseded in
+[Part A §A6](ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+
+**Reason:** A three-hour crossing horizon plus the six-hour trend/confidence
+gates restrict any one repeating ramp's projection window. Demo values must
+remain plausible rather than changing statistical gates to satisfy a showcase.
+A bounded recurring pH signal also needs an explicit exhibit phase; its own
+rolling baseline eventually incorporates an increase in variability.
+
+**Consequences:** Seed and live curves share one pure UTC function. Existing
+species ranges, legacy fleet states, reporting gaps and Recovery Reef's outage
+are preserved. Demo writes acquire the existing tank lifecycle lock and exclude
+active-device/unmapped tanks. The observed >1-second eight-day reading cost
+activates the review-required 20-second, 32-entry in-process response cache;
+sorted active tank-ID scopes are isolated per database bind. `evaluated_at`
+identifies the snapshot; authorization/active-tank checks still run and explicit
+evaluation times bypass caching. No dependencies, schema changes or alert
+policy changes are introduced.
+
+## 2026-10-06 — Bounded, advisory current insights and short-horizon projections
+
+**Decision:** Implement the deterministic, conditional, staff-only current
+insights and projections in [the approved analytics plan](ANALYTICS_INSIGHTS_PLAN.md).
+This supersedes the earlier "predictive analytics deferred" scope note only
+for these bounded methods: no machine learning, a six-hour robust trend fit,
+and at most a three-hour projection. Observed, Derived and Projected outputs
+remain distinct. Projections and insights never create alerts, push events or
+monitoring incidents and are not exposed by public endpoints.
+
+**Reason:** Operators need transparent short-term context without turning an
+extrapolation into a measured value or an operational safety signal.
+
+**Consequences:** New typed staff-only `/analytics/current-insights` responses
+share current effective thresholds and notable-change magnitudes with existing
+services. No database schema, dependencies or alert-engine changes are needed.
+Backend review after Goal 2 precedes stability/demo work and subsequent UI work.
+
+## 2026-10-06 — Correct the historical analytics timestamp description
+
+**Decision:** Add this correction to the 2026-08-21 receipt-time analytics entry
+without rewriting that historical entry. Current code buckets water-quality
+trends on observation `SensorReading.timestamp`, as recorded in `CLAUDE.md`
+and the later split-time decision. `received_at` remains the basis for
+freshness, reporting health, uptime and monitoring; alert events retain their
+creation time. The current-insights fit and species compliance also use
+observation time.
+
+**Reason:** Backfilled observations belong to their observation period and must
+not imply that reporting was healthy during an outage.
+
+**Consequences:** Current API/status documentation is reconciled to the
+implemented split-time behavior. The old decision is retained as history;
+no timestamp semantics of existing endpoints or monitoring are changed here.
 
 ## 2026-10-06 — Tank Console Phase 2A is a separate read-only LAN path
 

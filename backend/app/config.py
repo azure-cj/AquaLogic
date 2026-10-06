@@ -1,5 +1,7 @@
 import os
+import logging
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 
 from sqlalchemy.engine import make_url
@@ -14,6 +16,7 @@ MAX_REFRESH_SESSION_DAYS = 7
 DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS = 900
 DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
 DEFAULT_PUSH_DISPATCH_INTERVAL_SECONDS = 15
+logger = logging.getLogger(__name__)
 
 
 def normalize_database_url(database_url: str) -> str:
@@ -41,6 +44,28 @@ def _parse_csv(value: str | None, default: list[str]) -> list[str]:
     if value is None:
         return default
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _parse_exhibit_date(value: str) -> date:
+    try:
+        parsed = date.fromisoformat(value)
+        if parsed.isoformat() != value:
+            raise ValueError
+        return parsed
+    except ValueError:
+        raise ValueError("DEMO_EXHIBIT_DATE must be YYYY-MM-DD (UTC)") from None
+
+
+def _parse_exhibit_until(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if "T" not in value or parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+            raise ValueError
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        raise ValueError("EXHIBIT_DEMO_UNTIL must be an ISO UTC datetime") from None
 
 
 @dataclass(frozen=True)
@@ -71,6 +96,8 @@ class Settings:
     monitoring_incident_check_interval_seconds: int
     push_notifications_enabled: bool
     push_dispatch_interval_seconds: int
+    demo_exhibit_date: date = date(2026, 10, 13)
+    exhibit_demo_until: datetime | None = None
 
     @property
     def is_production(self) -> bool:
@@ -102,7 +129,10 @@ def _validate_production(settings: Settings) -> None:
         raise ValueError("Production requires explicit CORS_ORIGINS")
     if not settings.trusted_hosts or "*" in settings.trusted_hosts:
         raise ValueError("Production requires explicit TRUSTED_HOSTS")
-    if settings.debug or settings.demo_sensor_enabled or settings.demo_sensor_instance:
+    now = datetime.now(timezone.utc)
+    valid_exhibit = (settings.exhibit_demo_until is not None
+                     and settings.exhibit_demo_until <= now + timedelta(days=7))
+    if settings.debug or ((settings.demo_sensor_enabled or settings.demo_sensor_instance) and not valid_exhibit):
         raise ValueError("Production requires DEBUG and demo generation to be disabled")
     if not 5 <= settings.access_token_expire_minutes <= MAX_ACCESS_TOKEN_MINUTES:
         raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be between 5 and 15 in production")
@@ -110,6 +140,12 @@ def _validate_production(settings: Settings) -> None:
         raise ValueError("REFRESH_SESSION_EXPIRE_DAYS must be between 1 and 7 in production")
     if not settings.monitoring_incidents_enabled:
         raise ValueError("Production requires persistent monitoring incidents to remain enabled")
+    if (settings.demo_sensor_enabled or settings.demo_sensor_instance) and (
+        settings.exhibit_demo_until is not None and settings.exhibit_demo_until <= now
+    ):
+        logger.warning(
+            "Exhibit demo window expired; demo writer disabled. Remove DEMO_SENSOR_* and EXHIBIT_DEMO_UNTIL."
+        )
 
 
 def _validate_monitoring(settings: Settings) -> None:
@@ -129,6 +165,14 @@ def _validate_push(settings: Settings) -> None:
 @lru_cache
 def get_settings() -> Settings:
     environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    try:
+        exhibit_demo_until = _parse_exhibit_until(os.getenv("EXHIBIT_DEMO_UNTIL"))
+    except ValueError:
+        if environment == "production" and (
+            _parse_bool(os.getenv("DEMO_SENSOR_ENABLED")) or _parse_bool(os.getenv("DEMO_SENSOR_INSTANCE"))
+        ):
+            raise ValueError("Production requires DEBUG and demo generation to be disabled") from None
+        raise
     configured_database_url = os.getenv("DATABASE_URL")
     if configured_database_url is None:
         database_url = "" if environment == "production" else "sqlite:///./aqualogic.db"
@@ -149,6 +193,8 @@ def get_settings() -> Settings:
         demo_sensor_enabled=_parse_bool(os.getenv("DEMO_SENSOR_ENABLED")),
         demo_sensor_instance=_parse_bool(os.getenv("DEMO_SENSOR_INSTANCE")),
         demo_sensor_interval_seconds=int(os.getenv("DEMO_SENSOR_INTERVAL_SECONDS", "30")),
+        demo_exhibit_date=_parse_exhibit_date(os.getenv("DEMO_EXHIBIT_DATE", "2026-10-13")),
+        exhibit_demo_until=exhibit_demo_until,
         public_base_url=os.getenv("PUBLIC_BASE_URL", "http://localhost:5173").rstrip("/"),
         public_image_hosts=set(_parse_csv(os.getenv("PUBLIC_IMAGE_HOSTS"), ["images.unsplash.com"] if environment != "production" else [])),
         media_root=os.getenv("MEDIA_ROOT", "./media"),

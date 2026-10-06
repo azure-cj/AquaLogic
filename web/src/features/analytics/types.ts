@@ -127,3 +127,61 @@ export type DecisionSupportCard = {
   observation_start: string | null; observation_end: string | null; samples: number; unit: string;
   evidence: Record<string, number | string>; qualifications: string[]; checks: string[]; related_alert_ids: number[];
 };
+
+export type CurrentParameter = 'temperature' | 'ph' | 'turbidity' | 'tds';
+export type CurrentInsightPoint = { t: string; value: number };
+export type CurrentFitPoint = CurrentInsightPoint & { count: number };
+export type CurrentBounds = { min: number | null; max: number | null };
+export type CurrentTrend = {
+  status: 'rising' | 'falling' | 'steady' | 'uncertain' | 'insufficient_data';
+  reason: 'too_few_buckets' | 'gap' | 'not_recent' | 'mixed_source' | null;
+  rate_per_hour: number | null; rate_ci_low: number | null; rate_ci_high: number | null;
+  change_6h: number | null; notable_change: number | null;
+  qualifying_buckets: number; required_buckets: number;
+  fit_points: CurrentFitPoint[]; fitted_start: CurrentInsightPoint | null;
+  fitted_end: CurrentInsightPoint | null; sigma: number | null;
+};
+export type CurrentHeadroom = {
+  side: 'upper' | 'lower'; bound: number | null; distance: number | null;
+  outside: boolean | null; reason: 'side_bound_missing' | 'value_unavailable' | null;
+};
+export type SpeciesRangeConflict = { min_species: string; min: number; max_species: string; max: number };
+export type CurrentSpeciesRange = CurrentBounds & {
+  status: 'ok' | 'conflict' | 'not_configured' | 'not_applicable';
+  species_count: number; conflict: SpeciesRangeConflict | null;
+  compliance_percent_24h: number | null; headroom: CurrentHeadroom | null;
+  compliance_reason: 'too_few_readings' | 'mixed_source' | null;
+  compliance_readings: number; required_readings: number;
+};
+export type ProjectionBandPoint = { t: string; low: number; mid: number; high: number };
+export type CurrentProjection = {
+  status: 'crossing_projected' | 'no_crossing_within_horizon' | 'too_uncertain' | 'stale'
+    | 'insufficient_data' | 'already_outside' | 'no_bound' | 'not_applicable';
+  reason: string | null; bound_side: 'upper' | 'lower' | null; bound: number | null;
+  crossing_hours_low: number | null; crossing_hours_high: number | null;
+  horizon_hours: number; band: ProjectionBandPoint[];
+};
+export type CurrentStability = {
+  status: 'more_variable' | 'typical' | 'steadier' | 'insufficient_data' | 'insufficient_baseline';
+  reason: string | null; current_spread: number | null; baseline_spread: number | null;
+  ratio: number | null; current_buckets: number; baseline_days_covered: number;
+};
+export type CurrentObserved = { value: number; observed_at: string };
+export type CurrentParameterInsights = {
+  parameter: CurrentParameter; unit: string; observed: CurrentObserved | null;
+  warning_bounds: CurrentBounds | null; critical_bounds: CurrentBounds | null;
+  trend: CurrentTrend; headroom: CurrentHeadroom | null; species_range: CurrentSpeciesRange;
+  projection: CurrentProjection; stability: CurrentStability;
+};
+export type CurrentLatest = { observed_at: string | null; received_at: string | null; is_current: boolean };
+export type CurrentTankInsights = { tank_id: number; tank_name: string; latest: CurrentLatest; parameters: CurrentParameterInsights[] };
+export type CurrentAttentionItem = {
+  tank_id: number; tank_name: string; parameter: CurrentParameter;
+  kind: 'projected' | 'derived'; type: 'crossing_projected' | 'more_variable' | 'species_conflict';
+  crossing_hours_low: number | null; crossing_hours_high: number | null; ratio: number | null;
+};
+export type CurrentInsightConstants = { fit_hours: number; horizon_hours: number; baseline_days: number; bucket_minutes: number };
+export type CurrentInsightsResponse = {
+  evaluated_at: string; method_version: string; constants: CurrentInsightConstants;
+  tanks: CurrentTankInsights[]; attention: CurrentAttentionItem[];
+};

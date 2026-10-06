@@ -1,7 +1,7 @@
 # Web Area Guide
 
 Status: Current
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-07
 
 ## Read first
 
@@ -12,6 +12,11 @@ Last reviewed: 2026-10-02
 - [`../deep-spec/phase-05-equipment-control/`](../deep-spec/phase-05-equipment-control/)
 
 ## Important locations
+
+- `web/src/features/analytics/tank-insights/`: staff current-insights cards,
+  exact state copy, method disclosure and a recent observed/trend/projected chart.
+- `web/src/features/analytics/useCurrentInsights.ts`: all-active or single-tank
+  queries on load/selection/focus, without polling.
 
 - `web/src/app/`: composition, providers, router, lazy route loaders.
 - `web/src/features/`: auth, fleet, alerts, tanks, fish, customers, analytics,
@@ -37,6 +42,37 @@ Last reviewed: 2026-10-02
 - `web/vercel.json`: deployment proxy configuration.
 
 ## Route boundaries
+
+Analytics begins with **Tank insights**, independent of the historical range,
+scope and metric controls below the **History** heading. Its selector defaults
+to the first attention tank, then the first active tank; a valid
+`/admin/analytics?insights_tank=<id>` takes precedence. Retired/unknown IDs fall
+back to the default. Tank switches preserve all History URL filters.
+Four parameter cards always show Observed, Derived and Projected blocks, even
+when their observations or inference are insufficient/stale. Buttons select the
+chart parameter. The chart keeps half-hour medians, a dashed six-hour fitted
+trend, warning bounds and species overlap on one time axis; available conditional
+projections add a shaded low/high band and dotted mid-line. Now uses the API's
+evaluation timestamp, including cached responses. Turbidity has no projection.
+Tooltips name every category; method disclosure explains the deterministic
+calculations. All new layout uses existing semantic tokens/components. Visual
+polish remains a separate owner checkpoint under
+[`ANALYTICS_INSIGHTS_PLAN.md`](../ANALYTICS_INSIGHTS_PLAN.md).
+
+The fleet dashboard places **Needs attention** below status counts and above
+Tank health. Up to three rows rank critical tanks, offline tanks, projected
+crossings by soonest crossing, more-variable parameters by ratio, then species
+conflicts. Observed rows retain existing fleet open-alert counts. Every row
+links to Analytics with `insights_tank`; short projection copy remains
+conditional and uses the same rounded time rules as cards. Derived rows reuse
+the Goal 4 copy formatter. The empty state counts distinct tanks with an
+insufficient recent trend. Insights failures leave observed rows and other
+dashboard content available and show **Insights unavailable**; failed refreshes
+also hide cached advisory rows/indicators rather than presenting them as current.
+Temperature/pH values in desktop and mobile tank views get a small arrow/rate
+only for rising/falling trends. Other parameters and steady/uncertain/insufficient
+trends have no indicator. All-tank insights share the load/focus-only hook.
+Existing fleet, alerts and uptime refresh behavior is unchanged.
 
 - `/tank/:publicId`: public, read-only customer experience.
 - `/admin/login`, `/admin/setup-password`, `/admin/change-password`, and

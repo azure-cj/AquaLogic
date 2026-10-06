@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -50,6 +50,17 @@ link back here rather than duplicate a competing project status.
   hardware scope, and future integration boundary.
 
 ## Current implementation deep specs
+
+- [`ANALYTICS_INSIGHTS_PLAN.md`](ANALYTICS_INSIGHTS_PLAN.md): binding contract
+  and sequential branch/checkpoint workflow for bounded advisory current
+  insights. Goals 1–3 backend are implemented locally;
+  Review #2 follow-up adds configurable dates, a time-boxed production SHOW-*
+  exhibit writer and scoped seed/status/cleanup CLI; the
+  [exhibit runbook](WORKFLOWS.md#exhibit-runbook) records operations.
+  Goals 4–5 add the structural staff Tank insights and Needs attention UI;
+  Claude's visual polish is complete. The optional backtest remains pending.
+- [Exhibit checklist](EXHIBIT_CHECKLIST.md): dated steps for the October 13
+  showcase demo.
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
   implementation record and scope guardrail for the final cross-cutting safety,

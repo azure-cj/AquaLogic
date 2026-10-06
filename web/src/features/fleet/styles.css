@@ -364,3 +364,25 @@
     grid-template-columns: 1fr;
   }
 }
+/* needs-attention: at most three ranked rows; tokens only. */
+.needs-attention-panel { margin-bottom: 1rem; }
+.needs-attention-list { display: grid; margin: 0; padding: .35rem 0; list-style: none; }
+.needs-attention-list li + li { border-top: 1px solid var(--border); }
+.needs-attention-row { --tone: var(--teal-600); position: relative; display: grid; grid-template-columns: 104px minmax(0, 1fr) 16px; align-items: center; gap: .85rem; padding: .7rem 1.05rem .7rem 1.25rem; color: var(--text); text-decoration: none; font-size: .8rem; transition: background .15s ease; }
+.needs-attention-row::before { position: absolute; top: .55rem; bottom: .55rem; left: .55rem; width: 3px; border-radius: 3px; background: var(--tone); content: ''; }
+.needs-attention-row[data-tone='critical'] { --tone: var(--critical); }
+.needs-attention-row[data-tone='offline'] { --tone: var(--offline); }
+.needs-attention-row[data-tone='projected'] { --tone: var(--warning); }
+.needs-attention-row .insight-category .insight-category-glyph { color: var(--tone); }
+.needs-attention-row:hover { background: var(--surface-soft); }
+.needs-attention-row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.needs-attention-copy { min-width: 0; color: var(--muted); line-height: 1.4; }
+.needs-attention-copy strong { color: var(--text); font-weight: 750; }
+.needs-attention-chevron { color: var(--muted); }
+.needs-attention-note { margin: .75rem 1.05rem; color: var(--muted); font-size: .76rem; }
+.needs-attention-trend { display: inline-flex; align-items: center; gap: .2rem; margin-left: .4rem; padding: .05rem .35rem; border-radius: 999px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); font-family: var(--font-admin-sans); font-size: .66rem; font-weight: 700; white-space: nowrap; }
+@media (max-width: 640px) {
+  .needs-attention-row { grid-template-columns: minmax(0, 1fr) 16px; gap: .35rem .75rem; }
+  .needs-attention-row .insight-category { grid-column: 1 / -1; }
+}
+/* end needs-attention */

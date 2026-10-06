@@ -1,9 +1,282 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 ## Completed and working locally
+
+### UI polish follow-up: honest three-tank warming coverage (2026-10-07)
+
+On `feat/insights-ui-polish`, after Claude's b1d947b polish/departure gate,
+SHOW-WARM-C replaces SHOW-BREED. The shared seed/live temperature curves rise
+linearly from 24.8 to the default upper warning bound of 28 °C over nine hours,
+then reset continuously in 30 minutes. The 9.5 h cycle is staggered by
+3 h 10 min, anchored to configured exhibit midnight UTC. Maximum reset change
+is 0.05334 °C per 30 s, below the 0.2 °C plausibility limit. Live writer guards,
+all inference code/constants, including departure and stability floors, are
+unchanged from b1d947b (current-insights file hash verified identical).
+
+Warming C retains the readable local name Breeder Bay and legacy critical
+ammonia fixture; exhibit name is Showcase · Warming C. It uses unchanged
+Guppy/Molly preferences overlapping at 24–28 °C, pH 7.2–8.0 and TDS 180–400 ppm.
+The stable, offline, pH variability and species-conflict roles remain intact.
+Local reporting gaps, five alert fixtures, idempotence and latest fleet states
+are retained; the existing demo seed test is unchanged and passes.
+
+Both real seed paths were measured in SQLite with ten days of 30-second mock
+history ending after the two complete exhibit days. At 24 hourly evaluations
+per day, local and exhibit CLI produce the same temperature crossing counts:
+
+| UTC day | SHOW-WARM-A | SHOW-WARM-B | SHOW-WARM-C | Combined |
+|---|---|---|---|---|
+| 2026-10-13 | 6/24 (25.0%) | 8/24 (33.3%) | 9/24 (37.5%) | 23/24 (95.8%) |
+| 2026-10-14 | 9/24 (37.5%) | 7/24 (29.2%) | 6/24 (25.0%) | 22/24 (91.7%) |
+
+The target is met on each day without altering gates. These discrete hourly
+results do not assert continuous-time coverage. pH is more_variable 24/24 each
+day; stable and conflict checks also hold throughout. Earlier two-tank coverage
+in this document predates the departure gate and is superseded for the current
+demo. Every sampled crossing now also asserts latest observation within
+`max(DEPARTURE_SIGMAS·sigma, DEPARTURE_NOTABLE_FRACTION·notable_change)` of
+trend.fitted_end. A separate quarter-hour sweep across both days checks each
+warming tank's crossings and exercises recent_departure rejection during resets.
+
+Focused validation passed: expanded seed/scenario checks 16 tests
+(314.80 s), four phase/departure checks, and two CLI mapping/legacy cleanup
+checks. Web `npm test` passed (206 tests in 31 files). Full backend
+`python -m pytest -q` passed (429 passed, one existing optional PostgreSQL skip
+without a disposable URL, one existing Firebase Message.token deprecation
+warning; 387.60 s). The full run includes both complete-day coverage paths,
+all new departure/compatibility assertions and the existing suites. Markdown
+links (81 files), diff checks and protected-scope checks pass. The runbook records guarded
+cleanup for obsolete SHOW-BREED setups and regeneration of older curve history;
+local seeding continues preserving existing data instead of adopting hardware.
+Eleven files change: shared curves, exhibit map, two local seed mappings, two
+test files, Part A §A6/goal prompt, runbook, Development Status, decisions and
+backend area guide. No web source, inference, protected operational behavior,
+schema, migration or dependency changes. Commit on the same polish branch
+without a Co-Authored-By trailer; no push or PR. Goal 6 remains unstarted.
+
+### Analytics insights Goal 5: Needs attention structure (2026-10-07; polish checkpoint)
+
+`feat/dashboard-needs-attention` follows the unmerged Goal 4 branch. Fleet now
+shows a maximum of three attention rows below counts and above Tank health:
+critical, offline, then conditional projected crossings, more-variable and
+species conflicts. Observed rows use existing fleet status/open-alert counts;
+advisory rows use the all-tank current-insights query and shared state/time copy.
+Every row links to the independent Analytics selector via `insights_tank`.
+Empty-state coverage counts tanks with any insufficient trend once each.
+Insights errors keep observed rows, alerts, uptime and tank views available with
+Insights unavailable. Pending/error responses never report a false all-clear;
+failed refreshes suppress stale cached advisory rows and trend indicators.
+
+Temperature/pH rising/falling trends show a small arrow and two-decimal rate in
+desktop and mobile tank views, with Derived accessible copy. No other trend
+statuses or parameters add indicators. New CSS is limited to marked structure
+blocks and existing tokens; there are no new dependencies or visual design.
+Final requirement audit also made the full Goal 4 card clickable while retaining
+native keyboard selection and aligned the test fixture's fitted origin with
+the backend's first fit point. That three-file fix is included on both UI branch
+tips before the Goal 5 feature commit.
+
+Acceptance after both goals: `npm run typecheck`, `npm test` (201 passed in 30
+files), and `npm run build` passed. Existing Analytics/Fleet tests remain intact;
+only new endpoint mock responses were added to existing cases. New tests cover
+all state copy, rounding, default/URL tank selection, scoped refetch, focus/no
+polling, preserved History filters, four missing/stale cards, SVG layers and
+category tooltips, ranking/cap, empty coverage, cached error fallback and both
+tank layouts. Earlier focused Goal 5 ranking/indicator/existing Fleet checks
+passed (18 tests); the final suite adds two page integration cases. Markdown
+relative links (81 files), diff checks and the protected-file scope audit pass.
+Backend/inference, auth, actuator/command, bridge/mobile/firmware, migrations,
+public endpoints, alert/incident/push behavior and API response fields are
+unchanged. No push or PR. Stop for the owner's Claude UI polish pass;
+Goal 6 is not started.
+
+### Analytics insights Goal 4: Tank insights structure (2026-10-07)
+
+`feat/analytics-tank-insights-ui` branches from the unmerged, reviewed/fixed
+`feat/current-insights-stability-demo` backend branch. Analytics now starts with
+an independent active-tank selector, four Observed/Derived/Projected cards,
+method disclosure and a selected-parameter recent chart above History. Shared
+API types mirror the implemented backend, including coverage/compliance reasons.
+Exact Part A state copy and half-hour crossing rounding are centralized in pure
+formatters. Missing observations/compliance remain explicit rather than invented.
+Existing historical controls, calculations, export and results are retained.
+
+The all-tank attention snapshot sets the default; scoped tank requests fetch on
+selection and focus, with no polling. Valid `insights_tank` URLs take priority;
+unknown IDs fall back, and changes preserve History URL state. Chart medians,
+fitted trend and conditional low/high/mid projection stay separate, including
+tooltip labels. Warning bounds, species overlap and the evaluated-at Now line
+share one time axis. Turbidity never renders a projection layer. Native buttons,
+select/details, text badges and a chart summary provide accessible structure.
+Only existing components and semantic tokens are used; visual polish is pending.
+
+Validation: `npm run typecheck`, `npm test` (185 passed in 29 files) and
+`npm run build` passed. The focused copy/section/chart plus unchanged historical
+Analytics assertions passed (53 tests); existing test mocks only gained valid
+empty responses for the new endpoint. No backend, protected areas, dependencies
+or schema changes. Goal 5 follows on its own branch; Goal 6 is not authorized.
+
+### Goal 3 review #2b: expired-window startup (2026-10-07)
+
+An expired parsed UTC exhibit deadline now permits production API startup even
+with leftover demo flags, logging one cleanup warning. The generator starts no
+thread, and the existing writer expiry guard permits no new readings. Missing,
+malformed and over-seven-day future deadlines still reject demo flags; DEBUG
+remains forbidden. Equality with the deadline is expired, matching the writer.
+Focused exhibit/configuration checks passed (47), including production settings,
+application lifespan/health, no thread or readings, one warning and DEBUG
+rejection. A fresh-process production app import/lifespan/health check also
+passed with exactly one warning. Full backend `python -m pytest -q` passed:
+417 passed, one existing optional PostgreSQL skip without a disposable URL,
+and one existing Firebase deprecation warning. Markdown links and diff checks
+passed. No inference, protected operational code, dependencies or schema changes.
+This remains on `feat/current-insights-stability-demo` at the review checkpoint.
+
+### Goal 3 review #2 fixes and exhibit mode (2026-10-06)
+
+The same `feat/current-insights-stability-demo` branch now includes the owner's
+time-boxed production exhibit exception. Shared curves and reference species
+live under app services; no app module imports local seed modules. All scenario
+codes use SHOW-*. `DEMO_EXHIBIT_DATE` defaults to 2026-10-13; the pH plateau
+covers that entire UTC date and the next day. Arbitrary-date tests check
+00:30, 12:00 and 23:30 on both days. Inference algorithms/constants are unchanged;
+bucket timestamp sets cap at three, while all values remain for exact medians.
+
+Production still rejects DEBUG. Demo flags require a parsed future UTC
+`EXHIBIT_DEMO_UNTIL` at most seven days ahead; the writer checks expiry and exits
+permanently, logging once. Existing active-device, retirement and scenario-map
+guards remain locked against lifecycle/device changes.
+`python -m app.cli.exhibit_demo seed --days 10` creates only private SHOW tanks,
+missing reference species/common-name links, and bulk mock history. It touches
+no users, thresholds, devices or non-SHOW tanks and runs no historic decision
+engine. Reruns refuse existing history unless `--replace`; replacement refuses
+real/device history. Cleanup uses the deletion service shared with the tank
+route, preflights hardware and leaves species. Status prints counts/latest UTC
+observations and expiry. Local seeding preserves older colliding tank names.
+See the [exhibit runbook](WORKFLOWS.md#exhibit-runbook) for Railway setup/removal
+and ordinary staff push behavior for live showcase alerts.
+
+Validation: full backend `python -m pytest -q` passed (416 passed, no skips,
+one existing Firebase deprecation warning), with the existing opt-in PostgreSQL
+test enabled against a separately initialized disposable local cluster.
+Focused exhibit/local-seed checks passed (34). The fresh 14-day SQLite local
+seed created 281,904 readings and its rerun added zero rows; authenticated cold
+endpoint timing was 2.8701 s, cache hits 0.0120/0.0118 s. These are local ASGI
+measurements including authentication/response serialization, without network
+or server-startup costs. The existing PostgreSQL Alembic chain upgraded through
+0019 on disposable databases. PostgreSQL CLI seed/status/rerun refusal,
+replacement, active-device refusal and cleanup passed against a migrated
+disposable database: 201,587 showcase readings at 30-second cadence, with
+existing species/threshold values and the real tank/reading/device preserved.
+At 24 hourly evaluations on each of 2026-10-13 and 2026-10-14, SHOW-WARM-A and
+SHOW-WARM-B each project 12/24 (50%), combined 24/24 (100%). SHOW-PH is
+more_variable 24/24; stable trend/variability/species and the species conflict
+also match their targets 24/24. The local seed retains reporting gaps, giving
+12/24 and 8/24 warming coverage, combined 20/24 (83.3%) on October 13.
+AST audits prove every module constant and
+inference function unchanged except timestamp retention in TankWindow.
+No push/deployment/PR is performed; Goals 4–6 remain pending at review #2.
+
+### Analytics insights Goal 3 (2026-10-06; initial backend review #2 checkpoint)
+
+`feat/current-insights-stability-demo` branches from the unmerged Goal 2
+`feat/current-insights-projection`. Stability now compares median absolute
+changes between adjacent qualifying half-hour buckets over the current 24 h
+and preceding seven rolling days. Coverage, source mixing and spread floors
+are explicit; more-variable items participate in the existing attention order.
+The inference constants, trend/projection gates, public endpoints and
+alert/incident/push behavior are unchanged.
+
+The deterministic shared seed/live curves fill 14 days at a 30-second cadence
+on a fresh local database. Bulk inserts, existing reading preservation,
+idempotence, five legacy demo alerts and normal/warning/critical/offline states
+are retained. Live generation is restricted to mapped active tanks without an
+active device, checked under the existing lifecycle lock. Recovery Reef stays
+offline. Calmwater Rack's existing Discus (28–31 °C) and Corydoras Catfish
+(22–27 °C) assignments demonstrate a temperature-range conflict without edits
+to species ranges.
+
+The owner revised Part A §A6 during implementation: two warming tanks, offset
+by half a cycle, replace the infeasible single-tank 60% crossing target; the
+combined target is 80%. At 24 evenly spaced evaluations on the UTC exhibit
+day (2026-10-06), Guppy Gallery projects a crossing 12/24 times (50%) and
+Observation Point 8/24 (33.3%); at least one projects 20/24 times (83.3%).
+Observation Point retains its historical reporting gap. Juvenile Grove pH is
+more-variable 24/24 times with about a 2.5× ratio; Riverbank Community has
+steady temperature, typical variability and a valid species range throughout.
+The conflict role is detected throughout. Tests use nine days at a five-minute
+cadence through the same production scenario/seed/service functions.
+
+The pH role has a documented 28-day variability cycle, anchored to the exhibit
+epoch. It returns to quiet conditions outside that phase; it cannot remain
+above its own rolling baseline indefinitely. See
+[the role map and phase dates](ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+
+Fresh full-cadence SQLite seeding created 281,904 readings spanning 14 days in
+11.49 seconds on the final run, plus seven tanks, 15 species, 15 assignments
+and five alerts.
+Rerunning created zero new rows. Initial all-tank endpoint timings were
+2.84–2.94 seconds, triggering the required 20-second in-process cache. The
+cache uses sorted active tank-ID scopes, is isolated per database and bounded
+to 32 entries; explicit `now` or `use_cache=False` bypasses it. Cached snapshots
+retain their `evaluated_at`; readings/configuration may take up to 20 seconds
+to appear. Active-tank validation and authorization still run per request.
+The final authenticated HTTP benchmark against the isolated fresh SQLite
+database measured 2.9461 seconds cold and 0.0116/0.0123 seconds on cache hits.
+These in-process ASGI timings include real authentication dependencies,
+response validation and serialization, without network/server-startup costs.
+
+Validation: backend `python -m pytest -q` passed (382 passed, one existing
+PostgreSQL skip without a disposable URL and one existing Firebase deprecation
+warning). Focused insights/stability/cache/demo tests passed (105).
+Fresh `python -m seed.seed_data` and its idempotent rerun passed on an isolated
+SQLite database; the existing demo seed state test remains unchanged.
+Markdown relative-link checks (81 files), `git diff --check`, the unchanged
+Part A constants check and protected-area scope checks passed.
+No push or PR is performed. Stop for Claude review #2; Goals 4–6 remain planned.
+
+### Analytics insights Goals 1–2 (2026-10-06; backend review checkpoint)
+
+The staff/admin-only `/analytics/current-insights` endpoint provides bounded
+six-hour robust trends, warning headroom and current assigned-species overlap
+with 24-hour reading compliance. Observation-time bucket medians require three
+distinct timestamps, ten of twelve complete buckets, recent coverage and no
+gap over one hour. Real data suppresses mock data per window; mixed usable
+sources suppress inference. Freshness remains based on server receipt time.
+Goal 2 adds conditional quarter-hour projection bands to three hours and
+ordered freshness, coverage, outside-range, uncertainty and bound gates.
+Only a mid-line crossing establishes a projected crossing; band edges give
+the low/high hours from evaluation time, with null high for beyond the horizon.
+Advisory attention ranks crossings before species conflicts and caps at ten.
+At the Goal 2 checkpoint stability was `not_implemented` and its more-variable
+attention group was empty; Goal 3 above fills both in.
+No public, monitoring, alert or push behavior changes. Goal 2 branches from
+unmerged `feat/current-insights-core` as `feat/current-insights-projection`.
+This records the earlier Claude backend review #1 checkpoint; Goals 4–5 UI
+remain planned after review #2. See
+[the shared contract and checkpoint workflow](ANALYTICS_INSIGHTS_PLAN.md).
+
+Goal 1 validation: backend `python -m pytest -q` passed (319 passed, one existing
+skip; existing Firebase `Message.token` deprecation warning). Markdown relative
+links and `git diff --check` passed. The focused run initially caught an
+extra fixture timestamp accidentally qualifying a sparse bucket; the fixture
+was corrected before the full acceptance run.
+
+Goal 2 focused validation: 67 current-insights tests passed, including every
+projection gate, exact band/crossing formulas, elapsed-time adjustment, mirrored
+lower crossings, attention ordering and a ten-item cap. Repeated authenticated
+endpoint calls executed only SELECT statements and did not change Alert,
+PushNotificationEvent or MonitoringIncident counts. The reading path uses one
+column-only stream for all tanks, with bounded observation history plus latest
+reports for older last-known context. Final backend `python -m pytest -q`
+passed after query-budget consolidation (345 passed, one existing skip because
+no disposable PostgreSQL URL is configured; existing Firebase `Message.token`
+deprecation warning). Markdown relative links and `git diff --check` passed.
+No push or PR was performed; review the cumulative diff from `main` to
+`feat/current-insights-projection` for that earlier checkpoint.
 
 ### Tank Console Phase 2A (2026-10-06)
 
@@ -54,7 +327,7 @@ review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
   trends use observation time; reporting health and monitoring continue to use
   server receipt time, while alert events remain on alert creation time.
 - Optional demo sensor generation behind two explicit flags.
-- The local seed workflow creates seven days of deterministic demo sensor
+- The local seed workflow creates 14 days of deterministic demo sensor
   history, representative normal/warning/critical/offline fleet states, alert
   history, and populated public-tank details.
 - Backend behavior covered by pytest tests.
@@ -253,9 +526,9 @@ review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
 
 ### Documentation
 
-- Phase 04 operations hardening is implemented: fleet analytics uses server
-  `received_at` for operational bucketing, uptime, and reporting gaps while
-  preserving observation timestamps for history; the public tank page labels
+- Phase 04 operations hardening is implemented: fleet analytics uses observation
+  `timestamp` for water-quality buckets and server `received_at` for uptime and
+  reporting gaps; the public tank page labels
   its observation time as “Observed”. Fleet, tank, alert, analytics, and public
   contracts remain backward-compatible.
 - Phase 05 equipment-control documentation is reconciled with the current

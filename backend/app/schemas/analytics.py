@@ -151,3 +151,145 @@ class AnalyticsResponse(BaseModel):
     uptime_thresholds: UptimeThresholds
     insights: AnalyticsInsights
     decision_support_insights: DecisionSupportInsights | None = None
+
+
+class CurrentInsightConstants(BaseModel):
+    fit_hours: float
+    horizon_hours: float
+    baseline_days: int
+    bucket_minutes: float
+
+
+class CurrentInsightPoint(BaseModel):
+    t: datetime
+    value: float
+
+
+class CurrentFitPoint(CurrentInsightPoint):
+    count: int
+
+
+class CurrentTrend(BaseModel):
+    status: Literal['rising', 'falling', 'steady', 'uncertain', 'insufficient_data']
+    reason: Literal['too_few_buckets', 'gap', 'not_recent', 'mixed_source'] | None
+    rate_per_hour: float | None
+    rate_ci_low: float | None
+    rate_ci_high: float | None
+    change_6h: float | None
+    notable_change: float | None
+    qualifying_buckets: int
+    required_buckets: int
+    fit_points: list[CurrentFitPoint]
+    fitted_start: CurrentInsightPoint | None
+    fitted_end: CurrentInsightPoint | None
+    sigma: float | None
+
+
+class CurrentBounds(BaseModel):
+    min: float | None
+    max: float | None
+
+
+class CurrentHeadroom(BaseModel):
+    side: Literal['upper', 'lower']
+    bound: float | None
+    distance: float | None
+    outside: bool | None
+    reason: Literal['side_bound_missing', 'value_unavailable'] | None = None
+
+
+class SpeciesRangeConflict(BaseModel):
+    min_species: str
+    min: float
+    max_species: str
+    max: float
+
+
+class CurrentSpeciesRange(CurrentBounds):
+    status: Literal['ok', 'conflict', 'not_configured', 'not_applicable']
+    species_count: int
+    conflict: SpeciesRangeConflict | None
+    compliance_percent_24h: float | None
+    headroom: CurrentHeadroom | None
+    compliance_reason: Literal['too_few_readings', 'mixed_source'] | None
+    compliance_readings: int
+    required_readings: int
+
+
+class ProjectionBandPoint(BaseModel):
+    t: datetime
+    low: float
+    mid: float
+    high: float
+
+
+class CurrentProjection(BaseModel):
+    status: Literal['crossing_projected', 'no_crossing_within_horizon', 'too_uncertain', 'stale',
+                    'insufficient_data', 'already_outside', 'no_bound', 'not_applicable']
+    reason: str | None
+    bound_side: Literal['upper', 'lower'] | None
+    bound: float | None
+    crossing_hours_low: float | None
+    crossing_hours_high: float | None
+    horizon_hours: float
+    band: list[ProjectionBandPoint]
+
+
+class CurrentStability(BaseModel):
+    status: Literal['more_variable', 'typical', 'steadier', 'insufficient_data', 'insufficient_baseline']
+    reason: str | None
+    current_spread: float | None
+    baseline_spread: float | None
+    ratio: float | None
+    current_buckets: int
+    baseline_days_covered: int
+
+
+class CurrentObserved(BaseModel):
+    value: float
+    observed_at: datetime
+
+
+class CurrentParameterInsights(BaseModel):
+    parameter: Literal['temperature', 'ph', 'turbidity', 'tds']
+    unit: str
+    observed: CurrentObserved | None
+    warning_bounds: CurrentBounds | None
+    critical_bounds: CurrentBounds | None
+    trend: CurrentTrend
+    headroom: CurrentHeadroom | None
+    species_range: CurrentSpeciesRange
+    projection: CurrentProjection
+    stability: CurrentStability
+
+
+class CurrentLatest(BaseModel):
+    observed_at: datetime | None
+    received_at: datetime | None
+    is_current: bool
+
+
+class CurrentTankInsights(BaseModel):
+    tank_id: int
+    tank_name: str
+    latest: CurrentLatest
+    parameters: list[CurrentParameterInsights]
+
+
+class CurrentAttentionItem(BaseModel):
+    tank_id: int
+    tank_name: str
+    parameter: Literal['temperature', 'ph', 'turbidity', 'tds']
+    kind: Literal['projected', 'derived']
+    type: Literal['crossing_projected', 'more_variable', 'species_conflict']
+    crossing_hours_low: float | None
+    crossing_hours_high: float | None
+    ratio: float | None
+
+
+class CurrentInsightsResponse(BaseModel):
+    evaluated_at: datetime
+    method_version: str
+    constants: CurrentInsightConstants
+    tanks: list[CurrentTankInsights]
+    attention: list[CurrentAttentionItem]

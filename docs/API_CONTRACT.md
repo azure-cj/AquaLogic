@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-06
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -193,6 +193,7 @@ The device-key bridge routes are not browser routes:
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
 | GET | `/analytics/fleet` | Staff | Fleet/tank trends, effective historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
+| GET | `/analytics/current-insights` | Staff | Advisory current trends, headroom, species range, conditional projections and attention; active tanks only |
 | GET | `/thresholds` | Staff | Read global threshold defaults |
 | PUT | `/thresholds/{parameter}` | Admin | Update one global parameter default |
 | GET | `/tanks/{tank_id}/thresholds` | Staff | Read each parameter's effective threshold and whether it is inherited or overridden |
@@ -463,6 +464,85 @@ use a hosted species-photo URL through the existing `photo_url` field.
   `Alert.created_at`; reporting intervals and gaps use server `received_at`.
   Tank freshness, Offline status, and operational monitoring continue to use
   receipt time.
+- `GET /analytics/current-insights` evaluates now independently of the history
+  range selector. Up to 20 repeated `tank_id` values select active tanks;
+  omitted IDs select all active tanks. Unknown/retired selections return 404,
+  and more than 20 IDs return 422. Staff and administrators are authorized.
+  The typed response contains `evaluated_at`, `method_version=ci-v1`, method
+  `constants`, `tanks` (latest observation/receipt/freshness and four parameter
+  results) and `attention`. Each parameter includes an unchanged observed value
+  rounded to four decimals, nullable warning/critical bounds, a Theil–Sen trend
+  over the last 12 complete half-hour median buckets, warning headroom and the
+  overlap of assigned species' preferred ranges. Ten qualifying buckets with
+  three distinct timestamps each are required; gaps, missing recent coverage
+  and mixed sources have explicit reasons. Turbidity has no species range.
+  Real observations suppress mock observations independently in each evaluation
+  window. Fit/compliance use observation time; latest reporting freshness uses
+  `received_at` and the shared 90-second helper. Latest context uses receipt
+  order with reading ID as tie-breaker, preferring real reports when the current
+  24-hour observation window contains real data. Missing latest metadata has
+  null timestamps and `is_current=false`; stale last-known readings are retained.
+  One column-only streamed query covers the bounded eight-day observation
+  history plus at most the latest real/mock reports per tank outside that
+  window, so older last-known context does not require loading history or ORM
+  reading objects. Rows observed or received after evaluation are excluded.
+  Species compliance uses inclusive one-sided bounds and reports a null percent
+  below 30 usable readings or on mixed sources. `compliance_reason`,
+  `compliance_readings` and `required_readings` explain that null per the plan's
+  insufficient-data invariant. Missing headroom values report
+  `value_unavailable`; a missing selected bound reports `side_bound_missing`.
+  Disabled thresholds have null bounds/headroom. Stability compares the median
+  absolute change between qualifying buckets exactly 30 minutes apart in the
+  last 48 complete buckets against the preceding seven rolling days. It needs
+  36 current buckets and five UTC dates with at least 24 qualifying baseline
+  buckets. A rolling window can touch eight qualifying UTC dates, which are
+  counted literally in `baseline_days_covered`. Baseline spread uses all
+  adjacent qualifying pairs in its window, including pairs across midnight;
+  no pair crosses the current/baseline seam. The denominator is the larger of
+  baseline spread and the parameter's spread floor. Ratios ≥1.5 are
+  `more_variable`, ≤0.67 `steadier`, otherwise `typical`.
+  Coverage failures return `insufficient_data/too_few_buckets` or
+  `insufficient_baseline/too_few_days`, with `current_buckets` and
+  `baseline_days_covered`. No adjacent baseline pairs returns
+  `insufficient_baseline/no_adjacent_buckets`. Mixed usable sources anywhere
+  across current plus baseline take priority (`insufficient_data/mixed_source`).
+  Real data suppresses mocks across this entire stability window, independently
+  of the shorter fit/compliance windows. These read-only advisory results never
+  create alerts, push events or monitoring incidents.
+  See [the binding method and response contract](ANALYTICS_INSIGHTS_PLAN.md).
+- Current-insights projection statuses are checked in order: unsupported
+  turbidity (`not_applicable`), non-current receipt (`stale`), insufficient trend
+  (`insufficient_data`, copying its reason), observed value already strictly
+  outside either warning bound (`already_outside`), steady trend
+  (`no_crossing_within_horizon`, with band), uncertain trend (`too_uncertain`),
+  and a missing warning bound in the direction of a rising/falling trend
+  (`no_bound`). A non-finite/missing latest parameter value also reports
+  `insufficient_data/value_unavailable` rather than using a fitted value as an
+  observation. Supported fits extend the robust slope up to three hours from
+  the end of the last complete fit bucket, using 13 quarter-hour band points
+  with observation timestamps, a mid-line, the 90% Sen slope interval and
+  residual MAD scatter. A projection is conditional on the current trend
+  continuing; it is never a measurement.
+  `crossing_projected` requires the mid-line to reach its bound within that
+  horizon. The leading/trailing band edges then give `crossing_hours_low` and
+  `crossing_hours_high`; null high means the trailing edge did not cross within
+  the horizon. Hours subtract elapsed time from the bucket end to
+  `evaluated_at`, floored at zero. A rising/falling line that does not reach the
+  bound returns `no_crossing_within_horizon` with its band; suppressed states
+  have empty bands. `attention` contains at most ten advisory items: projected
+  crossings sorted by low hours ascending, more-variable results by ratio
+  descending, then species conflicts.
+  Ties use tank name, ID and parameter order deterministically. Only evaluated
+  tanks contribute; persisted alerts and offline state are merged separately
+  by future dashboard work. All output floats are rounded to four decimals
+  after calculations and ranking.
+- Current-insights responses use a bounded in-process cache with a 20-second
+  TTL, keyed by the sorted active tank-ID tuple and isolated per database bind.
+  Authorization and active-tank validation still run on every request.
+  `evaluated_at` identifies the cached snapshot; readings, thresholds and species
+  edits may take up to 20 seconds to appear. Each process keeps at most 32
+  entries. Injecting `now` or passing `use_cache=False` to the service bypasses
+  the cache, so historical/test evaluation always reads its own requested time.
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current
