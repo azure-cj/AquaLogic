@@ -5,6 +5,25 @@ Last reviewed: 2026-10-06
 
 ## Completed and working locally
 
+### Analytics insights Goal 1 (2026-10-06)
+
+The staff/admin-only `/analytics/current-insights` endpoint provides bounded
+six-hour robust trends, warning headroom and current assigned-species overlap
+with 24-hour reading compliance. Observation-time bucket medians require three
+distinct timestamps, ten of twelve complete buckets, recent coverage and no
+gap over one hour. Real data suppresses mock data per window; mixed usable
+sources suppress inference. Freshness remains based on server receipt time.
+Projection and stability have explicit `not_implemented` placeholders, and
+attention is empty. No public, monitoring, alert or push behavior changes.
+Goal 2 is next; Goal 3 stability/demo and Goals 4–5 UI remain planned. See
+[the shared contract and checkpoint workflow](ANALYTICS_INSIGHTS_PLAN.md).
+
+Goal 1 validation: backend `python -m pytest -q` passed (319 passed, one existing
+skip; existing Firebase `Message.token` deprecation warning). Markdown relative
+links and `git diff --check` passed. The focused run initially caught an
+extra fixture timestamp accidentally qualifying a sparse bucket; the fixture
+was corrected before the full acceptance run.
+
 ### Tank Console Phase 2A (2026-10-06)
 
 Production Console reads configured local ESP32 telemetry/equipment through an
@@ -253,9 +272,9 @@ review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
 
 ### Documentation
 
-- Phase 04 operations hardening is implemented: fleet analytics uses server
-  `received_at` for operational bucketing, uptime, and reporting gaps while
-  preserving observation timestamps for history; the public tank page labels
+- Phase 04 operations hardening is implemented: fleet analytics uses observation
+  `timestamp` for water-quality buckets and server `received_at` for uptime and
+  reporting gaps; the public tank page labels
   its observation time as “Observed”. Fleet, tank, alert, analytics, and public
   contracts remain backward-compatible.
 - Phase 05 equipment-control documentation is reconciled with the current

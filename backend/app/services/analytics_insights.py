@@ -26,6 +26,12 @@ def percentile(values, proportion):
     return values[left] + (values[ceil(position)] - values[left]) * (position - left)
 
 
+def notable_change(parameter, period_median):
+    """Shared magnitude gate for supported water-quality parameters."""
+    return {'temperature': .5, 'ph': .15, 'turbidity': max(2, .15 * abs(period_median)),
+            'tds': max(20, .1 * abs(period_median))}[parameter]
+
+
 def fitted_change(points):
     xs = [(stamp - points[0][0]) / HALF_HOUR for stamp, _ in points]
     ys = [value for _, value in points]
@@ -149,7 +155,7 @@ class AnalyticsInsightAccumulator:
                     continue
                 values = [value for _, value in points]
                 period_median = median(values)
-                notable = {'temperature': .5, 'ph': .15, 'turbidity': max(2, .15 * abs(period_median)), 'tds': max(20, .1 * abs(period_median))}[parameter]
+                notable = notable_change(parameter, period_median)
                 early, late, change = contrast(points)
                 fitted, residual_spread = fitted_change(points)
                 spread = percentile(values, .9) - percentile(values, .1)

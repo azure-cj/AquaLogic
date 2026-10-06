@@ -51,6 +51,10 @@ link back here rather than duplicate a competing project status.
 
 ## Current implementation deep specs
 
+- [`ANALYTICS_INSIGHTS_PLAN.md`](ANALYTICS_INSIGHTS_PLAN.md): binding contract
+  and sequential branch/checkpoint workflow for bounded advisory current
+  insights. Goal 1 backend is implemented; later goals remain planned.
+
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
   implementation record and scope guardrail for the final cross-cutting safety,
   correctness, clarity, and client-validation pass after Phases 01–06. Goals 1–5

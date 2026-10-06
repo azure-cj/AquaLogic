@@ -6,6 +6,41 @@ Last reviewed: 2026-10-06
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-06 — Bounded, advisory current insights and short-horizon projections
+
+**Decision:** Implement the deterministic, conditional, staff-only current
+insights and projections in [the approved analytics plan](ANALYTICS_INSIGHTS_PLAN.md).
+This supersedes the earlier "predictive analytics deferred" scope note only
+for these bounded methods: no machine learning, a six-hour robust trend fit,
+and at most a three-hour projection. Observed, Derived and Projected outputs
+remain distinct. Projections and insights never create alerts, push events or
+monitoring incidents and are not exposed by public endpoints.
+
+**Reason:** Operators need transparent short-term context without turning an
+extrapolation into a measured value or an operational safety signal.
+
+**Consequences:** New typed staff-only `/analytics/current-insights` responses
+share current effective thresholds and notable-change magnitudes with existing
+services. No database schema, dependencies or alert-engine changes are needed.
+Backend review after Goal 2 precedes stability/demo work and subsequent UI work.
+
+## 2026-10-06 — Correct the historical analytics timestamp description
+
+**Decision:** Add this correction to the 2026-08-21 receipt-time analytics entry
+without rewriting that historical entry. Current code buckets water-quality
+trends on observation `SensorReading.timestamp`, as recorded in `CLAUDE.md`
+and the later split-time decision. `received_at` remains the basis for
+freshness, reporting health, uptime and monitoring; alert events retain their
+creation time. The current-insights fit and species compliance also use
+observation time.
+
+**Reason:** Backfilled observations belong to their observation period and must
+not imply that reporting was healthy during an outage.
+
+**Consequences:** Current API/status documentation is reconciled to the
+implemented split-time behavior. The old decision is retained as history;
+no timestamp semantics of existing endpoints or monitoring are changed here.
+
 ## 2026-10-06 — Tank Console Phase 2A is a separate read-only LAN path
 
 **Decision:** Production Console uses a configured local ESP32 repository with

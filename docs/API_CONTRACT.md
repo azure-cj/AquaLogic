@@ -1,7 +1,7 @@
 # AquaLogic API Contract
 
 Status: Current route inventory
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-06
 
 The running FastAPI application at `backend/app/main.py` is the executable
 contract. This document is a navigation aid; response models and tests remain
@@ -193,6 +193,7 @@ The device-key bridge routes are not browser routes:
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
 | GET | `/analytics/fleet` | Staff | Fleet/tank trends, effective historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
+| GET | `/analytics/current-insights` | Staff | Advisory current tank trends, warning headroom and assigned species range; active tanks only |
 | GET | `/thresholds` | Staff | Read global threshold defaults |
 | PUT | `/thresholds/{parameter}` | Admin | Update one global parameter default |
 | GET | `/tanks/{tank_id}/thresholds` | Staff | Read each parameter's effective threshold and whether it is inherited or overridden |
@@ -463,6 +464,34 @@ use a hosted species-photo URL through the existing `photo_url` field.
   `Alert.created_at`; reporting intervals and gaps use server `received_at`.
   Tank freshness, Offline status, and operational monitoring continue to use
   receipt time.
+- `GET /analytics/current-insights` evaluates now independently of the history
+  range selector. Up to 20 repeated `tank_id` values select active tanks;
+  omitted IDs select all active tanks. Unknown/retired selections return 404,
+  and more than 20 IDs return 422. Staff and administrators are authorized.
+  The typed response contains `evaluated_at`, `method_version=ci-v1`, method
+  `constants`, `tanks` (latest observation/receipt/freshness and four parameter
+  results) and `attention`. Each parameter includes an unchanged observed value
+  rounded to four decimals, nullable warning/critical bounds, a Theil–Sen trend
+  over the last 12 complete half-hour median buckets, warning headroom and the
+  overlap of assigned species' preferred ranges. Ten qualifying buckets with
+  three distinct timestamps each are required; gaps, missing recent coverage
+  and mixed sources have explicit reasons. Turbidity has no species range.
+  Real observations suppress mock observations independently in each evaluation
+  window. Fit/compliance use observation time; latest reporting freshness uses
+  `received_at` and the shared 90-second helper. Latest context uses receipt
+  order with reading ID as tie-breaker, preferring real reports when the current
+  24-hour observation window contains real data. Missing latest metadata has
+  null timestamps and `is_current=false`; stale last-known readings are retained.
+  Species compliance uses inclusive one-sided bounds and reports a null percent
+  below 30 usable readings or on mixed sources. `compliance_reason`,
+  `compliance_readings` and `required_readings` explain that null per the plan's
+  insufficient-data invariant. Missing headroom values report
+  `value_unavailable`; a missing selected bound reports `side_bound_missing`.
+  Disabled thresholds have null bounds/headroom. In the Goal 1 checkpoint,
+  projection and stability report `insufficient_data/not_implemented`, except
+  turbidity projection is `not_applicable`; attention is empty. These read-only
+  advisory results never create alerts, push events or monitoring incidents.
+  See [the binding method and response contract](ANALYTICS_INSIGHTS_PLAN.md).
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current

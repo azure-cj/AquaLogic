@@ -1,7 +1,7 @@
 # Backend Area Guide
 
 Status: Current
-Last reviewed: 2026-10-02
+Last reviewed: 2026-10-06
 
 ## Read first
 
@@ -35,6 +35,13 @@ Last reviewed: 2026-10-02
   and analytics history that falls back to the global timeline after resets.
 - `backend/app/services/species_suitability.py`: derived species preference
   checks; keep this policy separate from threshold and alert behavior.
+- `backend/app/services/current_insights.py`: staff-only advisory six-hour
+  Theil–Sen fits of observation-time half-hour medians, warning headroom and
+  current assigned-species ranges/compliance. Column-only reading streams use
+  separate real/mock accumulators per evaluation window and injectable `now`.
+  Constants and the shared notable-change helper are versioned in the
+  [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md). Projection and
+  stability are explicit placeholders at the Goal 1 checkpoint.
 - `backend/app/routes/tanks.py`: tank detail, active/retired/all directory
   filters, one-way retirement, configuration, assignments, the compact
   `/operations` snapshot contract, hero-image upload/replacement, and
