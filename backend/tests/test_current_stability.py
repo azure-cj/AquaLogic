@@ -56,7 +56,21 @@ def test_slow_drift_is_not_more_variable():
     value = ci.build_stability('temperature', buckets(drift=True), {(None, True)}, END)
     assert value['current_spread'] == pytest.approx(.01)
     assert value['baseline_spread'] == pytest.approx(.01)
-    assert value['status'] == 'steadier'  # Floor prevents over-interpreting tiny changes.
+    assert value['status'] == 'typical'  # Identical sub-floor spreads are not "steadier".
+    assert value['ratio'] == pytest.approx(1)
+
+
+@pytest.mark.parametrize('parameter,floor', ci.SPREAD_FLOOR.items())
+def test_both_windows_below_floor_are_typical(parameter, floor):
+    value = ci.build_stability(parameter, buckets(current=floor / 10, baseline=floor / 2), {(None, True)}, END)
+    assert value['status'] == 'typical'
+    assert value['ratio'] == pytest.approx(1)
+
+
+def test_quieter_current_than_floor_baseline_is_steadier():
+    value = ci.build_stability('temperature', buckets(current=.001, baseline=.1), {(None, True)}, END)
+    assert value['status'] == 'steadier'
+    assert value['ratio'] == pytest.approx(.2)
 
 
 @pytest.mark.parametrize('parameter,floor', ci.SPREAD_FLOOR.items())

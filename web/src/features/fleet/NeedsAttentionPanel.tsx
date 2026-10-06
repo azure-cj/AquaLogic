@@ -1,17 +1,20 @@
+import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { CurrentInsightsResponse } from '@/features/analytics/types';
 import { metricOptions } from '@/features/analytics/types';
+import { CategoryLabel } from '@/features/analytics/tank-insights/CategoryLabel';
 import { crossingTimeCopy, speciesCopy, stabilityCopy } from '@/features/analytics/tank-insights/CopyFormatter';
 import type { FleetTank } from '@/shared/api/models';
 import { EmptyState, LoadingState, Panel } from '@/shared/components/admin-ui';
 
-export type AttentionRow = { key: string; tankId: number; category: 'Observed' | 'Projected' | 'Derived'; copy: string };
+export type AttentionRow = { key: string; tankId: number; category: 'Observed' | 'Projected' | 'Derived'; copy: string;
+  tone: 'critical' | 'offline' | 'projected' | 'derived' };
 export function attentionRows(tanks: FleetTank[], insights?: CurrentInsightsResponse): AttentionRow[] {
   const rows: AttentionRow[] = [];
   for (const status of ['critical', 'offline'] as const) {
     tanks.filter((tank) => tank.status === status).forEach((tank) => {
       const alerts = tank.active_critical_count + tank.active_warning_count;
-      rows.push({ key: `observed-${tank.id}`, tankId: tank.id, category: 'Observed',
+      rows.push({ key: `observed-${tank.id}`, tankId: tank.id, category: 'Observed', tone: status,
         copy: `${tank.name} · ${status === 'critical' ? 'Critical' : 'Offline'}${alerts ? ` · ${alerts} open alert${alerts === 1 ? '' : 's'}` : ''}` });
     });
   }
@@ -30,7 +33,7 @@ export function attentionRows(tanks: FleetTank[], insights?: CurrentInsightsResp
         ? parameter ? stabilityCopy(parameter.stability) : 'More variable than usual'
         : parameter ? speciesCopy(parameter.species_range, parameter.unit) : "Assigned species' ranges do not overlap";
     rows.push({ key: `${item.type}-${item.tank_id}-${item.parameter}`, tankId: item.tank_id,
-      category: item.kind === 'projected' ? 'Projected' : 'Derived', copy: `${item.tank_name} · ${parameterName}: ${detail}` });
+      category: item.kind === 'projected' ? 'Projected' : 'Derived', tone: item.kind === 'projected' ? 'projected' : 'derived', copy: `${item.tank_name} · ${parameterName}: ${detail}` });
   }
   return rows.slice(0, 3);
 }
@@ -43,16 +46,22 @@ export function NeedsAttentionPanel({ tanks, insights, insightsError, insightsPe
   const rows = attentionRows(tanks, usableInsights);
   const insufficient = usableInsights?.tanks.filter((tank) => tank.parameters.some((p) => p.trend.status === 'insufficient_data')).length ?? 0;
   const pending = fleetPending || insightsPending;
-  return <Panel title="Needs attention" className="needs-attention-panel">
+  return <Panel title="Needs attention" className="needs-attention-panel"
+    description="The few things worth checking first. Projections and derived insights are advisory.">
     {rows.length > 0 && <ul className="needs-attention-list">
-      {rows.map((row) => <li key={row.key}><Link to={`/admin/analytics?insights_tank=${row.tankId}`}>
-        <span className="status-badge">{row.category}</span><span>{row.copy}</span>
-      </Link></li>)}
+      {rows.map((row) => {
+        const split = row.copy.indexOf(' · ');
+        return <li key={row.key}><Link className="needs-attention-row" data-tone={row.tone} to={`/admin/analytics?insights_tank=${row.tankId}`}>
+          <CategoryLabel kind={row.category.toLowerCase() as 'observed' | 'derived' | 'projected'} />
+          <span className="needs-attention-copy">{split > 0 ? <><strong>{row.copy.slice(0, split)}</strong>{row.copy.slice(split)}</> : row.copy}</span>
+          <ChevronRight size={16} aria-hidden="true" className="needs-attention-chevron" />
+        </Link></li>;
+      })}
     </ul>}
-    {insightsError && <p role="status">Insights unavailable</p>}
-    {fleetError && <p role="status">Fleet status unavailable</p>}
+    {insightsError && <p role="status" className="needs-attention-note">Insights unavailable</p>}
+    {fleetError && <p role="status" className="needs-attention-note">Fleet status unavailable</p>}
     {pending && <LoadingState label="Checking attention…" />}
     {!rows.length && !pending && !insightsError && !fleetError && <EmptyState title="No tanks need attention right now." message="" />}
-    {!rows.length && insufficient > 0 && <p>{insufficient} tanks have too little recent data to assess.</p>}
+    {!rows.length && insufficient > 0 && <p className="needs-attention-note">{insufficient} tanks have too little recent data to assess.</p>}
   </Panel>;
 }

@@ -131,6 +131,12 @@ Preconditions, checked in order, each with its own status:
 6. trend `uncertain` → `too_uncertain`
 7. warning bound missing on the trend side → `no_bound`
 
+Departure gate (added at UI polish review): after gates 1–7, compute `level`
+(below). If `|latest value − level| > max(3·sigma, 0.5·notable)`, return
+`too_uncertain` with reason `recent_departure`. Theil–Sen treats a sudden step
+(e.g. a water change) as outliers and would otherwise keep extending the old
+trend from a level the tank has already left.
+
 Band: origin `x_end` = end of the last fit bucket; `level = a + b·x_end`. For
 `h = 0, 0.25, …, HORIZON_HOURS`:
 `mid = level + b·h`, `low = level + b_low·h − BAND_Z·sigma`,
@@ -153,7 +159,7 @@ Hours are measured from `now` (subtract `now − x_end`, floor at 0).
 - Baseline: the `BASELINE_DAYS` days before the current window; needs
   `BASELINE_MIN_DAYS` UTC days with ≥24 qualifying buckets
   (`insufficient_baseline`, report `baseline_days_covered`).
-- `ratio = current / max(baseline, SPREAD_FLOOR[parameter])`.
+- `ratio = max(current, SPREAD_FLOOR[parameter]) / max(baseline, SPREAD_FLOOR[parameter])` (floor on both sides, corrected at UI polish: a one-sided floor labelled sub-resolution changes "steadier").
 - `more_variable` if ratio ≥ 1.5, `steadier` if ≤ 0.67, else `typical`.
 - Mixed source across current+baseline → `insufficient_data`, `mixed_source`.
 
@@ -250,7 +256,7 @@ Category badges: `Observed`, `Derived`, `Projected`.
 | headroom outside | `Outside the warning range` |
 | projection crossing | `If the current trend continues, may reach the {upper\|lower} warning bound ({bound} {unit}) in about {low}–{high} h` ; if high is null: `… in about {low} h or later` |
 | projection none | `Not projected to reach a warning bound within 3 h if the trend continues` |
-| projection too_uncertain | `Trend too uncertain to project` |
+| projection too_uncertain | `Trend too uncertain to project`; reason `recent_departure` → `Not projected: the latest readings no longer follow the 6 h trend` |
 | projection stale | `No projection: the latest reading is not current` |
 | projection insufficient | `No projection: not enough recent readings` |
 | projection already_outside | `Already outside the warning range — see alerts` |

@@ -1,0 +1,5 @@
+/* Shared by Analytics and the fleet dashboard (route CSS is lazy). */
+.insight-category { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .64rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.insight-category-glyph { flex: none; }
+.insight-category-observed .insight-category-glyph { color: var(--metric-color, var(--text)); }
+.insight-category-projected { color: color-mix(in srgb, var(--metric-color, var(--teal-600)) 70%, var(--text)); }

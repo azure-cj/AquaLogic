@@ -594,3 +594,26 @@ def test_attention_endpoint_ranks_crossings_before_species_conflicts(db_session,
     # Attention is built from evaluated scope only.
     response = ci.build_current_insights(db_session, [tank.id], now=NOW)
     assert all(item['tank_id'] == tank.id for item in response['attention'])
+
+
+def test_recent_step_away_from_trend_blocks_projection(db_session, tank):
+    # A clean rise toward the bound, then a sudden drop (e.g. a water change):
+    # the robust fit still says "rising", but the latest reading has left the line.
+    values = [27.1 + i * .06 + (i % 3 - 1) * .015 for i in range(12)]
+    series(db_session, tank, values, latest=False)
+    add_reading(db_session, tank, 25.0, NOW - timedelta(seconds=10))
+    db_session.commit()
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'rising'
+    assert response['projection']['status'] == 'too_uncertain'
+    assert response['projection']['reason'] == 'recent_departure'
+    assert response['projection']['band'] == []
+
+
+def test_departure_tolerance_uses_sigma_and_notable_change():
+    fit = ci.Fit(.2, .1, .3, 26.7, .02, START, NOW)
+    trend = dict(status='rising', notable_change=.5)
+    bounds = dict(min=20, max=28)
+    # Level is 27.9; tolerance is max(3 * .02, .5 * .5) = .25.
+    assert ci.projection('temperature', dict(is_current=True), 27.66, bounds, trend, fit, NOW)['status'] == 'crossing_projected'
+    assert ci.projection('temperature', dict(is_current=True), 27.6, bounds, trend, fit, NOW)['reason'] == 'recent_departure'

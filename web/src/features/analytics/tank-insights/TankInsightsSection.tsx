@@ -7,6 +7,7 @@ import { useCurrentInsights } from '../useCurrentInsights';
 import { MethodDisclosure } from './MethodDisclosure';
 import { ParameterSummaryCard } from './ParameterSummaryCard';
 import { RecentTrendChart } from './RecentTrendChart';
+import { formatAnalyticsDate } from '../utils';
 
 export function TankInsightsSection() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,19 +21,21 @@ export function TankInsightsSection() {
   const selected = useCurrentInsights(selectedId ?? null);
   const tank = selected.data?.tanks.find((item) => item.tank_id === selectedId);
   const parameter = tank?.parameters.find((item) => item.parameter === parameterKey);
-  return <Panel title="Tank insights" className="tank-insights-section">
-    <label className="field"><span>Insights tank</span>
-      <select value={selectedId ?? ''} disabled={!tanks.length} onChange={(event) => {
-        setSearchParams((current) => {
-          const next = new URLSearchParams(current);
-          next.set('insights_tank', event.target.value);
-          return next;
-        }, { replace: true });
-      }}>
-        {!tanks.length && <option value="">No active tanks</option>}
-        {tanks.map((item) => <option value={item.tank_id} key={item.tank_id}>{item.tank_name}</option>)}
-      </select>
-    </label>
+  const tankPicker = <label className="field tank-insights-picker"><span>Insights tank</span>
+    <select value={selectedId ?? ''} disabled={!tanks.length} onChange={(event) => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set('insights_tank', event.target.value);
+        return next;
+      }, { replace: true });
+    }}>
+      {!tanks.length && <option value="">{overview.isPending ? 'Loading tanks…' : 'No active tanks'}</option>}
+      {tanks.map((item) => <option value={item.tank_id} key={item.tank_id}>{item.tank_name}</option>)}
+    </select>
+  </label>;
+  const evaluated = selected.data?.evaluated_at;
+  return <Panel title="Tank insights" className="tank-insights-section" action={tankPicker}
+    description={`What the readings say right now: observed values, derived trends, and short conditional projections.${evaluated ? ` Evaluated ${formatAnalyticsDate(evaluated)}.` : ''}`}>
     {overview.isError && <ErrorState message="Tank insights could not be loaded." retry={() => overview.refetch()} />}
     {overview.isPending ? <LoadingState label="Loading tank insights…" /> : !overview.isError && !tanks.length ?
       <EmptyState title="No active tanks" message="Add an active tank to see current insights." /> : null}
@@ -46,7 +49,7 @@ export function TankInsightsSection() {
           })}
         </div>
         {parameter && <RecentTrendChart parameter={parameter} evaluatedAt={selected.data!.evaluated_at} />}
-      </> : <p>Selected tank insights are unavailable.</p>)}
+      </> : <p className="tank-insights-unavailable">Selected tank insights are unavailable.</p>)}
     <MethodDisclosure />
   </Panel>;
 }

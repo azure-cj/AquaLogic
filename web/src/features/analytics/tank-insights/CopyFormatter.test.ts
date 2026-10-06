@@ -54,3 +54,12 @@ describe('Part A copy formatter', () => {
     expect(speciesCopy({ ...p.species_range, min: null }, '°C')).toContain('unbounded–28');
   });
 });
+
+describe('polish additions', () => {
+  it('explains a projection blocked by a recent departure from the trend', () => {
+    const p = parameterFixture();
+    expect(projectionCopy({ ...p.projection, status: 'too_uncertain', reason: 'recent_departure' }, '°C'))
+      .toBe('Not projected: the latest readings no longer follow the 6 h trend');
+    expect(projectionCopy({ ...p.projection, status: 'too_uncertain', reason: null }, '°C')).toBe('Trend too uncertain to project');
+  });
+});

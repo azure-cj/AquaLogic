@@ -671,7 +671,10 @@ export default function AnalyticsPage() {
         }
       />
       <TankInsightsSection />
-      <h2>History</h2>
+      <div className="analytics-section-heading">
+        <h2>History</h2>
+        <p>Fleet water quality, alerts and reporting over the selected timeframe.</p>
+      </div>
       <Panel className="analytics-controls">
         <div className="analytics-control-grid">
           <label className="field">

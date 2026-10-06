@@ -32,6 +32,8 @@ BAND_Z = 1.645
 HORIZON_HOURS = 3.0
 PROJECTION_STEP_HOURS = 0.25
 PROJECTED_PARAMETERS = ("temperature", "ph", "tds")
+DEPARTURE_SIGMAS = 3.0
+DEPARTURE_NOTABLE_FRACTION = 0.5
 STABILITY_CURRENT_BUCKETS = 48
 STABILITY_MIN_CURRENT_BUCKETS = 36
 BASELINE_DAYS = 7
@@ -207,7 +209,9 @@ def build_stability(parameter, buckets, sources, end):
     if baseline_spread is None:
         result.update(status='insufficient_baseline', reason='no_adjacent_buckets')
         return result
-    ratio = result['current_spread'] / max(baseline_spread, SPREAD_FLOOR[parameter])
+    # Floor both sides: changes below sensor resolution are neither steadier nor more variable.
+    floor = SPREAD_FLOOR[parameter]
+    ratio = max(result['current_spread'], floor) / max(baseline_spread, floor)
     result.update(status='more_variable' if ratio >= MORE_VARIABLE_RATIO else
                   'steadier' if ratio <= STEADIER_RATIO else 'typical',
                   baseline_spread=baseline_spread, ratio=ratio)
@@ -327,7 +331,13 @@ def projection(parameter, latest, value, bounds, trend, fit, now):
         result.update(status='no_bound', bound_side=side)
         return result
     level = fit.intercept + fit.slope * (fit.end - fit.origin).total_seconds() / 3600
-    steps = [index * PROJECTION_STEP_HOURS for index in range(round(horizon / PROJECTION_STEP_HOURS) + 1)]
+    # The robust fit ignores a sudden step (e.g. a water change) as outliers. If
+    # the latest observation no longer sits on the fitted line, do not extend it.
+    notable = trend.get('notable_change') or notable_change(parameter, value)
+    if abs(value - level) > max(DEPARTURE_SIGMAS * fit.sigma, DEPARTURE_NOTABLE_FRACTION * notable):
+        result.update(status='too_uncertain', reason='recent_departure')
+        return result
+    steps =[index * PROJECTION_STEP_HOURS for index in range(round(horizon / PROJECTION_STEP_HOURS) + 1)]
     result['band'] = [dict(t=fit.end + timedelta(hours=h),
                            low=level + fit.low * h - BAND_Z * fit.sigma,
                            mid=level + fit.slope * h,

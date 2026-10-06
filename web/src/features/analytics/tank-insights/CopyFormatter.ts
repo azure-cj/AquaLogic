@@ -37,7 +37,9 @@ export function projectionCopy(projection: CurrentProjection, unit: string): str
   switch (projection.status) {
     case 'crossing_projected': return `If the current trend continues, may reach the ${projection.bound_side} warning bound (${projection.bound == null ? '—' : formatNumber(projection.bound)} ${unit}) ${crossingTimeCopy(projection.crossing_hours_low, projection.crossing_hours_high)}`;
     case 'no_crossing_within_horizon': return 'Not projected to reach a warning bound within 3 h if the trend continues';
-    case 'too_uncertain': return 'Trend too uncertain to project';
+    case 'too_uncertain': return projection.reason === 'recent_departure'
+      ? 'Not projected: the latest readings no longer follow the 6 h trend'
+      : 'Trend too uncertain to project';
     case 'stale': return 'No projection: the latest reading is not current';
     case 'insufficient_data': return 'No projection: not enough recent readings';
     case 'already_outside': return 'Already outside the warning range — see alerts';
