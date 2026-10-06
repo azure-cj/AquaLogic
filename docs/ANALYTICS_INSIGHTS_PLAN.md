@@ -1,6 +1,7 @@
 # Analytics Insights Plan (re-defense / exhibit)
 
-Status: Goal 1 implemented locally; Goals 2–6 pending. Last reviewed: 2026-10-06.
+Status: Goals 1–2 implemented locally; stopped for Claude backend review #1.
+Goals 3–6 pending. Last reviewed: 2026-10-06.
 Owner workflow: Codex implements each
 goal on its own branch; Claude reviews the backend after Goal 2 and Goal 3 and
 does the final UI polish after Goal 5.

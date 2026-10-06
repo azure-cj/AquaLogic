@@ -193,7 +193,7 @@ The device-key bridge routes are not browser routes:
 | --- | --- | --- | --- |
 | GET | `/fleet` | Staff | Fleet overview and reporting state |
 | GET | `/analytics/fleet` | Staff | Fleet/tank trends, effective historical threshold context, alert events, comparisons, and uptime; `include_retired=true` opts retired tanks into historical scope |
-| GET | `/analytics/current-insights` | Staff | Advisory current tank trends, warning headroom and assigned species range; active tanks only |
+| GET | `/analytics/current-insights` | Staff | Advisory current trends, headroom, species range, conditional projections and attention; active tanks only |
 | GET | `/thresholds` | Staff | Read global threshold defaults |
 | PUT | `/thresholds/{parameter}` | Admin | Update one global parameter default |
 | GET | `/tanks/{tank_id}/thresholds` | Staff | Read each parameter's effective threshold and whether it is inherited or overridden |
@@ -482,16 +482,45 @@ use a hosted species-photo URL through the existing `photo_url` field.
   order with reading ID as tie-breaker, preferring real reports when the current
   24-hour observation window contains real data. Missing latest metadata has
   null timestamps and `is_current=false`; stale last-known readings are retained.
+  One column-only streamed query covers the bounded eight-day observation
+  history plus at most the latest real/mock reports per tank outside that
+  window, so older last-known context does not require loading history or ORM
+  reading objects. Rows observed or received after evaluation are excluded.
   Species compliance uses inclusive one-sided bounds and reports a null percent
   below 30 usable readings or on mixed sources. `compliance_reason`,
   `compliance_readings` and `required_readings` explain that null per the plan's
   insufficient-data invariant. Missing headroom values report
   `value_unavailable`; a missing selected bound reports `side_bound_missing`.
-  Disabled thresholds have null bounds/headroom. In the Goal 1 checkpoint,
-  projection and stability report `insufficient_data/not_implemented`, except
-  turbidity projection is `not_applicable`; attention is empty. These read-only
-  advisory results never create alerts, push events or monitoring incidents.
+  Disabled thresholds have null bounds/headroom. Stability remains
+  `insufficient_data/not_implemented` until Goal 3. These read-only advisory
+  results never create alerts, push events or monitoring incidents.
   See [the binding method and response contract](ANALYTICS_INSIGHTS_PLAN.md).
+- Current-insights projection statuses are checked in order: unsupported
+  turbidity (`not_applicable`), non-current receipt (`stale`), insufficient trend
+  (`insufficient_data`, copying its reason), observed value already strictly
+  outside either warning bound (`already_outside`), steady trend
+  (`no_crossing_within_horizon`, with band), uncertain trend (`too_uncertain`),
+  and a missing warning bound in the direction of a rising/falling trend
+  (`no_bound`). A non-finite/missing latest parameter value also reports
+  `insufficient_data/value_unavailable` rather than using a fitted value as an
+  observation. Supported fits extend the robust slope up to three hours from
+  the end of the last complete fit bucket, using 13 quarter-hour band points
+  with observation timestamps, a mid-line, the 90% Sen slope interval and
+  residual MAD scatter. A projection is conditional on the current trend
+  continuing; it is never a measurement.
+  `crossing_projected` requires the mid-line to reach its bound within that
+  horizon. The leading/trailing band edges then give `crossing_hours_low` and
+  `crossing_hours_high`; null high means the trailing edge did not cross within
+  the horizon. Hours subtract elapsed time from the bucket end to
+  `evaluated_at`, floored at zero. A rising/falling line that does not reach the
+  bound returns `no_crossing_within_horizon` with its band; suppressed states
+  have empty bands. `attention` contains at most ten advisory items: projected
+  crossings sorted by low hours ascending, more-variable results by ratio
+  descending (empty while stability is a placeholder), then species conflicts.
+  Ties use tank name, ID and parameter order deterministically. Only evaluated
+  tanks contribute; persisted alerts and offline state are merged separately
+  by future dashboard work. All output floats are rounded to four decimals
+  after calculations and ranking.
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current

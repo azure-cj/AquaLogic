@@ -37,11 +37,15 @@ Last reviewed: 2026-10-06
   checks; keep this policy separate from threshold and alert behavior.
 - `backend/app/services/current_insights.py`: staff-only advisory six-hour
   Theil–Sen fits of observation-time half-hour medians, warning headroom and
-  current assigned-species ranges/compliance. Column-only reading streams use
-  separate real/mock accumulators per evaluation window and injectable `now`.
+  current assigned-species ranges/compliance. One column-only reading stream
+  covers bounded history and last-known context, with separate real/mock
+  accumulators per evaluation window and injectable `now`.
   Constants and the shared notable-change helper are versioned in the
-  [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md). Projection and
-  stability are explicit placeholders at the Goal 1 checkpoint.
+  [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md). Projection
+  uses ordered gates and quarter-hour conditional bands through three hours;
+  attention ranks crossings and species conflicts with a ten-item cap.
+  Stability remains an explicit placeholder pending Goal 3 after backend
+  review #1. The service writes no alerts, push events or incidents.
 - `backend/app/routes/tanks.py`: tank detail, active/retired/all directory
   filters, one-way retirement, configuration, assignments, the compact
   `/operations` snapshot contract, hero-image upload/replacement, and

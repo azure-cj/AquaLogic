@@ -5,7 +5,7 @@ Last reviewed: 2026-10-06
 
 ## Completed and working locally
 
-### Analytics insights Goal 1 (2026-10-06)
+### Analytics insights Goals 1–2 (2026-10-06; backend review checkpoint)
 
 The staff/admin-only `/analytics/current-insights` endpoint provides bounded
 six-hour robust trends, warning headroom and current assigned-species overlap
@@ -13,9 +13,16 @@ with 24-hour reading compliance. Observation-time bucket medians require three
 distinct timestamps, ten of twelve complete buckets, recent coverage and no
 gap over one hour. Real data suppresses mock data per window; mixed usable
 sources suppress inference. Freshness remains based on server receipt time.
-Projection and stability have explicit `not_implemented` placeholders, and
-attention is empty. No public, monitoring, alert or push behavior changes.
-Goal 2 is next; Goal 3 stability/demo and Goals 4–5 UI remain planned. See
+Goal 2 adds conditional quarter-hour projection bands to three hours and
+ordered freshness, coverage, outside-range, uncertainty and bound gates.
+Only a mid-line crossing establishes a projected crossing; band edges give
+the low/high hours from evaluation time, with null high for beyond the horizon.
+Advisory attention ranks crossings before species conflicts and caps at ten.
+Stability remains `not_implemented`; its more-variable attention group is empty.
+No public, monitoring, alert or push behavior changes. Goal 2 branches from
+unmerged `feat/current-insights-core` as `feat/current-insights-projection`.
+Stop here for Claude backend review #1. Goal 3 stability/demo and Goals 4–5 UI
+remain planned. See
 [the shared contract and checkpoint workflow](ANALYTICS_INSIGHTS_PLAN.md).
 
 Goal 1 validation: backend `python -m pytest -q` passed (319 passed, one existing
@@ -23,6 +30,19 @@ skip; existing Firebase `Message.token` deprecation warning). Markdown relative
 links and `git diff --check` passed. The focused run initially caught an
 extra fixture timestamp accidentally qualifying a sparse bucket; the fixture
 was corrected before the full acceptance run.
+
+Goal 2 focused validation: 67 current-insights tests passed, including every
+projection gate, exact band/crossing formulas, elapsed-time adjustment, mirrored
+lower crossings, attention ordering and a ten-item cap. Repeated authenticated
+endpoint calls executed only SELECT statements and did not change Alert,
+PushNotificationEvent or MonitoringIncident counts. The reading path uses one
+column-only stream for all tanks, with bounded observation history plus latest
+reports for older last-known context. Final backend `python -m pytest -q`
+passed after query-budget consolidation (345 passed, one existing skip because
+no disposable PostgreSQL URL is configured; existing Firebase `Message.token`
+deprecation warning). Markdown relative links and `git diff --check` passed.
+No push or PR was performed; review the cumulative diff from `main` to
+`feat/current-insights-projection` before starting Goal 3.
 
 ### Tank Console Phase 2A (2026-10-06)
 

@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from math import ceil, floor, isfinite, sqrt
 from statistics import median
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import SensorReading, Tank
@@ -206,10 +206,79 @@ class TankWindow:
 
 
 def projection(parameter, latest, value, bounds, trend, fit, now):
-    return dict(status='not_applicable' if parameter == 'turbidity' else 'insufficient_data',
-                reason=None if parameter == 'turbidity' else 'not_implemented',
-                bound_side=None, bound=None, crossing_hours_low=None, crossing_hours_high=None,
-                horizon_hours=HORIZON_HOURS, band=[])
+    """Conditional extrapolation with ordered gates; never an observed value."""
+    horizon = min(HORIZON_HOURS, FIT_BUCKETS * BUCKET_SECONDS / 3600 / 2)
+    result = dict(status='not_applicable', reason=None, bound_side=None, bound=None,
+                  crossing_hours_low=None, crossing_hours_high=None, horizon_hours=horizon, band=[])
+    if parameter not in PROJECTED_PARAMETERS:
+        return result
+    if not latest['is_current']:
+        result['status'] = 'stale'
+        return result
+    if trend['status'] == 'insufficient_data':
+        result.update(status='insufficient_data', reason=trend['reason'])
+        return result
+    # Invalid or missing latest parameter values must not be invented from the fit.
+    if value is None:
+        result.update(status='insufficient_data', reason='value_unavailable')
+        return result
+    if bounds is not None and ((bounds['min'] is not None and value < bounds['min']) or
+                               (bounds['max'] is not None and value > bounds['max'])):
+        result['status'] = 'already_outside'
+        return result
+    if trend['status'] == 'uncertain':
+        result['status'] = 'too_uncertain'
+        return result
+    side = 'upper' if trend['status'] == 'rising' else 'lower' if trend['status'] == 'falling' else None
+    bound = bounds['max' if side == 'upper' else 'min'] if bounds is not None and side else None
+    if trend['status'] != 'steady' and bound is None:
+        result.update(status='no_bound', bound_side=side)
+        return result
+    level = fit.intercept + fit.slope * (fit.end - fit.origin).total_seconds() / 3600
+    steps = [index * PROJECTION_STEP_HOURS for index in range(round(horizon / PROJECTION_STEP_HOURS) + 1)]
+    result['band'] = [dict(t=fit.end + timedelta(hours=h),
+                           low=level + fit.low * h - BAND_Z * fit.sigma,
+                           mid=level + fit.slope * h,
+                           high=level + fit.high * h + BAND_Z * fit.sigma) for h in steps]
+    result.update(status='no_crossing_within_horizon', bound_side=side, bound=bound)
+    if trend['status'] == 'steady':
+        return result  # Still disclose the conditional band, even without a configured bound.
+
+    def crossing(edge):
+        return next((h for h, point in zip(steps, result['band'])
+                     if (point[edge] >= bound if side == 'upper' else point[edge] <= bound)), None)
+
+    if crossing('mid') is None:
+        return result
+    # Only the mid-line establishes a crossing. Edges then describe its range.
+    early = crossing('high' if side == 'upper' else 'low')
+    late = crossing('low' if side == 'upper' else 'high')
+    elapsed = (now - fit.end).total_seconds() / 3600
+    result.update(status='crossing_projected', crossing_hours_low=max(0., early - elapsed),
+                  crossing_hours_high=max(0., late - elapsed) if late is not None else None)
+    return result
+
+
+def attention_items(tanks):
+    """Rank advisory results independently of persisted alerts/offline status."""
+    ranked = []
+    for tank in tanks:
+        for parameter in tank['parameters']:
+            projection, stability, species = (parameter[key] for key in ('projection', 'stability', 'species_range'))
+            base = dict(tank_id=tank['tank_id'], tank_name=tank['tank_name'], parameter=parameter['parameter'],
+                        crossing_hours_low=None, crossing_hours_high=None, ratio=None)
+            tie = (tank['tank_name'], tank['tank_id'], PARAMETERS.index(parameter['parameter']))
+            if projection['status'] == 'crossing_projected':
+                item = dict(base, kind='projected', type='crossing_projected',
+                            crossing_hours_low=projection['crossing_hours_low'],
+                            crossing_hours_high=projection['crossing_hours_high'])
+                ranked.append(((0, projection['crossing_hours_low'], *tie), item))
+            if stability['status'] == 'more_variable':
+                item = dict(base, kind='derived', type='more_variable', ratio=stability['ratio'])
+                ranked.append(((1, -stability['ratio'], *tie), item))
+            if species['status'] == 'conflict':
+                ranked.append(((2, 0, *tie), dict(base, kind='derived', type='species_conflict')))
+    return [item for _, item in sorted(ranked, key=lambda pair: pair[0])[:10]]
 
 
 def rounded(value):
@@ -233,22 +302,25 @@ def build_current_insights(db: Session, tank_ids=(), *, now=None):
     ids = list(windows)
     columns = [SensorReading.id, SensorReading.tank_id, SensorReading.timestamp, SensorReading.received_at,
                SensorReading.device_id, SensorReading.is_mock, *(getattr(SensorReading, p) for p in PARAMETERS)]
-    # Column rows only. A bounded IN stream serves every selected tank.
+    latest_by_tank = defaultdict(dict)
+    # One column-only IN stream serves all tanks. Include at most two last-known
+    # reports per tank outside the bounded history window, preserving stale context.
     if ids:
+        ranked = select(SensorReading.id, func.row_number().over(
+                    partition_by=(SensorReading.tank_id, SensorReading.is_mock),
+                    order_by=(SensorReading.received_at.desc(), SensorReading.id.desc())).label('rank')).where(
+                    SensorReading.tank_id.in_(ids), SensorReading.timestamp <= now,
+                    SensorReading.received_at <= now).subquery()
+        latest_ids = select(ranked.c.id).where(ranked.c.rank == 1)
         history = select(*columns).where(SensorReading.tank_id.in_(ids),
-                    SensorReading.timestamp >= now - timedelta(days=BASELINE_DAYS + 1),
-                    SensorReading.timestamp <= now, SensorReading.received_at <= now).execution_options(yield_per=1000)
+                    SensorReading.timestamp <= now, SensorReading.received_at <= now,
+                    or_(SensorReading.timestamp >= now - timedelta(days=BASELINE_DAYS + 1),
+                        SensorReading.id.in_(latest_ids))).execution_options(yield_per=1000)
         for row in db.execute(history):
             windows[row.tank_id].add(row)
-    # Preserve last-known context even when the latest report predates the history window.
-    # Rank each real/mock source group by receipt time, as in existing operational reads.
-    latest_by_tank = defaultdict(dict)
-    if ids:
-        ranked = select(*columns, func.row_number().over(partition_by=(SensorReading.tank_id, SensorReading.is_mock),
-                    order_by=(SensorReading.received_at.desc(), SensorReading.id.desc())).label('rank')).where(
-                    SensorReading.tank_id.in_(ids), SensorReading.timestamp <= now, SensorReading.received_at <= now).subquery()
-        for row in db.execute(select(ranked).where(ranked.c.rank == 1).execution_options(yield_per=1000)):
-            latest_by_tank[row.tank_id][row.is_mock] = row
+            previous = latest_by_tank[row.tank_id].get(row.is_mock)
+            if previous is None or (row.received_at, row.id) > (previous.received_at, previous.id):
+                latest_by_tank[row.tank_id][row.is_mock] = row
     results = []
     for tank in tanks:
         window = windows[tank.id]
@@ -294,4 +366,5 @@ def build_current_insights(db: Session, tank_ids=(), *, now=None):
     return rounded(dict(evaluated_at=now, method_version=METHOD_VERSION,
                         constants=dict(fit_hours=FIT_BUCKETS * BUCKET_SECONDS / 3600,
                                        horizon_hours=HORIZON_HOURS, baseline_days=BASELINE_DAYS,
-                                       bucket_minutes=BUCKET_SECONDS / 60), tanks=results, attention=[]))
+                                       bucket_minutes=BUCKET_SECONDS / 60), tanks=results,
+                        attention=attention_items(results)))

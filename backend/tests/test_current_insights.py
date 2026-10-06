@@ -6,7 +6,8 @@ from statistics import median
 import pytest
 from sqlalchemy import event
 
-from app.models import (FishSpecies, RegisteredDevice, SensorReading, Tank, TankFish,
+from app.models import (Alert, FishSpecies, MonitoringIncident, PushNotificationEvent,
+                        RegisteredDevice, SensorReading, Tank, TankFish,
                         TankThresholdOverride, TankThresholdRevision, ThresholdRevision)
 from app.services import current_insights as ci
 from app.services.decision_engine import ensure_default_thresholds
@@ -320,13 +321,13 @@ def test_reading_queries_stream_columns_not_orm(db_session, tank):
     finally:
         event.remove(db_session.bind, 'before_cursor_execute', track_sql)
         event.remove(db_session, 'loaded_as_persistent', track_load)
-    assert len(statements) == 2
+    assert len(statements) == 1
     assert all(options.get('yield_per') == 1000 for _, options in statements)
     assert not loaded_readings
     assert all('sample_id' not in statement and 'ammonia' not in statement for statement, _ in statements)
 
 
-def test_endpoint_auth_scope_validation_and_placeholders(db_session, client, test_user, auth_headers, tank, monkeypatch):
+def test_endpoint_auth_scope_validation_and_stability_placeholder(db_session, client, test_user, auth_headers, tank, monkeypatch):
     from app.routes import dashboard
     monkeypatch.setattr(dashboard, 'build_current_insights', partial(ci.build_current_insights, now=NOW))
     series(db_session, tank)
@@ -347,9 +348,246 @@ def test_endpoint_auth_scope_validation_and_placeholders(db_session, client, tes
         assert data['attention'] == []
         for parameter in data['tanks'][0]['parameters']:
             assert parameter['stability']['reason'] == 'not_implemented'
-            assert parameter['projection']['status'] == ('not_applicable' if parameter['parameter'] == 'turbidity' else 'insufficient_data')
+            assert parameter['projection']['status'] == ('not_applicable' if parameter['parameter'] == 'turbidity' else 'no_crossing_within_horizon')
     for ident in (retired.id, 999999):
         assert client.get(f'/analytics/current-insights?tank_id={ident}', headers=auth_headers).status_code == 404
     assert client.get('/analytics/current-insights', params=[('tank_id', tank.id)] * 21,
                       headers=auth_headers).status_code == 422
     assert client.get(f'/analytics/current-insights?tank_id={tank.id}', headers=auth_headers).status_code == 200
+
+
+@pytest.mark.parametrize('parameter', ['temperature', 'ph', 'tds'])
+def test_steady_has_thirteen_band_points(db_session, tank, parameter):
+    series(db_session, tank, [25 if parameter == 'temperature' else 7 if parameter == 'ph' else 100] * 12,
+           parameter=parameter)
+    projected = result(db_session, tank, parameter)['projection']
+    assert projected['status'] == 'no_crossing_within_horizon'
+    assert len(projected['band']) == 13
+    assert [point['t'] for point in projected['band']] == [NOW + timedelta(minutes=i * 15) for i in range(13)]
+    assert all(point['low'] == point['mid'] == point['high'] for point in projected['band'])
+    assert projected['bound_side'] is None and projected['crossing_hours_low'] is None
+
+
+@pytest.mark.parametrize('case,status,reason', [
+    ('turbidity', 'not_applicable', None), ('stale', 'stale', None),
+    ('insufficient', 'insufficient_data', 'too_few_buckets'),
+    ('outside', 'already_outside', None), ('uncertain', 'too_uncertain', None),
+    ('no_bound', 'no_bound', None)])
+def test_projection_precondition_statuses(db_session, tank, case, status, reason):
+    if case == 'turbidity':
+        # No observations: not_applicable wins even over stale/insufficient.
+        parameter = 'turbidity'
+    else:
+        parameter = 'temperature'
+        values = ([29] * 12 if case == 'outside' else
+                  [24,28,23,27,22,28,23,27,24,27,22,27] if case == 'uncertain' else None)
+        series(db_session, tank, values, skip=(1,2,3) if case == 'insufficient' else (),
+               received=NOW - timedelta(seconds=91) if case == 'stale' else None)
+        if case == 'no_bound':
+            override(db_session, tank, upper=None)
+    projected = result(db_session, tank, parameter)['projection']
+    assert projected['status'] == status and projected['reason'] == reason
+    assert projected['band'] == []
+    assert projected['crossing_hours_low'] is None
+
+
+def test_stale_wins_over_insufficient_and_outside(db_session, tank):
+    series(db_session, tank, [29] * 12, skip=(1,2,3), received=NOW - timedelta(seconds=91))
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'insufficient_data'
+    assert response['projection']['status'] == 'stale'
+
+
+def test_insufficient_wins_over_outside_and_copies_mixed_reason(db_session, tank):
+    devices(db_session, tank)
+    series(db_session, tank, [29] * 12, device='a')
+    add_reading(db_session, tank, 29, START, device='b')
+    db_session.commit()
+    projected = result(db_session, tank)['projection']
+    assert projected['status'] == 'insufficient_data' and projected['reason'] == 'mixed_source'
+
+
+def test_outside_wins_over_uncertain_and_bound_is_inclusive(db_session, tank):
+    values = [24,28,23,27,22,28,23,29,24,28,22,29]
+    series(db_session, tank, values)
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'uncertain'
+    assert response['projection']['status'] == 'already_outside'
+    # The boundary itself is inside: strict comparison, as in the specified warning range.
+    newest = db_session.query(SensorReading).order_by(SensorReading.received_at.desc()).first()
+    newest.temperature = 28
+    db_session.commit()
+    assert result(db_session, tank)['projection']['status'] == 'too_uncertain'
+
+
+def test_steady_wins_over_no_bound_and_uncertain_wins_over_no_bound(db_session, tank):
+    override(db_session, tank, lower=None, upper=None)
+    series(db_session, tank, [25] * 12)
+    projected = result(db_session, tank)['projection']
+    assert projected['status'] == 'no_crossing_within_horizon' and len(projected['band']) == 13
+    db_session.query(SensorReading).delete()
+    db_session.commit()
+    series(db_session, tank, [24,28,23,27,22,28,23,27,24,27,22,27])
+    assert result(db_session, tank)['projection']['status'] == 'too_uncertain'
+
+
+@pytest.mark.parametrize('direction', [1, -1])
+def test_projection_crossing_mirrors_upper_and_lower(db_session, tank, direction):
+    base = 27.1 if direction == 1 else 20.9
+    values = [base + direction * i * .06 + (i % 3 - 1) * .015 for i in range(12)]
+    series(db_session, tank, values)
+    response = result(db_session, tank)
+    projected = response['projection']
+    assert projected['status'] == 'crossing_projected'
+    assert projected['bound_side'] == ('upper' if direction == 1 else 'lower')
+    assert projected['bound'] == (28 if direction == 1 else 20)
+    mid = next((point['t'] - NOW).total_seconds() / 3600 for point in projected['band']
+               if (point['mid'] >= projected['bound'] if direction == 1 else point['mid'] <= projected['bound']))
+    assert 0 <= projected['crossing_hours_low'] <= mid <= projected['crossing_hours_high'] <= 3
+    band = projected['band']
+    assert len(band) == 13
+    assert all(point['low'] <= point['mid'] <= point['high'] for point in band)
+    widths = [point['high'] - point['low'] for point in band]
+    assert all(right >= left - .0001 for left, right in zip(widths, widths[1:]))
+    assert widths[-1] > widths[0]
+
+
+def test_rising_far_from_bound_still_returns_band(db_session, tank):
+    series(db_session, tank)
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'rising'
+    projected = response['projection']
+    assert projected['status'] == 'no_crossing_within_horizon'
+    assert len(projected['band']) == 13 and projected['bound'] == 28
+    assert projected['crossing_hours_low'] is None and projected['crossing_hours_high'] is None
+
+
+@pytest.mark.parametrize('direction', [1, -1])
+def test_crossing_null_high_and_no_edge_only_crossing(direction):
+    level = 27.6 if direction == 1 else 20.4
+    fit = ci.Fit(.2 * direction, .08 if direction == 1 else -.4,
+                 .4 if direction == 1 else -.08, level, .01, NOW, NOW)
+    trend = dict(status='rising' if direction == 1 else 'falling', reason=None)
+    projected = ci.projection('temperature', dict(is_current=True), level, dict(min=20, max=28), trend, fit, NOW)
+    assert projected['status'] == 'crossing_projected'
+    assert projected['crossing_hours_low'] == 1
+    assert projected['crossing_hours_high'] is None
+    far_level = 27 if direction == 1 else 21
+    far_fit = ci.Fit(fit.slope, fit.low, fit.high, far_level, .01, NOW, NOW)
+    projected = ci.projection('temperature', dict(is_current=True), far_level,
+                              dict(min=20, max=28), trend, far_fit, NOW)
+    assert projected['status'] == 'no_crossing_within_horizon'
+    assert projected['crossing_hours_low'] is None
+    assert any((point['high'] >= 28 if direction == 1 else point['low'] <= 20) for point in projected['band'])
+
+
+def test_crossing_band_formulas_origin_and_hours_from_now():
+    fit = ci.Fit(.2, .1, .3, 26.7, .02, START, NOW)
+    evaluated = NOW + timedelta(minutes=10)
+    projected = ci.projection('temperature', dict(is_current=True), 27.9,
+                              dict(min=20, max=28), dict(status='rising'), fit, evaluated)
+    assert projected['status'] == 'crossing_projected'
+    assert projected['band'][0]['t'] == NOW
+    for i, point in enumerate(projected['band']):
+        h = i * .25
+        assert point['mid'] == pytest.approx(27.9 + .2 * h)
+        assert point['low'] == pytest.approx(27.9 + .1 * h - 1.645 * .02)
+        assert point['high'] == pytest.approx(27.9 + .3 * h + 1.645 * .02)
+    assert projected['crossing_hours_low'] == pytest.approx(.25 - 1/6)
+    assert projected['crossing_hours_high'] == pytest.approx(1.5 - 1/6)
+    # All crossings before evaluation are explicitly floored at zero.
+    later = ci.projection('temperature', dict(is_current=True), 27.9,
+                          dict(min=20, max=28), dict(status='rising'), fit, NOW + timedelta(hours=2))
+    assert later['crossing_hours_low'] == later['crossing_hours_high'] == 0
+
+
+@pytest.mark.parametrize('age,status', [(90, 'crossing_projected'), (91, 'stale')])
+def test_perfect_trend_projection_requires_receipt_freshness(db_session, tank, age, status):
+    series(db_session, tank, [27.1 + i * .06 for i in range(12)], received=NOW - timedelta(seconds=age))
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'rising'
+    assert response['projection']['status'] == status
+
+
+def test_recent_receipt_with_delayed_observation_uses_shared_freshness(db_session, tank):
+    series(db_session, tank, [27.1 + i * .06 for i in range(12)], latest=False,
+           received=NOW - timedelta(seconds=10))
+    response = ci.build_current_insights(db_session, [tank.id], now=NOW)
+    assert response['tanks'][0]['latest']['is_current'] is True
+    assert response['tanks'][0]['parameters'][0]['projection']['status'] == 'crossing_projected'
+
+
+def test_missing_latest_value_cannot_be_invented_from_fit(db_session, tank):
+    series(db_session, tank)
+    latest = db_session.query(SensorReading).order_by(SensorReading.received_at.desc()).first()
+    latest.temperature = float('inf')
+    db_session.commit()
+    response = result(db_session, tank)
+    assert response['trend']['status'] == 'rising'
+    assert response['observed'] is None
+    assert response['projection']['status'] == 'insufficient_data'
+    assert response['projection']['reason'] == 'value_unavailable'
+
+
+def test_endpoint_is_advisory_only_and_projects_attention(db_session, client, auth_headers, tank, monkeypatch):
+    from app.routes import dashboard
+    monkeypatch.setattr(dashboard, 'build_current_insights', partial(ci.build_current_insights, now=NOW))
+    assign(db_session, tank, 'Warm', ideal_temp_min=28)
+    assign(db_session, tank, 'Cool', ideal_temp_max=26)
+    series(db_session, tank, [27.1 + i * .06 for i in range(12)])
+    models = (Alert, PushNotificationEvent, MonitoringIncident)
+    before = [db_session.query(model).count() for model in models]
+    statements = []
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement.strip().split()[0].upper())
+    event.listen(db_session.bind, 'before_cursor_execute', record)
+    try:
+        for _ in range(2):
+            response = client.get('/analytics/current-insights', headers=auth_headers)
+            assert response.status_code == 200
+            data = response.json()
+            assert [item['type'] for item in data['attention']] == ['crossing_projected', 'species_conflict']
+            assert all(item['tank_id'] == tank.id for item in data['attention'])
+            assert data['tanks'][0]['parameters'][0]['projection']['status'] == 'crossing_projected'
+    finally:
+        event.remove(db_session.bind, 'before_cursor_execute', record)
+    assert [db_session.query(model).count() for model in models] == before
+    assert set(statements) == {'SELECT'}
+
+
+def test_attention_ordering_ties_and_cap():
+    def tank_insights(ident, low=None, ratio=None, conflict=False):
+        return dict(tank_id=ident, tank_name=f'Tank {ident:02}', parameters=[dict(parameter='temperature',
+            projection=dict(status='crossing_projected' if low is not None else 'stale',
+                            crossing_hours_low=low, crossing_hours_high=None),
+            stability=dict(status='more_variable' if ratio else 'insufficient_data', ratio=ratio),
+            species_range=dict(status='conflict' if conflict else 'ok'))])
+    tanks = [tank_insights(1, 2, 1.5, True), tank_insights(2, 1, 3, True), tank_insights(3, 1, 2)]
+    attention = ci.attention_items(tanks[::-1])
+    assert [(item['type'], item['tank_id']) for item in attention] == [
+        ('crossing_projected', 2), ('crossing_projected', 3), ('crossing_projected', 1),
+        ('more_variable', 2), ('more_variable', 3), ('more_variable', 1),
+        ('species_conflict', 1), ('species_conflict', 2)]
+    assert all(item['kind'] == ('projected' if item['type'] == 'crossing_projected' else 'derived')
+               for item in attention)
+    assert ci.attention_items([]) == []
+    assert len(ci.attention_items([tank_insights(i, 1, 2, True) for i in range(11)])) == 10
+    assert all(item['type'] == 'crossing_projected' for item in
+               ci.attention_items([tank_insights(i, 1, 2, True) for i in range(11)]))
+
+
+def test_attention_endpoint_ranks_crossings_before_species_conflicts(db_session, tank):
+    other = Tank(name='Earlier', location='Synthetic')
+    db_session.add(other)
+    db_session.commit()
+    series(db_session, tank, [27.1 + i * .06 for i in range(12)])
+    series(db_session, other, [27.2 + i * .06 for i in range(12)])
+    assign(db_session, other, 'Warm', ideal_temp_min=28)
+    assign(db_session, other, 'Cool', ideal_temp_max=26)
+    response = ci.build_current_insights(db_session, now=NOW)
+    assert [(item['tank_id'], item['type']) for item in response['attention']] == [
+        (other.id, 'crossing_projected'), (tank.id, 'crossing_projected'), (other.id, 'species_conflict')]
+    assert not any(item['type'] == 'more_variable' for item in response['attention'])
+    # Attention is built from evaluated scope only.
+    response = ci.build_current_insights(db_session, [tank.id], now=NOW)
+    assert all(item['tank_id'] == tank.id for item in response['attention'])
