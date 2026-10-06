@@ -6,6 +6,25 @@ Last reviewed: 2026-10-07
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-07 — Staff current insights UI structure and display fallbacks
+
+**Decision:** Analytics places an independent single-tank current-insights
+section above History. An all-active-tank snapshot selects the first attention
+tank (otherwise the first active tank); a scoped query loads the selected tank.
+Only the new `insights_tank` URL key changes on selection. Queries fetch on
+mount/tank change and window focus, without polling or reconnect refetch.
+Observed, Derived and Projected remain text labels, including in chart tooltips.
+Existing components/tokens provide structure; visual polish is a later pass.
+
+**Display assumptions:** Part A's "2 significant decimals" means two decimal
+places for rates, with absolute magnitude after Rising/Falling. Ratios use one
+decimal and crossing hours use the binding half-hour/collapsed-range rules.
+For cases without specified copy, disabled thresholds, missing observations,
+turbidity species applicability, missing compliance and one-sided species ranges
+get explicit neutral text. Null compliance never becomes zero percent; an absent
+species bound is displayed as unbounded. These are display fallbacks, with no
+inference or API changes.
+
 ## 2026-10-07 — Expired showcase windows preserve production API availability
 
 **Decision:** A parsed, expired `EXHIBIT_DEMO_UNTIL` with leftover demo flags

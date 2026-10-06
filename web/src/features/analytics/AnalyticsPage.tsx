@@ -1,6 +1,7 @@
 import { api } from '@/shared/api/client';
 import { DecisionSupportInsights, trendOverview } from './DecisionSupportInsights';
 import { AnalyticsResultsNotes, TankComparison } from './TankComparison';
+import { TankInsightsSection } from './tank-insights/TankInsightsSection';
 import {
   EmptyState,
   ErrorState,
@@ -669,6 +670,8 @@ export default function AnalyticsPage() {
           </div>
         }
       />
+      <TankInsightsSection />
+      <h2>History</h2>
       <Panel className="analytics-controls">
         <div className="analytics-control-grid">
           <label className="field">

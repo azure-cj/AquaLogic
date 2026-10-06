@@ -1,3 +1,17 @@
+/* tank-insights (structure, to be polished) */
+.tank-insights-section { padding-bottom: 1rem; margin-bottom: 1rem; }
+.tank-insights-section > .field,
+.tank-insights-grid,
+.tank-insights-chart,
+.tank-insights-method { margin: 1rem; }
+.tank-insights-section > .field { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.tank-insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 1rem; }
+.tank-insights-card { min-width: 0; border: 1px solid var(--border); padding: 1rem; }
+.tank-insights-card h3 { margin: 0 0 1rem; }
+.tank-insights-card p { margin: .5rem 0 1rem; overflow-wrap: anywhere; }
+.tank-insights-legend { display: flex; flex-wrap: wrap; gap: 1rem; padding-left: 1rem; }
+/* end tank-insights structure */
+
 .metric-cell {
   color: #294550;
   font-variant-numeric: tabular-nums;

@@ -5,6 +5,32 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### Analytics insights Goal 4: Tank insights structure (2026-10-07)
+
+`feat/analytics-tank-insights-ui` branches from the unmerged, reviewed/fixed
+`feat/current-insights-stability-demo` backend branch. Analytics now starts with
+an independent active-tank selector, four Observed/Derived/Projected cards,
+method disclosure and a selected-parameter recent chart above History. Shared
+API types mirror the implemented backend, including coverage/compliance reasons.
+Exact Part A state copy and half-hour crossing rounding are centralized in pure
+formatters. Missing observations/compliance remain explicit rather than invented.
+Existing historical controls, calculations, export and results are retained.
+
+The all-tank attention snapshot sets the default; scoped tank requests fetch on
+selection and focus, with no polling. Valid `insights_tank` URLs take priority;
+unknown IDs fall back, and changes preserve History URL state. Chart medians,
+fitted trend and conditional low/high/mid projection stay separate, including
+tooltip labels. Warning bounds, species overlap and the evaluated-at Now line
+share one time axis. Turbidity never renders a projection layer. Native buttons,
+select/details, text badges and a chart summary provide accessible structure.
+Only existing components and semantic tokens are used; visual polish is pending.
+
+Validation: `npm run typecheck`, `npm test` (185 passed in 29 files) and
+`npm run build` passed. The focused copy/section/chart plus unchanged historical
+Analytics assertions passed (53 tests); existing test mocks only gained valid
+empty responses for the new endpoint. No backend, protected areas, dependencies
+or schema changes. Goal 5 follows on its own branch; Goal 6 is not authorized.
+
 ### Goal 3 review #2b: expired-window startup (2026-10-07)
 
 An expired parsed UTC exhibit deadline now permits production API startup even

@@ -57,7 +57,8 @@ link back here rather than duplicate a competing project status.
   Review #2 follow-up adds configurable dates, a time-boxed production SHOW-*
   exhibit writer and scoped seed/status/cleanup CLI; the
   [exhibit runbook](WORKFLOWS.md#exhibit-runbook) records operations.
-  UI and optional backtest goals remain planned.
+  Goal 4 adds the structural staff Tank insights UI; Goal 5 is the current
+  dashboard run. Visual polish and optional backtest remain pending.
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
   implementation record and scope guardrail for the final cross-cutting safety,
