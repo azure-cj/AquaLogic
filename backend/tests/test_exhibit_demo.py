@@ -43,6 +43,11 @@ def test_scoped_seed_preserves_real_tanks_species_devices_and_other_tables(db_se
     tanks = list(db_session.scalars(select(Tank).where(Tank.id != real.id)))
     assert {tank.tank_code for tank in tanks} == set(demo_scenarios.SCENARIOS)
     assert all(t.tank_code.startswith('SHOW-') and not t.is_public and t.name.startswith('Showcase · ') for t in tanks)
+    warming_c = next(t for t in tanks if t.tank_code == 'SHOW-WARM-C')
+    assert warming_c.name == 'Showcase · Warming C'
+    assert {fish.common_name for fish in warming_c.fish_species} == {'Guppy', 'Molly'}
+    assert set(cli.SHOWCASES) == set(demo_scenarios.SCENARIOS)
+    assert 'SHOW-BREED' not in cli.SHOWCASES
     assert all(row.is_mock and row.device_id is None for row in db_session.scalars(
         select(SensorReading).where(SensorReading.tank_id != real.id)))
     for tank in tanks:
@@ -78,6 +83,23 @@ def test_seed_refuses_rerun_and_replace_changes_only_show_readings(db_session):
     assert count(db_session, SensorReading) == before
     assert db_session.get(SensorReading, original_id).timestamp.replace(tzinfo=timezone.utc) == NOW
     assert count(db_session, Tank) == 8
+
+
+def test_obsolete_breeding_showcase_requires_guarded_cleanup_before_reseed(db_session):
+    legacy = Tank(name='Showcase · Breeding Community', tank_code='SHOW-BREED', location='Exhibit')
+    db_session.add(legacy)
+    db_session.flush()
+    legacy_id = legacy.id
+    row_id = reading(db_session, legacy, mock=True).id
+    db_session.commit()
+    with pytest.raises(cli.ExhibitError, match='Unrecognized SHOW'):
+        cli.seed(db_session, days=1, replace=True, now=NOW)
+    db_session.rollback()
+    assert db_session.get(Tank, legacy_id).tank_code == 'SHOW-BREED'
+    assert db_session.get(SensorReading, row_id) is not None
+    assert cli.cleanup(db_session) == 1
+    cli.seed(db_session, days=1, now=NOW)
+    assert set(db_session.scalars(select(Tank.tank_code))) == set(demo_scenarios.SCENARIOS)
 
 
 def test_cleanup_uses_shared_deletion_and_leaves_nonshow_and_species(db_session, monkeypatch):

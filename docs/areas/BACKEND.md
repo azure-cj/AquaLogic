@@ -139,7 +139,12 @@ Last reviewed: 2026-10-07
   and live readings. Roles, phase limits and measured coverage are in the
   [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
   `DEMO_EXHIBIT_DATE` defaults to 2026-10-13, with pH elevated through the next
-  day. Reference species live in `app/services/demo_species.py`, shared with
+  day. Three warming codes SHOW-WARM-A/B/C use identical 9 h rises and 30 min
+  continuous resets in a 9.5 h cycle, offset by one third. Warming C replaces
+  SHOW-BREED with Guppy/Molly preferences. The departure gate and all inference
+  constants remain unchanged. Old showcase history needs guarded cleanup or
+  replacement as described in the runbook. Reference species live in
+  `app/services/demo_species.py`, shared with
   local seeds without app-to-seed imports.
 - `backend/seed/seed_dashboard_demo.py`: 14 days at a 30-second cadence, bulk
   inserts in batches of 5,000; preserves existing readings and is idempotent.

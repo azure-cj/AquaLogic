@@ -5,6 +5,58 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### UI polish follow-up: honest three-tank warming coverage (2026-10-07)
+
+On `feat/insights-ui-polish`, after Claude's b1d947b polish/departure gate,
+SHOW-WARM-C replaces SHOW-BREED. The shared seed/live temperature curves rise
+linearly from 24.8 to the default upper warning bound of 28 °C over nine hours,
+then reset continuously in 30 minutes. The 9.5 h cycle is staggered by
+3 h 10 min, anchored to configured exhibit midnight UTC. Maximum reset change
+is 0.05334 °C per 30 s, below the 0.2 °C plausibility limit. Live writer guards,
+all inference code/constants, including departure and stability floors, are
+unchanged from b1d947b (current-insights file hash verified identical).
+
+Warming C retains the readable local name Breeder Bay and legacy critical
+ammonia fixture; exhibit name is Showcase · Warming C. It uses unchanged
+Guppy/Molly preferences overlapping at 24–28 °C, pH 7.2–8.0 and TDS 180–400 ppm.
+The stable, offline, pH variability and species-conflict roles remain intact.
+Local reporting gaps, five alert fixtures, idempotence and latest fleet states
+are retained; the existing demo seed test is unchanged and passes.
+
+Both real seed paths were measured in SQLite with ten days of 30-second mock
+history ending after the two complete exhibit days. At 24 hourly evaluations
+per day, local and exhibit CLI produce the same temperature crossing counts:
+
+| UTC day | SHOW-WARM-A | SHOW-WARM-B | SHOW-WARM-C | Combined |
+|---|---|---|---|---|
+| 2026-10-13 | 6/24 (25.0%) | 8/24 (33.3%) | 9/24 (37.5%) | 23/24 (95.8%) |
+| 2026-10-14 | 9/24 (37.5%) | 7/24 (29.2%) | 6/24 (25.0%) | 22/24 (91.7%) |
+
+The target is met on each day without altering gates. These discrete hourly
+results do not assert continuous-time coverage. pH is more_variable 24/24 each
+day; stable and conflict checks also hold throughout. Earlier two-tank coverage
+in this document predates the departure gate and is superseded for the current
+demo. Every sampled crossing now also asserts latest observation within
+`max(DEPARTURE_SIGMAS·sigma, DEPARTURE_NOTABLE_FRACTION·notable_change)` of
+trend.fitted_end. A separate quarter-hour sweep across both days checks each
+warming tank's crossings and exercises recent_departure rejection during resets.
+
+Focused validation passed: expanded seed/scenario checks 16 tests
+(314.80 s), four phase/departure checks, and two CLI mapping/legacy cleanup
+checks. Web `npm test` passed (206 tests in 31 files). Full backend
+`python -m pytest -q` passed (429 passed, one existing optional PostgreSQL skip
+without a disposable URL, one existing Firebase Message.token deprecation
+warning; 387.60 s). The full run includes both complete-day coverage paths,
+all new departure/compatibility assertions and the existing suites. Markdown
+links (81 files), diff checks and protected-scope checks pass. The runbook records guarded
+cleanup for obsolete SHOW-BREED setups and regeneration of older curve history;
+local seeding continues preserving existing data instead of adopting hardware.
+Eleven files change: shared curves, exhibit map, two local seed mappings, two
+test files, Part A §A6/goal prompt, runbook, Development Status, decisions and
+backend area guide. No web source, inference, protected operational behavior,
+schema, migration or dependency changes. Commit on the same polish branch
+without a Co-Authored-By trailer; no push or PR. Goal 6 remains unstarted.
+
 ### Analytics insights Goal 5: Needs attention structure (2026-10-07; polish checkpoint)
 
 `feat/dashboard-needs-attention` follows the unmerged Goal 4 branch. Fleet now

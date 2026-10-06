@@ -6,6 +6,28 @@ Last reviewed: 2026-10-07
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-07 — Three warming demos preserve the projection departure gate
+
+**Decision:** Replace SHOW-BREED with SHOW-WARM-C and use three shared curves:
+nine-hour linear rises from 24.8 to the default 28 °C warning bound, continuous
+half-hour resets and 3 h 10 min phase offsets in a 9.5 h cycle. Keep inference
+algorithms/constants and Claude's latest-vs-fit departure gate unchanged.
+
+**Reason:** Two shorter ramps cannot honestly meet the combined coverage
+target after reset departures stop projecting the old trend. Three staggered
+clean rises provide actual near-bound windows without altering inference.
+
+**Consequences/assumptions:** Anchor phases to configured exhibit midnight UTC
+and measure both complete days with actual 30-second history in the local and
+CLI seed paths. Preserve local reporting gaps and legacy fleet/alert fixtures.
+Keep the readable Breeder Bay local name; exhibit uses Showcase · Warming C.
+Use Guppy/Molly's unchanged preferred ranges, covering all C curves. Existing
+obsolete SHOW-BREED tanks/history require guarded cleanup before CLI reseeding;
+do not auto-adopt or overwrite potentially hardware-associated local history.
+Every tested warming crossing must satisfy the departure tolerance; reset
+windows exercise recent_departure suppression. See Part A §A6 and
+[the exhibit runbook](WORKFLOWS.md#exhibit-runbook).
+
 ## 2026-10-07 — Staff current insights UI structure and display fallbacks
 
 **Decision:** Analytics places an independent single-tank current-insights

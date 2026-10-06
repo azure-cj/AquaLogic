@@ -83,6 +83,20 @@ do not run `seed.seed_data` in production.
    `--replace` deletes/regenerates only mapped SHOW-* readings. It refuses
    active hardware, real/device readings, retired or unrecognized SHOW tanks.
    Do not change the exhibit date between seeding and live generation.
+   The seven-code map now includes SHOW-WARM-A/B/C, replacing SHOW-BREED.
+   They use a shared 9 h rise from 24.8 to 28 °C and a continuous 30 min reset,
+   staggered by 3 h 10 min in a 9.5 h cycle. Warming C is named
+   `Showcase · Warming C` and uses existing Guppy/Molly preferences covering
+   the curves. Temperature changes remain below 0.2 °C per 30 s.
+   For a deployment seeded with the old SHOW-BREED map, disable the demo writer
+   on every instance, redeploy, run guarded `cleanup`, then seed the seven new
+   SHOW codes and re-enable the time-boxed writer. `seed --replace` refuses the
+   obsolete code rather than silently adopting/deleting old tanks or history.
+   If all codes are already current but history uses an older curve, disable
+   the writer and use `seed --days 10 --replace` before re-enabling it. Keep
+   non-SHOW/hardware safeguards and inspect status first. Local development
+   seeding also preserves existing history; use a fresh disposable local DB to
+   demonstrate the new roles instead of combining old/new ramp data.
 3. Run `python -m app.cli.exhibit_demo status` to inspect codes, reading counts,
    latest observation times and the expiry deadline. With an existing staff
    token, inspect `GET /analytics/current-insights` (or repeat `tank_id` for
@@ -91,6 +105,11 @@ do not run `seed.seed_data` in production.
    to 20 seconds for the insights cache. SHOW-OFFLINE keeps a trailing ten-minute
    outage and receives no live writes. The pH plateau spans the entire configured
    UTC date and the following day, with elevated history starting the prior day.
+   Check at 24 hourly evaluation times on each day: the combined A/B/C warming
+   target is at least 80%, with individual and combined counts reported.
+   A projection must satisfy the unchanged latest-vs-fitted departure gate;
+   resets should suppress extrapolation from the old rising trend. Earlier
+   two-tank coverage predates this gate and does not establish current coverage.
 4. After the exhibit, unset `DEMO_SENSOR_ENABLED`, `DEMO_SENSOR_INSTANCE`,
    `EXHIBIT_DEMO_UNTIL` and `DEMO_EXHIBIT_DATE`, redeploy, then run
    `python -m app.cli.exhibit_demo cleanup`. Cleanup preflights all SHOW-* tanks

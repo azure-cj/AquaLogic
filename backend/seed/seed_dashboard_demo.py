@@ -23,7 +23,7 @@ LATEST_STATES = {
 FISH_ASSIGNMENTS = {
     "Riverbank Community": ("Neon Tetra", "Corydoras Catfish", "Angelfish"),
     "Guppy Gallery": ("Guppy", "Platy", "Molly"),
-    "Breeder Bay": ("Guppy", "Platy"),
+    "Breeder Bay": ("Guppy", "Molly"),
     "Juvenile Grove": ("Guppy", "Molly"),
     "Recovery Reef": ("Betta",),
     "Calmwater Rack": ("Discus", "Corydoras Catfish"),

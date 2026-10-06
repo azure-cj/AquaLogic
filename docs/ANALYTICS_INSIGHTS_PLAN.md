@@ -1,7 +1,7 @@
 # Analytics Insights Plan (re-defense / exhibit)
 
-Status: Goals 1–5 implemented locally; stopped for Claude UI polish. Goal 6 pending.
-Review #2 exhibit follow-up and expired-window fix implemented. Last reviewed: 2026-10-07.
+Status: Goals 1–5 and Claude UI polish implemented locally; demo warming correction
+follows on the polish branch. Goal 6 pending. Last reviewed: 2026-10-07.
 Owner workflow: Codex implements each
 goal on its own branch; Claude reviews the backend after Goal 2 and Goal 3 and
 does the final UI polish after Goal 5.
@@ -298,22 +298,35 @@ curves with no discontinuity.
 | Role | Behaviour | Must produce |
 |---|---|---|
 | Stable | small daily temperature cycle (±0.3 °C), tiny noise | trend `steady`, stability `typical`, species `ok` |
-| Two warming tanks | identical physically plausible repeating ramps, phase-offset by half a cycle; choose the cycle/ramp without changing the inference constants or gates | At 24 evenly spaced evaluation times across a day, at least one tank has `crossing_projected` at ≥80% of times; report individual coverage too |
+| Three warming tanks | identical 9 h linear rises from 24.8 to 28 °C, continuous 0.5 h resets; 9.5 h cycle with one-third-cycle phase offsets | At 24 evenly spaced evaluation times on DEMO_EXHIBIT_DATE and again on the following day, at least one tank has `crossing_projected` at ≥80% of times; report each tank and the combined coverage for both days |
 | Unstable pH | normal for 7+ days, pH noise ~2.5× larger in the last 24 h *rolling* (implement as variability that depends on a long cycle) | stability `more_variable` for ≥80% of times across the exhibit day |
 | Species conflict | assigned species whose configured temperature ranges do not overlap (use existing `seed_fish` values, e.g. a warm-water and a cool-water species) | species `conflict` |
 | Short / offline | existing offline service tank (no live readings) | `stale` / insufficient states |
 
 Warming target corrected by the owner during Goal 3 (2026-10-06): the former
 single-tank ≥60% target conflicts with a bounded three-hour crossing horizon
-and the six-hour trend/confidence gates. Use two complementary projection
-windows instead. Keep the exact Part A algorithms and constants. If the
-combined ≥80% target is still missed, retain plausible curves and report the
-measured coverage rather than distorting data or inference gates.
+and the six-hour trend/confidence gates. Two complementary tanks replaced it.
+The owner revised this again after Claude's departure gate (2026-10-07): the
+old 6.5 h rise/1.5 h reset produced only about 42% honest combined coverage;
+earlier projections during resets no longer pass the latest-vs-fit check.
+A tank's genuine projection window is about the final three hours after six
+hours of clean rise, capping single-tank coverage near 30% of a cycle. Use three
+complementary tanks and the longer rise instead. Keep every Part A algorithm,
+constant and gate, including the departure gate, unchanged. If the combined
+≥80% target is still missed, retain plausible curves and report measured
+coverage rather than distorting data or inference gates.
 
-Current role map: Riverbank Community (`SHOW-STABLE`) and Breeder Bay
-(`SHOW-BREED`) are stable; Guppy Gallery (`SHOW-WARM-A`) and Observation Point
-(`SHOW-WARM-B`) warm from 24.8 to 28.0 °C over 6.5 h and cool over 1.5 h, offset
-by 4 h. Juvenile Grove (`SHOW-PH`) has unstable pH. Calmwater Rack (`SHOW-SPECIES`)
+Current role map: Riverbank Community (`SHOW-STABLE`) stays stable. Guppy
+Gallery (`SHOW-WARM-A`), Observation Point (`SHOW-WARM-B`) and Breeder Bay
+(`SHOW-WARM-C`, replacing SHOW-BREED) warm from 24.8 to 28.0 °C over 9 h and
+cool continuously over 0.5 h. The cycle is 34,200 seconds; A/B/C phases are
+0/11,400/22,800 seconds relative to DEMO_EXHIBIT_DATE midnight UTC (3 h 10 min
+between phases). Reset changes are at most 0.05334 °C per 30 s, including
+the cycle seams, below the 0.2 °C limit. Warming C uses existing Guppy and
+Molly ranges: temperature overlap 24–28 °C, pH 7.2–8.0, TDS 180–400 ppm.
+These cover its full curves; no reference species values change. Its readable
+local name and legacy ammonia critical-state fixture are retained.
+Juvenile Grove (`SHOW-PH`) has unstable pH. Calmwater Rack (`SHOW-SPECIES`)
 uses its existing Discus (28–31 °C) and Corydoras Catfish (22–27 °C) conflict.
 Recovery Reef (`SHOW-OFFLINE`) stays offline. Other species ranges are unchanged.
 These are local seed names; the scoped exhibit CLI uses private `Showcase · …`
@@ -351,14 +364,28 @@ parsed deadline allows production API startup with one cleanup warning; no
 demo thread starts and the writer refuses expired writes. Future deadlines over
 seven days remain rejected. See the scoped seed/status/cleanup
 commands in the [exhibit runbook](WORKFLOWS.md#exhibit-runbook). The inference
-algorithms/constants are unchanged; Goals 4–6 have not started.
+algorithms/constants remain unchanged by the demo correction. Claude's UI
+polish is committed as b1d947b; Goal 6 has not started.
 
-Review #2 measured coverage on 2026-10-13 at 24 hourly times: full 30-second
-CLI history on PostgreSQL gives SHOW-WARM-A 12/24, SHOW-WARM-B 12/24 and
-combined 24/24 (100%); pH more_variable, stable-role targets and species conflict
-each hold 24/24. The same counts hold on October 14. The local seed's retained
-reporting gaps give warming 12/24 and 8/24, combined 20/24 (83.3%). No inference
-gate or constant was adjusted.
+Earlier Review #2 coverage predates the departure gate and is superseded by
+the three-tank measurements below (also recorded in Development Status).
+Full-cadence SQLite acceptance with the default 28 °C warning bound gives the
+same counts for the local seed, including its retained gaps, and exhibit CLI:
+
+| UTC day | A | B | C | At least one warming tank |
+|---|---|---|---|---|
+| 2026-10-13 | 6/24 (25.0%) | 8/24 (33.3%) | 9/24 (37.5%) | 23/24 (95.8%) |
+| 2026-10-14 | 9/24 (37.5%) | 7/24 (29.2%) | 6/24 (25.0%) | 22/24 (91.7%) |
+
+These are hourly evaluation results, not continuous-time coverage claims.
+Acceptance now
+evaluates both local history (including its existing reporting gaps) and the
+exhibit CLI at the real 30-second cadence on both complete exhibit days.
+Every projected warming result must have its latest observation within
+`max(3·sigma, 0.5·notable)` of `trend.fitted_end`; a separate quarter-hour
+sweep also exercises reset rejection. Existing SHOW-BREED setups require
+guarded showcase cleanup and reseeding, not reuse of obsolete curve history;
+see the exhibit runbook. The local seeder still preserves existing history.
 
 ---
 
@@ -498,7 +525,7 @@ Tasks:
    - Stability: more_variable, typical, steadier, insufficient_data, insufficient_baseline (with baseline_days_covered), spread floor, slow drift does not produce more_variable.
    - Demo: scenario_value is deterministic and continuous (no jump > plausibility limit between t and t+30 s); value ranges plausible.
    - Demo sensor safety: a tank with an active device and a tank not in SCENARIOS receive no demo readings.
-   - Scenario reliability: evaluate current insights over the seeded data at 24 evenly spaced "now" values across a day and assert the role targets in §A6 (at least one of the two warming tanks crossing_projected ≥80%, report each tank's individual coverage; unstable pH ≥80% more_variable, stable tank steady/typical, conflict tank conflict). Use a reduced history window if needed for test speed, but keep the same functions.
+   - Scenario reliability: evaluate current insights over the seeded data at 24 evenly spaced "now" values on the exhibit day and following day and assert the role targets in §A6 (at least one of the three warming tanks crossing_projected ≥80%, report each tank's individual coverage; unstable pH ≥80% more_variable, stable tank steady/typical, conflict tank conflict). Use a reduced history window if needed for test speed, but keep the same functions and true gap durations.
 4. Performance check (added at review #1): /analytics/current-insights streams up to 8 days of readings for every active tank and the dashboard will call it on load and focus. After seeding 14 days, time the endpoint for all tanks against the local DB and report the result. If it exceeds 1 second, add a small in-process cache keyed by the sorted tank-id tuple with a 20-second TTL (keep `now` injectable; tests must be able to bypass the cache). Do not add dependencies or SQL-dialect-specific aggregation.
 5. Update docs/DEVELOPMENT_STATUS.md, docs/areas/BACKEND.md, and the seed section of docs that describe demo data.
 

@@ -15,7 +15,7 @@ SHOWCASES = {
     'SHOW-STABLE': ('Stable Community', ('Neon Tetra', 'Corydoras Catfish', 'Angelfish')),
     'SHOW-WARM-A': ('Warming A', ('Guppy', 'Platy', 'Molly')),
     'SHOW-WARM-B': ('Warming B', ('Angelfish', 'Neon Tetra')),
-    'SHOW-BREED': ('Breeding Community', ('Guppy', 'Platy')),
+    'SHOW-WARM-C': ('Warming C', ('Guppy', 'Molly')),
     'SHOW-PH': ('Variable pH', ('Guppy', 'Molly')),
     'SHOW-SPECIES': ('Species Range Conflict', ('Discus', 'Corydoras Catfish')),
     'SHOW-OFFLINE': ('Offline Habitat', ('Betta',)),

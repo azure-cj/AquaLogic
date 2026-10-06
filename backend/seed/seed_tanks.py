@@ -36,7 +36,7 @@ SAMPLE_TANKS = [
         "name": "Breeder Bay",
         "location": "Breeding Room",
         "description": "A monitored breeding habitat used for selected livebearer pairs and fry development.",
-        "tank_code": "SHOW-BREED",
+        "tank_code": "SHOW-WARM-C",
         "habitat_label": "Livebearer breeding habitat",
         "water_type": "freshwater",
         "volume_liters": 240,
