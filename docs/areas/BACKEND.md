@@ -130,8 +130,11 @@ Last reviewed: 2026-10-07
   writes only active tanks in the scenario map without an active device,
   rechecking under the existing lifecycle lock shared with device provisioning
   and retirement. SHOW-OFFLINE remains offline and all demo readings are mock.
-  Production requires a future `EXHIBIT_DEMO_UNTIL` at most seven days ahead;
-  expiry permanently stops the loop. DEBUG remains forbidden in production.
+  Production requires a future `EXHIBIT_DEMO_UNTIL` at most seven days ahead to
+  run the writer. Expiry permanently stops the loop. On restart an expired
+  parsed deadline allows API startup, warns once and starts no demo thread;
+  missing/malformed/over-seven-day future deadlines still reject demo flags.
+  DEBUG remains forbidden in production.
 - `backend/app/services/demo_scenarios.py`: pure UTC curves shared by seeded history
   and live readings. Roles, phase limits and measured coverage are in the
   [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).

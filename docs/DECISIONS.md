@@ -6,6 +6,22 @@ Last reviewed: 2026-10-07
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-07 — Expired showcase windows preserve production API availability
+
+**Decision:** A parsed, expired `EXHIBIT_DEMO_UNTIL` with leftover demo flags
+allows production startup and emits one cleanup warning. The demo generator
+starts no thread at expiry and its existing write guard continues to reject
+expired writes. Missing/malformed deadlines, future deadlines over seven days,
+and DEBUG remain rejected. Equality with the deadline counts as expired.
+
+**Reason:** Railway restarts after the exhibit must not take the API down
+because an operator has not yet removed the exhibit environment variables.
+
+**Consequences:** The warning asks operators to remove `DEMO_SENSOR_*` and
+`EXHIBIT_DEMO_UNTIL`; the [exhibit runbook](WORKFLOWS.md#exhibit-runbook) still
+requires normal post-exhibit cleanup. No inference, hardware, schema,
+authorization, alert or notification policy changes.
+
 ## 2026-10-06 — Time-boxed production showcase exception (Goal 3 review #2)
 
 **Decision:** The owner authorizes production scenario generation only with a

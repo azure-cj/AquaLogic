@@ -63,11 +63,17 @@ do not run `seed.seed_data` in production.
 1. On Railway set `DEMO_EXHIBIT_DATE=2026-10-13`,
    `EXHIBIT_DEMO_UNTIL=2026-10-14T23:59:00Z`, `DEMO_SENSOR_ENABLED=true`,
    and `DEMO_SENSOR_INSTANCE=true` on exactly one instance/worker. The deadline
-   must be in the future and at most seven days ahead at startup, so enable this
+   must be in the future and at most seven days ahead to run the writer, so enable this
    configuration on or after 2026-10-07 23:59 UTC (strictly before the deadline).
    Every other instance must have its demo instance flag disabled. The writer
    checks expiry every cycle and before each locked write, exits permanently
    when expired, and logs its stop once.
+   A restart with expired `EXHIBIT_DEMO_UNTIL` and leftover demo flags keeps the
+   API available: settings emit one warning and no demo thread starts or writes.
+   The warning is: "Exhibit demo window expired; demo writer disabled. Remove
+   DEMO_SENSOR_* and EXHIBIT_DEMO_UNTIL." Missing/unparseable deadlines and
+   deadlines more than seven days ahead still reject production startup;
+   DEBUG remains forbidden.
 2. From `backend/` on the intended deployment, at least a day before the exhibit,
    run `python -m app.cli.exhibit_demo seed --days 10`. This creates only seven
    private SHOW-* tanks, common-name species links, missing reference species,
@@ -90,8 +96,9 @@ do not run `seed.seed_data` in production.
    `python -m app.cli.exhibit_demo cleanup`. Cleanup preflights all SHOW-* tanks
    under lifecycle locks, refuses any active device or unresolved actuator work,
    and uses the shared permanent deletion service to remove only SHOW tanks and
-   their reading/alert history. Species remain. Unsetting the expiry also allows
-   production CLI startup after the deadline has passed.
+   their reading/alert history. Species remain. Expired exhibit variables no
+   longer block API or CLI startup, but remove them to clear the warning and
+   return to the normal production configuration.
 
 If push notifications are enabled, **live showcase alerts will push to staff
 devices** through the ordinary decision engine. Bulk history does not run that

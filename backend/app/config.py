@@ -1,4 +1,5 @@
 import os
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
@@ -15,6 +16,7 @@ MAX_REFRESH_SESSION_DAYS = 7
 DEFAULT_MONITORING_OUTAGE_GRACE_SECONDS = 900
 DEFAULT_MONITORING_INCIDENT_CHECK_INTERVAL_SECONDS = 60
 DEFAULT_PUSH_DISPATCH_INTERVAL_SECONDS = 15
+logger = logging.getLogger(__name__)
 
 
 def normalize_database_url(database_url: str) -> str:
@@ -129,7 +131,7 @@ def _validate_production(settings: Settings) -> None:
         raise ValueError("Production requires explicit TRUSTED_HOSTS")
     now = datetime.now(timezone.utc)
     valid_exhibit = (settings.exhibit_demo_until is not None
-                     and now < settings.exhibit_demo_until <= now + timedelta(days=7))
+                     and settings.exhibit_demo_until <= now + timedelta(days=7))
     if settings.debug or ((settings.demo_sensor_enabled or settings.demo_sensor_instance) and not valid_exhibit):
         raise ValueError("Production requires DEBUG and demo generation to be disabled")
     if not 5 <= settings.access_token_expire_minutes <= MAX_ACCESS_TOKEN_MINUTES:
@@ -138,6 +140,12 @@ def _validate_production(settings: Settings) -> None:
         raise ValueError("REFRESH_SESSION_EXPIRE_DAYS must be between 1 and 7 in production")
     if not settings.monitoring_incidents_enabled:
         raise ValueError("Production requires persistent monitoring incidents to remain enabled")
+    if (settings.demo_sensor_enabled or settings.demo_sensor_instance) and (
+        settings.exhibit_demo_until is not None and settings.exhibit_demo_until <= now
+    ):
+        logger.warning(
+            "Exhibit demo window expired; demo writer disabled. Remove DEMO_SENSOR_* and EXHIBIT_DEMO_UNTIL."
+        )
 
 
 def _validate_monitoring(settings: Settings) -> None:

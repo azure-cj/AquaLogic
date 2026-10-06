@@ -174,7 +174,7 @@ def production_environment(monkeypatch):
 
 
 @pytest.mark.parametrize('flag', ['DEMO_SENSOR_ENABLED', 'DEMO_SENSOR_INSTANCE'])
-@pytest.mark.parametrize('offset', [None, -1, 0, 8, 'bad', 'naive', 'nonutc'])
+@pytest.mark.parametrize('offset', [None, 8, 'bad', 'naive', 'nonutc'])
 def test_production_demo_rejects_invalid_deadline(production_environment, monkeypatch, flag, offset):
     monkeypatch.setenv(flag, 'true')
     if offset is not None:
@@ -183,6 +183,50 @@ def test_production_demo_rejects_invalid_deadline(production_environment, monkey
                                                   'nonutc': '2030-01-01T00:00:00+01:00'}[offset])
         monkeypatch.setenv('EXHIBIT_DEMO_UNTIL', value)
     with pytest.raises(ValueError, match='Production requires DEBUG and demo generation to be disabled'):
+        config.get_settings()
+
+
+@pytest.mark.parametrize('flags', [(True, True), (True, False), (False, True)])
+@pytest.mark.parametrize('offset_seconds', [-86400, 0])
+def test_expired_production_settings_startup_without_demo_thread_or_writes(
+    production_environment, db_session, client, monkeypatch, caplog, flags, offset_seconds
+):
+    import anyio
+    from app import main as app_main
+    class Clock(datetime):
+        @staticmethod
+        def now(tz): return NOW
+    monkeypatch.setattr(config, 'datetime', Clock)
+    monkeypatch.setattr(demo_sensor, 'datetime', Clock)
+    monkeypatch.setenv('DEMO_SENSOR_ENABLED', str(flags[0]))
+    monkeypatch.setenv('DEMO_SENSOR_INSTANCE', str(flags[1]))
+    monkeypatch.setenv('EXHIBIT_DEMO_UNTIL', (NOW + timedelta(seconds=offset_seconds)).isoformat())
+    with caplog.at_level('WARNING', logger='app.config'):
+        loaded = config.get_settings()
+        assert config.get_settings() is loaded  # Cached startup emits only one warning.
+    assert [record.getMessage() for record in caplog.records if record.name == 'app.config'] == [
+        'Exhibit demo window expired; demo writer disabled. Remove DEMO_SENSOR_* and EXHIBIT_DEMO_UNTIL.']
+    monkeypatch.setattr(app_main, 'settings', loaded)
+    monkeypatch.setattr(demo_sensor, 'settings', loaded)
+    def unexpected_thread(*args, **kwargs):
+        pytest.fail('Expired exhibit must not construct a demo thread')
+    monkeypatch.setattr(demo_sensor.threading, 'Thread', unexpected_thread)
+    stopped = []
+    monkeypatch.setattr(app_main, 'start_periodic_maintenance',
+                        lambda: SimpleNamespace(stop=lambda: stopped.append(True)))
+    monkeypatch.setattr(app_main, 'start_push_dispatcher', lambda: None)
+    db_session.add(Tank(name='Expired show', tank_code='SHOW-STABLE', location='Test'))
+    db_session.commit()
+    async def startup():
+        async with app_main.app.router.lifespan_context(app_main.app):
+            assert demo_sensor.write_demo_cycle(db_session, now=NOW) == 0
+    anyio.run(startup)
+    assert stopped == [True]
+    assert client.get('/health').status_code == 200
+    assert count(db_session, SensorReading) == 0
+    monkeypatch.setenv('DEBUG', 'true')
+    config.get_settings.cache_clear()
+    with pytest.raises(ValueError, match='Production requires DEBUG'):
         config.get_settings()
 
 

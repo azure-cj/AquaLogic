@@ -74,5 +74,5 @@ def start_demo_generator() -> None:
     # Render and local development can run multiple API workers.  The explicit
     # instance flag makes exactly one designated process responsible for demo
     # ingestion, while every other process remains a normal API worker.
-    if settings.demo_sensor_enabled and settings.demo_sensor_instance:
+    if settings.demo_sensor_enabled and settings.demo_sensor_instance and not exhibit_expired():
         threading.Thread(target=_loop, name="aqualogic-demo-sensors", daemon=True).start()

@@ -338,9 +338,12 @@ real readings.
 
 Owner-approved review #2 exception (2026-10-06): production may run the
 scenario-only writer with `EXHIBIT_DEMO_UNTIL`, an ISO UTC datetime strictly in
-the future and at most seven days ahead at startup. DEBUG remains forbidden.
+the future and at most seven days ahead to run the writer. DEBUG remains forbidden.
 An invalid/missing deadline retains the production demo rejection. Expiry
-permanently stops the loop with one log line. See the scoped seed/status/cleanup
+permanently stops the loop with one log line. Review #2b (2026-10-07): an expired
+parsed deadline allows production API startup with one cleanup warning; no
+demo thread starts and the writer refuses expired writes. Future deadlines over
+seven days remain rejected. See the scoped seed/status/cleanup
 commands in the [exhibit runbook](WORKFLOWS.md#exhibit-runbook). The inference
 algorithms/constants are unchanged; Goals 4–6 have not started.
 

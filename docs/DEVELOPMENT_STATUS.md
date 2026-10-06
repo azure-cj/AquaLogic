@@ -5,6 +5,22 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### Goal 3 review #2b: expired-window startup (2026-10-07)
+
+An expired parsed UTC exhibit deadline now permits production API startup even
+with leftover demo flags, logging one cleanup warning. The generator starts no
+thread, and the existing writer expiry guard permits no new readings. Missing,
+malformed and over-seven-day future deadlines still reject demo flags; DEBUG
+remains forbidden. Equality with the deadline is expired, matching the writer.
+Focused exhibit/configuration checks passed (47), including production settings,
+application lifespan/health, no thread or readings, one warning and DEBUG
+rejection. A fresh-process production app import/lifespan/health check also
+passed with exactly one warning. Full backend `python -m pytest -q` passed:
+417 passed, one existing optional PostgreSQL skip without a disposable URL,
+and one existing Firebase deprecation warning. Markdown links and diff checks
+passed. No inference, protected operational code, dependencies or schema changes.
+This remains on `feat/current-insights-stability-demo` at the review checkpoint.
+
 ### Goal 3 review #2 fixes and exhibit mode (2026-10-06)
 
 The same `feat/current-insights-stability-demo` branch now includes the owner's
