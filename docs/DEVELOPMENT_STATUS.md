@@ -5,6 +5,64 @@ Last reviewed: 2026-10-06
 
 ## Completed and working locally
 
+### Analytics insights Goal 3 (2026-10-06; backend review #2 checkpoint)
+
+`feat/current-insights-stability-demo` branches from the unmerged Goal 2
+`feat/current-insights-projection`. Stability now compares median absolute
+changes between adjacent qualifying half-hour buckets over the current 24 h
+and preceding seven rolling days. Coverage, source mixing and spread floors
+are explicit; more-variable items participate in the existing attention order.
+The inference constants, trend/projection gates, public endpoints and
+alert/incident/push behavior are unchanged.
+
+The deterministic shared seed/live curves fill 14 days at a 30-second cadence
+on a fresh local database. Bulk inserts, existing reading preservation,
+idempotence, five legacy demo alerts and normal/warning/critical/offline states
+are retained. Live generation is restricted to mapped active tanks without an
+active device, checked under the existing lifecycle lock. Recovery Reef stays
+offline. Calmwater Rack's existing Discus (28–31 °C) and Corydoras Catfish
+(22–27 °C) assignments demonstrate a temperature-range conflict without edits
+to species ranges.
+
+The owner revised Part A §A6 during implementation: two warming tanks, offset
+by half a cycle, replace the infeasible single-tank 60% crossing target; the
+combined target is 80%. At 24 evenly spaced evaluations on the UTC exhibit
+day (2026-10-06), Guppy Gallery projects a crossing 12/24 times (50%) and
+Observation Point 8/24 (33.3%); at least one projects 20/24 times (83.3%).
+Observation Point retains its historical reporting gap. Juvenile Grove pH is
+more-variable 24/24 times with about a 2.5× ratio; Riverbank Community has
+steady temperature, typical variability and a valid species range throughout.
+The conflict role is detected throughout. Tests use nine days at a five-minute
+cadence through the same production scenario/seed/service functions.
+
+The pH role has a documented 28-day variability cycle, anchored to the exhibit
+epoch. It returns to quiet conditions outside that phase; it cannot remain
+above its own rolling baseline indefinitely. See
+[the role map and phase dates](ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+
+Fresh full-cadence SQLite seeding created 281,904 readings spanning 14 days in
+11.49 seconds on the final run, plus seven tanks, 15 species, 15 assignments
+and five alerts.
+Rerunning created zero new rows. Initial all-tank endpoint timings were
+2.84–2.94 seconds, triggering the required 20-second in-process cache. The
+cache uses sorted active tank-ID scopes, is isolated per database and bounded
+to 32 entries; explicit `now` or `use_cache=False` bypasses it. Cached snapshots
+retain their `evaluated_at`; readings/configuration may take up to 20 seconds
+to appear. Active-tank validation and authorization still run per request.
+The final authenticated HTTP benchmark against the isolated fresh SQLite
+database measured 2.9461 seconds cold and 0.0116/0.0123 seconds on cache hits.
+These in-process ASGI timings include real authentication dependencies,
+response validation and serialization, without network/server-startup costs.
+
+Validation: backend `python -m pytest -q` passed (382 passed, one existing
+PostgreSQL skip without a disposable URL and one existing Firebase deprecation
+warning). Focused insights/stability/cache/demo tests passed (105).
+Fresh `python -m seed.seed_data` and its idempotent rerun passed on an isolated
+SQLite database; the existing demo seed state test remains unchanged.
+Markdown relative-link checks (81 files), `git diff --check`, the unchanged
+Part A constants check and protected-area scope checks passed.
+No push or PR is performed. Stop for Claude review #2; Goals 4–6 remain planned.
+
 ### Analytics insights Goals 1–2 (2026-10-06; backend review checkpoint)
 
 The staff/admin-only `/analytics/current-insights` endpoint provides bounded
@@ -18,11 +76,12 @@ ordered freshness, coverage, outside-range, uncertainty and bound gates.
 Only a mid-line crossing establishes a projected crossing; band edges give
 the low/high hours from evaluation time, with null high for beyond the horizon.
 Advisory attention ranks crossings before species conflicts and caps at ten.
-Stability remains `not_implemented`; its more-variable attention group is empty.
+At the Goal 2 checkpoint stability was `not_implemented` and its more-variable
+attention group was empty; Goal 3 above fills both in.
 No public, monitoring, alert or push behavior changes. Goal 2 branches from
 unmerged `feat/current-insights-core` as `feat/current-insights-projection`.
-Stop here for Claude backend review #1. Goal 3 stability/demo and Goals 4–5 UI
-remain planned. See
+This records the earlier Claude backend review #1 checkpoint; Goals 4–5 UI
+remain planned after review #2. See
 [the shared contract and checkpoint workflow](ANALYTICS_INSIGHTS_PLAN.md).
 
 Goal 1 validation: backend `python -m pytest -q` passed (319 passed, one existing
@@ -42,7 +101,7 @@ passed after query-budget consolidation (345 passed, one existing skip because
 no disposable PostgreSQL URL is configured; existing Firebase `Message.token`
 deprecation warning). Markdown relative links and `git diff --check` passed.
 No push or PR was performed; review the cumulative diff from `main` to
-`feat/current-insights-projection` before starting Goal 3.
+`feat/current-insights-projection` for that earlier checkpoint.
 
 ### Tank Console Phase 2A (2026-10-06)
 
@@ -93,7 +152,7 @@ review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
   trends use observation time; reporting health and monitoring continue to use
   server receipt time, while alert events remain on alert creation time.
 - Optional demo sensor generation behind two explicit flags.
-- The local seed workflow creates seven days of deterministic demo sensor
+- The local seed workflow creates 14 days of deterministic demo sensor
   history, representative normal/warning/critical/offline fleet states, alert
   history, and populated public-tank details.
 - Backend behavior covered by pytest tests.

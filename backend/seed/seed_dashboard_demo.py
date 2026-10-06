@@ -1,13 +1,13 @@
 """Deterministic dashboard history for local demonstrations."""
 from datetime import datetime, timedelta, timezone
-from math import sin
 
 from sqlalchemy import insert, select
 from sqlalchemy.orm import Session
 
-from app.models import Alert, AlertSeverity, FishSpecies, SensorReading, Tank, TankFish
+from app.models import Alert, AlertSeverity, FishSpecies, RegisteredDevice, SensorReading, Tank, TankFish
+from seed.demo_scenarios import SCENARIOS, PARAMETERS, scenario_value
 
-DEMO_HISTORY_DAYS = 7
+DEMO_HISTORY_DAYS = 14
 DEMO_INTERVAL_SECONDS = 30
 
 LATEST_STATES = {
@@ -34,19 +34,6 @@ FISH_ASSIGNMENTS = {
 def _rounded_now() -> datetime:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     return now - timedelta(seconds=now.second % DEMO_INTERVAL_SECONDS)
-
-
-def _reading_values(tank_index: int, sample_index: int) -> dict[str, float]:
-    wave = sin((sample_index + tank_index * 47) / 120)
-    slower_wave = sin((sample_index + tank_index * 83) / 420)
-    return {
-        "temperature": round(25.4 + wave * 0.35 + tank_index * 0.025, 2),
-        "ph": round(7.1 + slower_wave * 0.08 - wave * 0.025, 2),
-        "turbidity": round(2.8 + abs(wave) * 0.8, 2),
-        "dissolved_oxygen": round(6.3 - abs(wave) * 0.2 - slower_wave * 0.08, 2),
-        "tds": round(180 + wave * 8, 2),
-        "ammonia": round(0.08 + abs(wave) * 0.03 + max(0, slower_wave) * 0.01, 2),
-    }
 
 
 def _alert_message(parameter: str, severity: AlertSeverity) -> str:
@@ -82,7 +69,10 @@ def seed_dashboard_demo(
     if history_days < 1 or interval_seconds < 1:
         raise ValueError("history_days and interval_seconds must be positive")
 
-    tanks = list(db.scalars(select(Tank).order_by(Tank.tank_code)).all())
+    active_device = select(RegisteredDevice.id).where(
+        RegisteredDevice.tank_id == Tank.id, RegisteredDevice.is_active.is_(True)).exists()
+    tanks = list(db.scalars(select(Tank).where(Tank.tank_code.in_(SCENARIOS),
+                     Tank.retired_at.is_(None), ~active_device).order_by(Tank.tank_code)).all())
     fish_assignments = _assign_demo_fish(db, tanks)
     now = _rounded_now()
     start = now - timedelta(days=history_days)
@@ -112,7 +102,7 @@ def seed_dashboard_demo(
     seeded_tanks: list[Tank] = []
     readings_created = 0
 
-    for tank_index, tank in enumerate(tanks):
+    for tank in tanks:
         if db.scalar(select(SensorReading.id).where(SensorReading.tank_id == tank.id).limit(1)):
             continue
 
@@ -127,7 +117,9 @@ def seed_dashboard_demo(
                 for gap_start, gap_end in reporting_gaps.get(tank.name, ())
             ):
                 continue
-            values = _reading_values(tank_index, sample_index)
+            timestamp = start + timedelta(seconds=sample_index * interval_seconds)
+            values = {parameter: scenario_value(tank.tank_code, parameter, timestamp)
+                      for parameter in PARAMETERS}
             event = next(
                 (
                     event_values[(event_tank, event_index)]
@@ -145,7 +137,6 @@ def seed_dashboard_demo(
                     values["ammonia"] = 0.35
                 elif state == "critical":
                     values["ammonia"] = 0.7
-            timestamp = start + timedelta(seconds=sample_index * interval_seconds)
             batch.append({
                 "tank_id": tank.id,
                 "timestamp": timestamp,

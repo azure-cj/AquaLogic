@@ -327,7 +327,7 @@ def test_reading_queries_stream_columns_not_orm(db_session, tank):
     assert all('sample_id' not in statement and 'ammonia' not in statement for statement, _ in statements)
 
 
-def test_endpoint_auth_scope_validation_and_stability_placeholder(db_session, client, test_user, auth_headers, tank, monkeypatch):
+def test_endpoint_auth_scope_validation_and_stability_coverage(db_session, client, test_user, auth_headers, tank, monkeypatch):
     from app.routes import dashboard
     monkeypatch.setattr(dashboard, 'build_current_insights', partial(ci.build_current_insights, now=NOW))
     series(db_session, tank)
@@ -347,7 +347,10 @@ def test_endpoint_auth_scope_validation_and_stability_placeholder(db_session, cl
         assert len(data['tanks'][0]['parameters']) == 4
         assert data['attention'] == []
         for parameter in data['tanks'][0]['parameters']:
-            assert parameter['stability']['reason'] == 'not_implemented'
+            assert parameter['stability']['status'] == 'insufficient_data'
+            assert parameter['stability']['reason'] == 'too_few_buckets'
+            assert parameter['stability']['current_buckets'] == 12
+            assert parameter['stability']['baseline_days_covered'] == 0
             assert parameter['projection']['status'] == ('not_applicable' if parameter['parameter'] == 'turbidity' else 'no_crossing_within_horizon')
     for ident in (retired.id, 999999):
         assert client.get(f'/analytics/current-insights?tank_id={ident}', headers=auth_headers).status_code == 404

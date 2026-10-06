@@ -24,7 +24,7 @@ pytest -q                                   # full suite
 pytest -q tests/test_actuators.py           # one file
 pytest -q tests/test_actuators.py::test_name  # one test
 alembic upgrade head
-python -m seed.seed_data                    # local demo data only (7 days of readings, varied fleet states)
+python -m seed.seed_data                    # local demo data only (14 days of readings, varied fleet states)
 python -m uvicorn app.main:app --reload     # API on :8000, docs at /docs
 ```
 

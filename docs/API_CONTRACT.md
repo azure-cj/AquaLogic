@@ -491,9 +491,24 @@ use a hosted species-photo URL through the existing `photo_url` field.
   `compliance_readings` and `required_readings` explain that null per the plan's
   insufficient-data invariant. Missing headroom values report
   `value_unavailable`; a missing selected bound reports `side_bound_missing`.
-  Disabled thresholds have null bounds/headroom. Stability remains
-  `insufficient_data/not_implemented` until Goal 3. These read-only advisory
-  results never create alerts, push events or monitoring incidents.
+  Disabled thresholds have null bounds/headroom. Stability compares the median
+  absolute change between qualifying buckets exactly 30 minutes apart in the
+  last 48 complete buckets against the preceding seven rolling days. It needs
+  36 current buckets and five UTC dates with at least 24 qualifying baseline
+  buckets. A rolling window can touch eight qualifying UTC dates, which are
+  counted literally in `baseline_days_covered`. Baseline spread uses all
+  adjacent qualifying pairs in its window, including pairs across midnight;
+  no pair crosses the current/baseline seam. The denominator is the larger of
+  baseline spread and the parameter's spread floor. Ratios ≥1.5 are
+  `more_variable`, ≤0.67 `steadier`, otherwise `typical`.
+  Coverage failures return `insufficient_data/too_few_buckets` or
+  `insufficient_baseline/too_few_days`, with `current_buckets` and
+  `baseline_days_covered`. No adjacent baseline pairs returns
+  `insufficient_baseline/no_adjacent_buckets`. Mixed usable sources anywhere
+  across current plus baseline take priority (`insufficient_data/mixed_source`).
+  Real data suppresses mocks across this entire stability window, independently
+  of the shorter fit/compliance windows. These read-only advisory results never
+  create alerts, push events or monitoring incidents.
   See [the binding method and response contract](ANALYTICS_INSIGHTS_PLAN.md).
 - Current-insights projection statuses are checked in order: unsupported
   turbidity (`not_applicable`), non-current receipt (`stale`), insufficient trend
@@ -516,11 +531,18 @@ use a hosted species-photo URL through the existing `photo_url` field.
   bound returns `no_crossing_within_horizon` with its band; suppressed states
   have empty bands. `attention` contains at most ten advisory items: projected
   crossings sorted by low hours ascending, more-variable results by ratio
-  descending (empty while stability is a placeholder), then species conflicts.
+  descending, then species conflicts.
   Ties use tank name, ID and parameter order deterministically. Only evaluated
   tanks contribute; persisted alerts and offline state are merged separately
   by future dashboard work. All output floats are rounded to four decimals
   after calculations and ranking.
+- Current-insights responses use a bounded in-process cache with a 20-second
+  TTL, keyed by the sorted active tank-ID tuple and isolated per database bind.
+  Authorization and active-tank validation still run on every request.
+  `evaluated_at` identifies the cached snapshot; readings, thresholds and species
+  edits may take up to 20 seconds to appear. Each process keeps at most 32
+  entries. Injecting `now` or passing `use_cache=False` to the service bypasses
+  the cache, so historical/test evaluation always reads its own requested time.
 - Fleet, tank, and alert list responses do not yet paginate. WebSocket streaming
   is not implemented; the current web dashboard uses bounded polling.
 - A future WebSocket path may be added; the current

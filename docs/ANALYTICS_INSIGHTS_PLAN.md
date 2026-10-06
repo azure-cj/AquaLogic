@@ -1,7 +1,7 @@
 # Analytics Insights Plan (re-defense / exhibit)
 
-Status: Goals 1–2 implemented locally; stopped for Claude backend review #1.
-Goals 3–6 pending. Last reviewed: 2026-10-06.
+Status: Goals 1–3 implemented locally; stopped for Claude backend review #2.
+Goals 4–6 pending. Last reviewed: 2026-10-06.
 Owner workflow: Codex implements each
 goal on its own branch; Claude reviews the backend after Goal 2 and Goal 3 and
 does the final UI polish after Goal 5.
@@ -268,6 +268,13 @@ Category badges: `Observed`, `Derived`, `Projected`.
 Display rounding: crossing hours to nearest 0.5 h; rates to 2 significant
 decimals; ratios to 1 dp.
 
+Crossing-range display rules (added at review #1; avoids fake precision such as
+"about 0.5–0.5 h" or "about 0–0.5 h"), applied after rounding:
+- low and high both present and equal → `… in about {low} h`
+- low rounds to 0 → `… within about {high} h` (or `… soon; the latest readings are close to the bound` if high also rounds to 0)
+- high null → `… in about {low} h or later`
+- otherwise the range form in the table above.
+
 "How is this calculated?" disclosure text (one per category):
 - Derived trend: `Theil–Sen robust slope over the last 6 h of 30-minute medians. Requires 10 of 12 intervals. Robust to occasional sensor spikes.`
 - Projected: `Extends the 6 h trend up to 3 h, using the 90% slope range plus typical reading scatter. Shown only when the trend is clear and the latest reading is current. Not a measurement.`
@@ -285,10 +292,32 @@ curves with no discontinuity.
 | Role | Behaviour | Must produce |
 |---|---|---|
 | Stable | small daily temperature cycle (±0.3 °C), tiny noise | trend `steady`, stability `typical`, species `ok` |
-| Warming | repeating 8 h sawtooth: ~6.5 h slow warm-up from mid-range toward/just past the upper warning bound, ~1.5 h cool-down | `crossing_projected` for ≥60% of wall-clock times |
-| Unstable pH | normal for 7+ days, pH noise ~2.5× larger in the last 24 h *rolling* (implement as variability that depends on a long cycle so it is always "recent") | stability `more_variable` for ≥80% of times |
+| Two warming tanks | identical physically plausible repeating ramps, phase-offset by half a cycle; choose the cycle/ramp without changing the inference constants or gates | At 24 evenly spaced evaluation times across a day, at least one tank has `crossing_projected` at ≥80% of times; report individual coverage too |
+| Unstable pH | normal for 7+ days, pH noise ~2.5× larger in the last 24 h *rolling* (implement as variability that depends on a long cycle) | stability `more_variable` for ≥80% of times across the exhibit day |
 | Species conflict | assigned species whose configured temperature ranges do not overlap (use existing `seed_fish` values, e.g. a warm-water and a cool-water species) | species `conflict` |
 | Short / offline | existing offline service tank (no live readings) | `stale` / insufficient states |
+
+Warming target corrected by the owner during Goal 3 (2026-10-06): the former
+single-tank ≥60% target conflicts with a bounded three-hour crossing horizon
+and the six-hour trend/confidence gates. Use two complementary projection
+windows instead. Keep the exact Part A algorithms and constants. If the
+combined ≥80% target is still missed, retain plausible curves and report the
+measured coverage rather than distorting data or inference gates.
+
+Current role map: Riverbank Community (`DISPLAY-01`) and Breeder Bay
+(`BREED-01`) are stable; Guppy Gallery (`DISPLAY-02`) and Observation Point
+(`RACK-02`) warm from 24.8 to 28.0 °C over 6.5 h and cool over 1.5 h, offset
+by 4 h. Juvenile Grove (`BREED-02`) has unstable pH. Calmwater Rack (`RACK-01`)
+uses its existing Discus (28–31 °C) and Corydoras Catfish (22–27 °C) conflict.
+Recovery Reef (`SERVICE-01`) stays offline. Other species ranges are unchanged.
+
+The pH long cycle has 23 quiet days, one day of smooth increase, three high
+days, and one day of smooth recovery. Its fixed UTC exhibit epoch is
+2026-10-06; the 24-point acceptance day is that UTC day. High noise begins
+2026-10-05 and recovery begins 2026-10-08, repeating every 28 days. This
+explicit phase avoids a seed/live discontinuity; outside the exhibit phase,
+the role naturally returns to typical/steadier. A bounded recurring signal
+cannot remain more variable than its own rolling baseline indefinitely.
 
 Values must stay physically plausible: temperature 22–31 °C, pH 6.4–8.2, TDS
 80–450 ppm, turbidity 0–25 NTU; max 0.2 °C change between consecutive 30 s
@@ -439,8 +468,9 @@ Tasks:
    - Stability: more_variable, typical, steadier, insufficient_data, insufficient_baseline (with baseline_days_covered), spread floor, slow drift does not produce more_variable.
    - Demo: scenario_value is deterministic and continuous (no jump > plausibility limit between t and t+30 s); value ranges plausible.
    - Demo sensor safety: a tank with an active device and a tank not in SCENARIOS receive no demo readings.
-   - Scenario reliability: evaluate current insights over the seeded data at 24 evenly spaced "now" values across a day and assert the role targets in §A6 (warming ≥60% crossing_projected, unstable pH ≥80% more_variable, stable tank steady/typical, conflict tank conflict). Use a reduced history window if needed for test speed, but keep the same functions.
-4. Update docs/DEVELOPMENT_STATUS.md, docs/areas/BACKEND.md, and the seed section of docs that describe demo data.
+   - Scenario reliability: evaluate current insights over the seeded data at 24 evenly spaced "now" values across a day and assert the role targets in §A6 (at least one of the two warming tanks crossing_projected ≥80%, report each tank's individual coverage; unstable pH ≥80% more_variable, stable tank steady/typical, conflict tank conflict). Use a reduced history window if needed for test speed, but keep the same functions.
+4. Performance check (added at review #1): /analytics/current-insights streams up to 8 days of readings for every active tank and the dashboard will call it on load and focus. After seeding 14 days, time the endpoint for all tanks against the local DB and report the result. If it exceeds 1 second, add a small in-process cache keyed by the sorted tank-id tuple with a 20-second TTL (keep `now` injectable; tests must be able to bypass the cache). Do not add dependencies or SQL-dialect-specific aggregation.
+5. Update docs/DEVELOPMENT_STATUS.md, docs/areas/BACKEND.md, and the seed section of docs that describe demo data.
 
 Acceptance (from backend/): `pytest -q` all green; `python -m seed.seed_data` runs on a fresh local SQLite DB.
 

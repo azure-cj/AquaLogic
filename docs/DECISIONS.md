@@ -6,6 +6,31 @@ Last reviewed: 2026-10-06
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
 
+## 2026-10-06 — Complementary demo warming roles and bounded insight caching
+
+**Decision:** Keep all Part A inference constants and gates unchanged. Following
+the owner's Goal 3 correction, use two warming demo tanks with half-cycle
+offsets and test combined projected-crossing coverage of at least 80% at 24
+evenly spaced times across a day. Report each tank's coverage. The former
+single-tank 60% target is superseded in
+[Part A §A6](ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+
+**Reason:** A three-hour crossing horizon plus the six-hour trend/confidence
+gates restrict any one repeating ramp's projection window. Demo values must
+remain plausible rather than changing statistical gates to satisfy a showcase.
+A bounded recurring pH signal also needs an explicit exhibit phase; its own
+rolling baseline eventually incorporates an increase in variability.
+
+**Consequences:** Seed and live curves share one pure UTC function. Existing
+species ranges, legacy fleet states, reporting gaps and Recovery Reef's outage
+are preserved. Demo writes acquire the existing tank lifecycle lock and exclude
+active-device/unmapped tanks. The observed >1-second eight-day reading cost
+activates the review-required 20-second, 32-entry in-process response cache;
+sorted active tank-ID scopes are isolated per database bind. `evaluated_at`
+identifies the snapshot; authorization/active-tank checks still run and explicit
+evaluation times bypass caching. No dependencies, schema changes or alert
+policy changes are introduced.
+
 ## 2026-10-06 — Bounded, advisory current insights and short-horizon projections
 
 **Decision:** Implement the deterministic, conditional, staff-only current

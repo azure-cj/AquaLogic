@@ -53,8 +53,8 @@ link back here rather than duplicate a competing project status.
 
 - [`ANALYTICS_INSIGHTS_PLAN.md`](ANALYTICS_INSIGHTS_PLAN.md): binding contract
   and sequential branch/checkpoint workflow for bounded advisory current
-  insights. Goals 1–2 backend are implemented locally and stopped for review #1;
-  later goals remain planned.
+  insights. Goals 1–3 backend are implemented locally and stopped for review #2;
+  UI and optional backtest goals remain planned.
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
   implementation record and scope guardrail for the final cross-cutting safety,

@@ -43,9 +43,13 @@ Last reviewed: 2026-10-06
   Constants and the shared notable-change helper are versioned in the
   [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md). Projection
   uses ordered gates and quarter-hour conditional bands through three hours;
-  attention ranks crossings and species conflicts with a ten-item cap.
-  Stability remains an explicit placeholder pending Goal 3 after backend
-  review #1. The service writes no alerts, push events or incidents.
+  attention ranks crossings, more-variable results and species conflicts with
+  a ten-item cap. Stability compares median adjacent half-hour changes over
+  24 h with the preceding seven rolling days, with coverage/source gates and
+  parameter-specific spread floors. A bounded per-database cache retains
+  responses for 20 seconds (32 sorted tank-ID scopes); explicit `now` or
+  `use_cache=False` bypasses it. The service writes no alerts, push events or
+  incidents. Goals 1–3 are stopped for backend review #2 before UI work.
 - `backend/app/routes/tanks.py`: tank detail, active/retired/all directory
   filters, one-way retirement, configuration, assignments, the compact
   `/operations` snapshot contract, hero-image upload/replacement, and
@@ -117,7 +121,17 @@ Last reviewed: 2026-10-06
 - `backend/alembic/versions/0019_sensor_reading_sample_id.py`: nullable
   device-scoped sensor-ingestion sample IDs with a database-enforced unique
   constraint; callers that omit the field keep the existing insert behavior.
-- `backend/app/services/demo_sensor.py`: opt-in local sensor generator.
+- `backend/app/services/demo_sensor.py`: opt-in local sensor generator. It
+  writes only active tanks in the scenario map without an active device,
+  rechecking under the existing lifecycle lock shared with device provisioning
+  and retirement. Recovery Reef remains offline and all demo readings are mock.
+- `backend/seed/demo_scenarios.py`: pure UTC curves shared by seeded history
+  and live readings. Roles, phase limits and measured coverage are in the
+  [analytics insights plan](../ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6).
+- `backend/seed/seed_dashboard_demo.py`: 14 days at a 30-second cadence, bulk
+  inserts in batches of 5,000; preserves existing readings and is idempotent.
+  The seed also skips unmapped, retired and active-device tanks. See
+  [local seeding](../WORKFLOWS.md#local-demo-data).
 - `backend/app/services/auth_security.py`: refresh rotation, login throttling,
   setup links, and security audit recording.
 - `backend/alembic/versions/`: schema migrations.

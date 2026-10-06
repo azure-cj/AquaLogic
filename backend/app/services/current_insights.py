@@ -3,11 +3,15 @@
 Observation time defines inference windows. Receipt time defines freshness.
 No ingestion, alert, push or incident service is called from this module.
 """
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import ceil, floor, isfinite, sqrt
 from statistics import median
+from threading import Lock
+from time import monotonic
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -36,6 +40,39 @@ MORE_VARIABLE_RATIO = 1.5
 STEADIER_RATIO = 0.67
 SPREAD_FLOOR = {"temperature": 0.02, "ph": 0.01, "tds": 1.0, "turbidity": 0.1}
 SPECIES_COMPLIANCE_MIN_READINGS = 30
+INSIGHTS_CACHE_TTL_SECONDS = 20
+INSIGHTS_CACHE_MAX_ENTRIES = 32
+# Separate database binds cannot share responses. Each bind's bounded LRU is
+# keyed only by the sorted active tank-id tuple. No DB writes or background work.
+_cache_by_bind = WeakKeyDictionary()
+_cache_lock = Lock()
+
+
+def clear_current_insights_cache():
+    with _cache_lock:
+        _cache_by_bind.clear()
+
+
+def _cached(bind, key):
+    with _cache_lock:
+        entries = _cache_by_bind.get(bind)
+        if entries is None or key not in entries:
+            return None
+        expires, value = entries[key]
+        if monotonic() >= expires:
+            del entries[key]
+            return None
+        entries.move_to_end(key)
+        return deepcopy(value)
+
+
+def _remember(bind, key, value):
+    with _cache_lock:
+        entries = _cache_by_bind.setdefault(bind, OrderedDict())
+        entries[key] = (monotonic() + INSIGHTS_CACHE_TTL_SECONDS, deepcopy(value))
+        entries.move_to_end(key)
+        while len(entries) > INSIGHTS_CACHE_MAX_ENTRIES:
+            entries.popitem(last=False)
 
 
 @dataclass(frozen=True)
@@ -135,6 +172,48 @@ def headroom(value, bounds, trend_status):
                 outside=None if distance is None else distance < 0, reason=reason)
 
 
+def build_stability(parameter, buckets, sources, end):
+    """Compare adjacent half-hour changes in rolling, complete-bucket windows."""
+    current_start = end - STABILITY_CURRENT_BUCKETS * BUCKET_SECONDS
+    baseline_start = current_start - BASELINE_DAYS * 86400
+    points = [(key, median(values)) for key, (values, times) in sorted(buckets.items())
+              if baseline_start <= key < end and len(times) >= MIN_BUCKET_READINGS]
+    current = [(key, value) for key, value in points if key >= current_start]
+    baseline = [(key, value) for key, value in points if key < current_start]
+    days = defaultdict(int)
+    for key, _ in baseline:
+        days[stamp(key).date()] += 1
+    covered = sum(count >= 24 for count in days.values())
+    result = dict(status='insufficient_data', reason=None, current_spread=None,
+                  baseline_spread=None, ratio=None, current_buckets=len(current),
+                  baseline_days_covered=covered)
+    if len(sources) > 1:
+        result['reason'] = 'mixed_source'
+        return result
+    if len(current) < STABILITY_MIN_CURRENT_BUCKETS:
+        result['reason'] = 'too_few_buckets'
+        return result
+
+    def spread(values):
+        changes = [abs(right[1] - left[1]) for left, right in zip(values, values[1:])
+                   if right[0] - left[0] == BUCKET_SECONDS]
+        return median(changes) if changes else None
+
+    result['current_spread'] = spread(current)
+    if covered < BASELINE_MIN_DAYS:
+        result.update(status='insufficient_baseline', reason='too_few_days')
+        return result
+    baseline_spread = spread(baseline)
+    if baseline_spread is None:
+        result.update(status='insufficient_baseline', reason='no_adjacent_buckets')
+        return result
+    ratio = result['current_spread'] / max(baseline_spread, SPREAD_FLOOR[parameter])
+    result.update(status='more_variable' if ratio >= MORE_VARIABLE_RATIO else
+                  'steadier' if ratio <= STEADIER_RATIO else 'typical',
+                  baseline_spread=baseline_spread, ratio=ratio)
+    return result
+
+
 def species_range(species, parameter):
     result = dict(status='not_configured', min=None, max=None, species_count=len(species), conflict=None,
                   compliance_percent_24h=None, headroom=None, compliance_reason=None,
@@ -161,7 +240,7 @@ def species_range(species, parameter):
 class TankWindow:
     """Separate real/mock accumulators permit tank-wide filtering per window.
 
-    Retains fit-bucket values for exact medians, not eight days of raw rows.
+    Retains only per-parameter bucket values/timestamps for exact medians.
     Compliance is counted while streaming, including partial current buckets.
     """
     def __init__(self, species, now):
@@ -169,8 +248,12 @@ class TankWindow:
         self.end = bucket_start(now)
         self.start = self.end - FIT_BUCKETS * BUCKET_SECONDS
         self.day_start = now - timedelta(hours=24)
+        self.stability_start = self.end - (STABILITY_CURRENT_BUCKETS * BUCKET_SECONDS + BASELINE_DAYS * 86400)
         self.real_fit = self.real_day = False
+        self.real_stability = False
         self.buckets = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: ([], set()))))
+        self.stability_buckets = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: ([], set()))))
+        self.stability_sources = defaultdict(lambda: defaultdict(set))
         self.fit_sources = defaultdict(lambda: defaultdict(set))
         self.day_sources = defaultdict(lambda: defaultdict(set))
         self.counts = defaultdict(lambda: defaultdict(lambda: [0, 0]))
@@ -181,11 +264,13 @@ class TankWindow:
         key = bucket_start(observed)
         in_fit = self.start <= key < self.end
         in_day = self.day_start <= observed <= self.now
-        if not in_fit and not in_day:
+        in_stability = self.stability_start <= key < self.end
+        if not in_fit and not in_day and not in_stability:
             return
         mock = row.is_mock
         self.real_fit |= in_fit and not mock
         self.real_day |= in_day and not mock
+        self.real_stability |= in_stability and not mock
         source = (row.device_id, mock)
         for parameter in PARAMETERS:
             value = getattr(row, parameter)
@@ -196,6 +281,11 @@ class TankWindow:
                 values.append(value)
                 times.add(observed)
                 self.fit_sources[mock][parameter].add(source)
+            if in_stability:
+                values, times = self.stability_buckets[mock][parameter][key]
+                values.append(value)
+                times.add(observed)
+                self.stability_sources[mock][parameter].add(source)
             if in_day:
                 self.day_sources[mock][parameter].add(source)
                 bounds = self.ranges[parameter]
@@ -292,12 +382,19 @@ def rounded(value):
     return value
 
 
-def build_current_insights(db: Session, tank_ids=(), *, now=None):
+def build_current_insights(db: Session, tank_ids=(), *, now=None, use_cache=True):
+    cache_enabled = use_cache and now is None
     now = aware(now or datetime.now(timezone.utc))
     stmt = select(Tank).where(Tank.retired_at.is_(None)).options(selectinload(Tank.fish_species)).order_by(Tank.name, Tank.id)
     if tank_ids:
         stmt = stmt.where(Tank.id.in_(tank_ids))
     tanks = list(db.scalars(stmt))
+    cache_key = tuple(sorted(tank.id for tank in tanks))
+    bind = db.get_bind()
+    if cache_enabled:
+        cached = _cached(bind, cache_key)
+        if cached is not None:
+            return cached
     windows = {tank.id: TankWindow(tank.fish_species, now) for tank in tanks}
     ids = list(windows)
     columns = [SensorReading.id, SensorReading.tank_id, SensorReading.timestamp, SensorReading.received_at,
@@ -314,7 +411,7 @@ def build_current_insights(db: Session, tank_ids=(), *, now=None):
         latest_ids = select(ranked.c.id).where(ranked.c.rank == 1)
         history = select(*columns).where(SensorReading.tank_id.in_(ids),
                     SensorReading.timestamp <= now, SensorReading.received_at <= now,
-                    or_(SensorReading.timestamp >= now - timedelta(days=BASELINE_DAYS + 1),
+                    or_(SensorReading.timestamp >= stamp(bucket_start(now)) - timedelta(days=BASELINE_DAYS + 1),
                         SensorReading.id.in_(latest_ids))).execution_options(yield_per=1000)
         for row in db.execute(history):
             windows[row.tank_id].add(row)
@@ -360,11 +457,14 @@ def build_current_insights(db: Session, tank_ids=(), *, now=None):
                 warning_bounds=warning, critical_bounds=critical, trend=trend,
                 headroom=headroom(value, warning, trend['status']), species_range=species,
                 projection=projection(parameter, latest, value, warning, trend, fit, now),
-                stability=dict(status='insufficient_data', reason='not_implemented', current_spread=None,
-                               baseline_spread=None, ratio=None, current_buckets=0, baseline_days_covered=0)))
+                stability=build_stability(parameter, window.stability_buckets[not window.real_stability][parameter],
+                                          window.stability_sources[not window.real_stability][parameter], window.end)))
         results.append(dict(tank_id=tank.id, tank_name=tank.name, latest=latest, parameters=parameters))
-    return rounded(dict(evaluated_at=now, method_version=METHOD_VERSION,
+    response = rounded(dict(evaluated_at=now, method_version=METHOD_VERSION,
                         constants=dict(fit_hours=FIT_BUCKETS * BUCKET_SECONDS / 3600,
                                        horizon_hours=HORIZON_HOURS, baseline_days=BASELINE_DAYS,
                                        bucket_minutes=BUCKET_SECONDS / 60), tanks=results,
                         attention=attention_items(results)))
+    if cache_enabled:
+        _remember(bind, cache_key, response)
+    return response

@@ -1,7 +1,7 @@
 # AquaLogic Development Workflows
 
 Status: Current local workflow
-Last reviewed: 2026-09-26
+Last reviewed: 2026-10-06
 
 ## First-time setup
 
@@ -19,6 +19,32 @@ python -m seed.seed_data
 
 The seed step above is for local development only. Do not run the demo seed
 script in production.
+
+### Local demo data
+
+`python -m seed.seed_data` requires `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD`
+when no administrator exists. On a fresh local SQLite database it creates
+14 days of history at a 30-second cadence, using bulk batches of 5,000 rows,
+with existing normal/warning/critical/offline states and five demo alerts.
+Only mapped, active demo tanks without active registered devices are filled;
+Recovery Reef has a ten-minute trailing outage and receives no live readings.
+Tanks with any existing readings are preserved, so rerunning does not duplicate
+history or backfill an existing older seed. Use a separate fresh development
+database to get the full new scenario history.
+
+The optional live generator uses the same pure `scenario_value` curves as
+the seed and retains `is_mock=True`. `DEMO_SENSOR_ENABLED` and
+`DEMO_SENSOR_INSTANCE` must both be enabled; exactly one designated worker
+should generate readings. It never writes to an unmapped tank or an active
+device's tank and shares lifecycle locking with device provisioning.
+Guppy Gallery and Observation Point are complementary warming roles;
+Riverbank Community is stable; Juvenile Grove is the unstable-pH role;
+Calmwater Rack has an existing Discus/Corydoras temperature-range conflict.
+The pH curve has an explicit 28-day exhibit phase; check its date window in
+[Part A §A6](ANALYTICS_INSIGHTS_PLAN.md#a6-demo-scenarios-b6) before relying on
+that role for a later demonstration. Seed/live continuity is deterministic
+and independent of when the seed command is run. Legacy historical alert
+samples and reporting gaps are retained.
 
 The backend defaults to SQLite for development and tests. A production
 environment must provide `DATABASE_URL` using PostgreSQL; a missing URL or a
