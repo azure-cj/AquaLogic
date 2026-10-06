@@ -364,3 +364,10 @@
     grid-template-columns: 1fr;
   }
 }
+/* needs-attention (structure, to be polished) */
+.needs-attention-panel { margin-bottom: 1rem; }
+.needs-attention-list { list-style: none; padding: 0 1rem; }
+.needs-attention-list a { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; padding: .5rem 0; }
+.needs-attention-panel > p { margin: 1rem; }
+.needs-attention-trend { display: inline-flex; gap: .25rem; margin-left: .5rem; color: var(--muted); }
+/* end needs-attention structure */

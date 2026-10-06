@@ -1,7 +1,8 @@
 import { api } from '@/shared/api/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { insightsFixture } from '@/features/analytics/tank-insights/currentInsights.fixture';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Fleet from './FleetPage';
@@ -65,9 +66,47 @@ function renderPage() {
 afterEach(() => vi.clearAllMocks());
 
 describe('fleet reporting clarity', () => {
+  it('loads advisory insights independently, places attention above Tank health, and adds temperature/pH trends to table and cards', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') return [{ ...fleet[0], status: 'normal' }];
+      if (path === '/analytics/current-insights') {
+        const data = insightsFixture(); data.tanks[0].parameters[1].trend.status = 'falling';
+        data.tanks[0].parameters[1].trend.rate_per_hour = -.18;
+        return data;
+      }
+      if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
+      return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
+    });
+    renderPage();
+    const attention = screen.getByRole('heading', { name: 'Needs attention' }).closest('section')!;
+    expect(await within(attention).findByRole('link')).toHaveAttribute('href', '/admin/analytics?insights_tank=2');
+    expect(screen.getByRole('heading', { name: 'Needs attention' }).compareDocumentPosition(screen.getByRole('heading', { name: 'Tank health' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await screen.findAllByLabelText('Derived: Rising 0.18 °C/h over the last 6 h')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Derived: Falling 0.18 pH/h over the last 6 h')).toHaveLength(2);
+    expect(api).toHaveBeenCalledWith('/analytics/current-insights');
+  });
+
+  it('keeps fleet and alerts usable when insights fail', async () => {
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === '/fleet') return fleet;
+      if (path === '/analytics/current-insights') throw new Error('insights down');
+      if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
+      return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
+    });
+    renderPage();
+    expect(await screen.findByText('Insights unavailable')).toBeInTheDocument();
+    expect(screen.getByText('There are no unresolved alerts.')).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/Last known temperature/)).toHaveLength(1);
+    const panel = screen.getByRole('heading', { name: 'Needs attention' }).closest('section')!;
+    expect(within(panel).getByRole('link')).toHaveAttribute('href', '/admin/analytics?insights_tank=1');
+    expect(within(panel).getByText('Observed')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Derived: Rising/)).not.toBeInTheDocument();
+  });
+
   it('labels offline values as last known and uses server reporting age', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return fleet;
+      if (path === '/analytics/current-insights') return { ...insightsFixture(), tanks: [], attention: [] };
       if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });
@@ -92,6 +131,7 @@ describe('fleet reporting clarity', () => {
     ];
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') return withStatuses;
+      if (path === '/analytics/current-insights') return { ...insightsFixture(), tanks: [], attention: [] };
       if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });
@@ -110,6 +150,7 @@ describe('fleet reporting clarity', () => {
   it('keeps cached fleet data visible after a refresh failure', async () => {
     vi.mocked(api).mockImplementation(async (path) => {
       if (path === '/fleet') throw new TypeError('Failed to fetch');
+      if (path === '/analytics/current-insights') return { ...insightsFixture(), tanks: [], attention: [] };
       if (path === '/alerts/history?resolved=false&page=1&page_size=25') return emptyAlertHistory;
       return { uptime: [], uptime_comparison: { current: 0, change: 0 }, fleet_series: [] };
     });

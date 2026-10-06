@@ -5,6 +5,42 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### Analytics insights Goal 5: Needs attention structure (2026-10-07; polish checkpoint)
+
+`feat/dashboard-needs-attention` follows the unmerged Goal 4 branch. Fleet now
+shows a maximum of three attention rows below counts and above Tank health:
+critical, offline, then conditional projected crossings, more-variable and
+species conflicts. Observed rows use existing fleet status/open-alert counts;
+advisory rows use the all-tank current-insights query and shared state/time copy.
+Every row links to the independent Analytics selector via `insights_tank`.
+Empty-state coverage counts tanks with any insufficient trend once each.
+Insights errors keep observed rows, alerts, uptime and tank views available with
+Insights unavailable. Pending/error responses never report a false all-clear;
+failed refreshes suppress stale cached advisory rows and trend indicators.
+
+Temperature/pH rising/falling trends show a small arrow and two-decimal rate in
+desktop and mobile tank views, with Derived accessible copy. No other trend
+statuses or parameters add indicators. New CSS is limited to marked structure
+blocks and existing tokens; there are no new dependencies or visual design.
+Final requirement audit also made the full Goal 4 card clickable while retaining
+native keyboard selection and aligned the test fixture's fitted origin with
+the backend's first fit point. That three-file fix is included on both UI branch
+tips before the Goal 5 feature commit.
+
+Acceptance after both goals: `npm run typecheck`, `npm test` (201 passed in 30
+files), and `npm run build` passed. Existing Analytics/Fleet tests remain intact;
+only new endpoint mock responses were added to existing cases. New tests cover
+all state copy, rounding, default/URL tank selection, scoped refetch, focus/no
+polling, preserved History filters, four missing/stale cards, SVG layers and
+category tooltips, ranking/cap, empty coverage, cached error fallback and both
+tank layouts. Earlier focused Goal 5 ranking/indicator/existing Fleet checks
+passed (18 tests); the final suite adds two page integration cases. Markdown
+relative links (81 files), diff checks and the protected-file scope audit pass.
+Backend/inference, auth, actuator/command, bridge/mobile/firmware, migrations,
+public endpoints, alert/incident/push behavior and API response fields are
+unchanged. No push or PR. Stop for the owner's Claude UI polish pass;
+Goal 6 is not started.
+
 ### Analytics insights Goal 4: Tank insights structure (2026-10-07)
 
 `feat/analytics-tank-insights-ui` branches from the unmerged, reviewed/fixed

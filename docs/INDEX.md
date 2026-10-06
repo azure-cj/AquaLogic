@@ -53,12 +53,12 @@ link back here rather than duplicate a competing project status.
 
 - [`ANALYTICS_INSIGHTS_PLAN.md`](ANALYTICS_INSIGHTS_PLAN.md): binding contract
   and sequential branch/checkpoint workflow for bounded advisory current
-  insights. Goals 1–3 backend are implemented locally and stopped for review #2;
+  insights. Goals 1–3 backend are implemented locally;
   Review #2 follow-up adds configurable dates, a time-boxed production SHOW-*
   exhibit writer and scoped seed/status/cleanup CLI; the
   [exhibit runbook](WORKFLOWS.md#exhibit-runbook) records operations.
-  Goal 4 adds the structural staff Tank insights UI; Goal 5 is the current
-  dashboard run. Visual polish and optional backtest remain pending.
+  Goals 4–5 add the structural staff Tank insights and Needs attention UI,
+  stopped for Claude polish. Visual polish and optional backtest remain pending.
 
 - [`deep-spec/FINAL-HARDENING-REVIEW.md`](deep-spec/FINAL-HARDENING-REVIEW.md):
   implementation record and scope guardrail for the final cross-cutting safety,

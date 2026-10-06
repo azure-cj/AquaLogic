@@ -59,6 +59,21 @@ calculations. All new layout uses existing semantic tokens/components. Visual
 polish remains a separate owner checkpoint under
 [`ANALYTICS_INSIGHTS_PLAN.md`](../ANALYTICS_INSIGHTS_PLAN.md).
 
+The fleet dashboard places **Needs attention** below status counts and above
+Tank health. Up to three rows rank critical tanks, offline tanks, projected
+crossings by soonest crossing, more-variable parameters by ratio, then species
+conflicts. Observed rows retain existing fleet open-alert counts. Every row
+links to Analytics with `insights_tank`; short projection copy remains
+conditional and uses the same rounded time rules as cards. Derived rows reuse
+the Goal 4 copy formatter. The empty state counts distinct tanks with an
+insufficient recent trend. Insights failures leave observed rows and other
+dashboard content available and show **Insights unavailable**; failed refreshes
+also hide cached advisory rows/indicators rather than presenting them as current.
+Temperature/pH values in desktop and mobile tank views get a small arrow/rate
+only for rising/falling trends. Other parameters and steady/uncertain/insufficient
+trends have no indicator. All-tank insights share the load/focus-only hook.
+Existing fleet, alerts and uptime refresh behavior is unchanged.
+
 - `/tank/:publicId`: public, read-only customer experience.
 - `/admin/login`, `/admin/setup-password`, `/admin/change-password`, and
   `/admin/account`, `/admin/security`: authentication, password, and

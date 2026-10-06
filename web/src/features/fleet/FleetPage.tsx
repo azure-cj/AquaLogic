@@ -1,4 +1,7 @@
-import { AnalyticsRange, AnalyticsResponse } from '@/features/analytics/types';
+import { AnalyticsRange, AnalyticsResponse, CurrentTankInsights } from '@/features/analytics/types';
+import { useCurrentInsights } from '@/features/analytics/useCurrentInsights';
+import { NeedsAttentionPanel } from './NeedsAttentionPanel';
+import { TrendIndicator } from './TrendIndicator';
 import { fleetCounts, tankNameForAlert } from '@/features/fleet/utils';
 import { api } from '@/shared/api/client';
 import type { AlertHistoryPage, FleetTank } from '@/shared/api/models';
@@ -79,7 +82,8 @@ function StatCard({
   );
 }
 
-function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
+function FleetTable({ tanks, insights }: { tanks: FleetTank[]; insights?: CurrentTankInsights[] }) {
+  const parameter = (tankId: number, key: 'temperature' | 'ph') => insights?.find((tank) => tank.tank_id === tankId)?.parameters.find((p) => p.parameter === key);
   if (!tanks.length) {
     return <EmptyState title="No matching tanks" message="Choose another status filter." />;
   }
@@ -115,6 +119,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               aria-label={`${tank.status === 'offline' && tank.latest_reading?.temperature != null ? 'Last known temperature' : 'Temperature'} ${reading(tank.latest_reading?.temperature, '°C')}`}
             >
               {reading(tank.latest_reading?.temperature, '°C')}
+              <TrendIndicator parameter={parameter(tank.id, 'temperature')} />
               {tank.status === 'offline' && tank.latest_reading?.temperature != null && <small className="metric-context">Last known</small>}
             </span>
             <span
@@ -122,6 +127,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
               aria-label={`${tank.status === 'offline' && tank.latest_reading?.ph != null ? 'Last known pH' : 'pH'} ${reading(tank.latest_reading?.ph, '', 1)}`}
             >
               {reading(tank.latest_reading?.ph, '', 1)}
+              <TrendIndicator parameter={parameter(tank.id, 'ph')} />
               {tank.status === 'offline' && tank.latest_reading?.ph != null && <small className="metric-context">Last known</small>}
             </span>
             <span>
@@ -159,11 +165,11 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
             <dl>
               <div>
                 <dt>{tank.status === 'offline' && tank.latest_reading?.temperature != null ? 'Last known temp' : 'Temperature'}</dt>
-                <dd>{reading(tank.latest_reading?.temperature, '°C')}</dd>
+                <dd>{reading(tank.latest_reading?.temperature, '°C')}<TrendIndicator parameter={parameter(tank.id, 'temperature')} /></dd>
               </div>
               <div>
                 <dt>{tank.status === 'offline' && tank.latest_reading?.ph != null ? 'Last known pH' : 'pH'}</dt>
-                <dd>{reading(tank.latest_reading?.ph, '')}</dd>
+                <dd>{reading(tank.latest_reading?.ph, '')}<TrendIndicator parameter={parameter(tank.id, 'ph')} /></dd>
               </div>
             </dl>
             <small>{formatReportingAge(tank.reporting_age_seconds, { offline: tank.status === 'offline' })}</small>
@@ -177,6 +183,7 @@ function FleetTable({ tanks }: { tanks: FleetTank[]; }) {
 }
 
 export function Fleet() {
+  const insights = useCurrentInsights();
   const [filter, setFilter] = useState<'all' | FleetStatus | 'needsAction'>('all');
   const [uptimeRange, setUptimeRange] =
     useState<Exclude<AnalyticsRange, 'custom'>>('24h');
@@ -311,6 +318,8 @@ export function Fleet() {
           onClick={() => setFilter('offline')}
         />
       </div>
+      <NeedsAttentionPanel tanks={tanks} insights={insights.data} insightsError={insights.isError}
+        insightsPending={insights.isPending} fleetPending={fleet.isPending} fleetError={fleet.isError && !fleet.data} />
       <div className="fleet-workspace">
         <Panel
           title="Tank health"
@@ -336,7 +345,7 @@ export function Fleet() {
           ) : !fleet.data && fleet.isError ? (
             <ErrorState message="Fleet data could not be loaded." retry={() => fleet.refetch()} />
           ) : (
-            <FleetTable tanks={filtered} />
+            <FleetTable tanks={filtered} insights={insights.isError ? undefined : insights.data?.tanks} />
           )}
         </Panel>
         <div className="fleet-rail">

@@ -25,6 +25,16 @@ get explicit neutral text. Null compliance never becomes zero percent; an absent
 species bound is displayed as unbounded. These are display fallbacks, with no
 inference or API changes.
 
+Dashboard attention uses a three-row cap, ordered critical, offline, projected
+crossings, more-variable and species conflicts. Existing fleet counts supply
+observed open-alert context; current-insights supplies advisory rows. Rows may
+refer to the same tank for different parameters/categories: the cap counts rows,
+as the contract specifies. Short projections reuse all crossing-rounding rules.
+Failed insights, including a failed refresh with cached data, suppress advisory
+rows/indicators and show Insights unavailable while observed fleet rows remain.
+Loading/errors do not claim that no tanks need attention. The empty-state
+coverage note counts distinct tanks with any insufficient trend, once per tank.
+
 ## 2026-10-07 — Expired showcase windows preserve production API availability
 
 **Decision:** A parsed, expired `EXHIBIT_DEMO_UNTIL` with leftover demo flags
