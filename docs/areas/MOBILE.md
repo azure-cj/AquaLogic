@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
 Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are deployed, and the M6.6 physical tap checks passed
-Last reviewed: 2026-10-04
+Last reviewed: 2026-10-06
 
 ## Read first
 
@@ -19,11 +19,13 @@ behavior are unchanged. Development-only preview accounts and the browser
 authentication boundary are documented in
 [`../../mobile_app/README.md`](../../mobile_app/README.md).
 
-Tank Console Mode is an additional, isolated UI prototype entered through More.
-Its readings, Local/Cloud connections and lighting/UV/feeder commands are all
-simulated; pumps are read-only. No direct ESP32 networking exists. See
-[`../TANK_CONSOLE_PHASE_1.md`](../TANK_CONSOLE_PHASE_1.md) for architecture,
-display-session restoration, notification deferral and physical-device checks.
+Tank Console is entered through More. Production uses an isolated local ESP32
+repository for read-only telemetry/status; previews retain labeled simulation.
+All real commands remain disabled. See
+[`../TANK_CONSOLE_PHASE_2A.md`](../TANK_CONSOLE_PHASE_2A.md) and
+[`../TANK_CONSOLE_INTEGRATION_READINESS.md`](../TANK_CONSOLE_INTEGRATION_READINESS.md)
+for setup, socket tests and remaining physical checks. Phase 1 display-session
+restoration and notification-navigation deferral remain intact.
 
 The Flutter app is an Android-first client. Authentication, Home, Tanks, Alerts,
 Monitoring, species, and read-only equipment talk directly to the Railway

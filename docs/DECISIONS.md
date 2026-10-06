@@ -1,10 +1,24 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-10-04
+Last reviewed: 2026-10-06
 
 Record choices that affect multiple components or future work. Small local
 implementation choices belong in code and tests; do not turn this into a diary.
+
+## 2026-10-06 — Tank Console Phase 2A is a separate read-only LAN path
+
+**Decision:** Production Console uses a configured local ESP32 repository with
+six allowlisted GETs and serial polling. Live commands stay disabled at both
+repository and controller boundaries. Mock previews remain isolated. Firmware
+owns equipment/schedules; gateway owns backlog acknowledgements. Live Cloud
+health stays Unknown until a verified infrastructure signal exists.
+
+**Reason:** Hardware telemetry can be validated without bypassing safety or
+changing remote/cloud flows. Missing fields must not become invented readings
+or safe equipment defaults. Native Android cleartext remains denied by default
+with a narrow firmware-hostname exception; dynamic-IP Dart requests are checked
+at the local transport boundary. See [Phase 2A](TANK_CONSOLE_PHASE_2A.md).
 
 ## 2026-10-04 — Keep Tank Console Phase 1 isolated and simulated
 

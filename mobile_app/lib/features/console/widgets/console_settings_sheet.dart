@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../controllers/console_controller.dart';
 import '../data/console_repository.dart';
 import 'console_panel.dart';
 import 'console_style.dart';
+import 'console_endpoint_settings.dart';
 
 class ConsoleSettingsSheet extends StatefulWidget {
   const ConsoleSettingsSheet({
@@ -44,8 +45,13 @@ class _ConsoleSettingsSheetState extends State<ConsoleSettingsSheet> {
                   _ConnectionRow(
                     icon: Icons.memory_rounded,
                     title: 'Local ESP32',
-                    detail: 'Controls the tank equipment',
+                    detail: state?.isSimulated == false
+                        ? 'Read-only local monitor'
+                        : 'Controls the tank equipment',
                     connected: state?.localConnected ?? false,
+                    status: state?.isSimulated == false
+                        ? state?.connection.name
+                        : null,
                   ),
                   const Divider(
                     height: 1,
@@ -57,11 +63,15 @@ class _ConsoleSettingsSheetState extends State<ConsoleSettingsSheet> {
                     icon: Icons.cloud_outlined,
                     title: 'Cloud',
                     detail: 'History, alerts, analytics and sync',
-                    connected: state?.cloudConnected ?? false,
+                    connected: state?.cloudConnected,
                   ),
                 ],
               ),
             ),
+            if (widget.controller.repository.supportsLocalConfiguration) ...[
+              const SizedBox(height: 20),
+              ConsoleEndpointSettings(repository: widget.controller.repository),
+            ],
             if (widget.controller.hasScenarios) ...[
               const SizedBox(height: 24),
               const ConsoleSectionLabel('Prototype scenario'),
@@ -149,17 +159,22 @@ class _ConnectionRow extends StatelessWidget {
     required this.title,
     required this.detail,
     required this.connected,
+    this.status,
   });
   final IconData icon;
   final String title;
   final String detail;
-  final bool connected;
+  final bool? connected;
+  final String? status;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(16),
     child: Row(
       children: [
-        ConsoleIconBadge(icon: icon, active: connected),
+        ConsoleIconBadge(
+          icon: icon,
+          active: connected == true && status != 'degraded',
+        ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -174,11 +189,18 @@ class _ConnectionRow extends StatelessWidget {
           ),
         ),
         Text(
-          connected ? 'Connected' : 'Unavailable',
+          status ??
+              (connected == null
+                  ? 'Unknown'
+                  : connected == true
+                  ? 'Connected'
+                  : 'Unavailable'),
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: connected ? ConsoleStyle.good : ConsoleStyle.warning,
+            color: connected == true && status != 'degraded'
+                ? ConsoleStyle.good
+                : ConsoleStyle.warning,
           ),
         ),
       ],

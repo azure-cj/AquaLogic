@@ -7,9 +7,11 @@ class ConsoleConnectionIndicator extends StatelessWidget {
     required this.label,
     required this.connected,
     this.compact = false,
+    this.status,
   });
   final String label;
-  final bool connected;
+  final bool? connected;
+  final String? status;
 
   /// Compact shows only the dot and the label, for the console header.
   final bool compact;
@@ -23,18 +25,33 @@ class ConsoleConnectionIndicator extends StatelessWidget {
         height: 8,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: connected ? ConsoleStyle.good : ConsoleStyle.warning,
+          color: connected == true && status != 'Degraded'
+              ? ConsoleStyle.good
+              : ConsoleStyle.warning,
         ),
       ),
       const SizedBox(width: 8),
       Text(
-        compact ? label : '$label · ${connected ? 'Connected' : 'Unavailable'}',
-        semanticsLabel: '$label ${connected ? 'connected' : 'unavailable'}',
+        compact && status == null && connected != null
+            ? label
+            : '$label · ${status ?? (connected == null
+                      ? 'Unknown'
+                      : connected == true
+                      ? 'Connected'
+                      : 'Unavailable')}',
+        semanticsLabel:
+            '$label ${status ?? (connected == null
+                    ? 'unknown'
+                    : connected == true
+                    ? 'connected'
+                    : 'unavailable')}',
         style: TextStyle(
-          fontSize: compact ? 14 : 13,
+          fontSize: compact ? 12 : 13,
           height: 1,
           fontWeight: FontWeight.w500,
-          color: connected ? ConsoleStyle.muted : ConsoleStyle.warning,
+          color: connected == true && status != 'Degraded'
+              ? ConsoleStyle.muted
+              : ConsoleStyle.warning,
         ),
       ),
     ],

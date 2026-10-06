@@ -23,6 +23,9 @@ class ConsoleCommandSheet extends StatelessWidget {
     listenable: controller,
     builder: (context, _) {
       final state = controller.state;
+      final pumpStatus = title == 'Pump A'
+          ? state?.equipment.pumpAStatus
+          : state?.equipment.pumpBStatus;
       final command = state?.command;
       final current = switch (action) {
         ConsoleAction.lightOn || ConsoleAction.lightOff =>
@@ -83,9 +86,9 @@ class ConsoleCommandSheet extends StatelessWidget {
               ConsoleInset(
                 child: Row(
                   children: [
-                    const Text(
-                      'Idle',
-                      style: TextStyle(
+                    Text(
+                      pumpStatus ?? 'Unknown',
+                      style: const TextStyle(
                         fontSize: 32,
                         height: 1,
                         fontWeight: FontWeight.w600,

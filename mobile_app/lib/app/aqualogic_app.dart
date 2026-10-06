@@ -212,8 +212,14 @@ class _AquaLogicAppState extends State<AquaLogicApp> {
         ),
       ),
       home: ConsoleRepositoryScope(
+        liveMode:
+            widget.consoleRepositoryFactory == null &&
+            _authService is ApiAuthService,
         createRepository:
-            widget.consoleRepositoryFactory ?? createPrototypeConsoleRepository,
+            widget.consoleRepositoryFactory ??
+            (_authService is ApiAuthService
+                ? createLiveConsoleRepository
+                : createPrototypeConsoleRepository),
         onActiveChanged: (active) =>
             _notificationNavigationCoordinator?.setNavigationSuspended(active),
         child: AuthScope(

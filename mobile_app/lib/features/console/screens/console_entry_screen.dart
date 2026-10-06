@@ -1,27 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:aqualogic/app/console/console_repository_scope.dart';
 import 'tank_console_screen.dart';
+import '../widgets/console_endpoint_settings.dart';
 
 class ConsoleEntryScreen extends StatefulWidget {
   const ConsoleEntryScreen({
     super.key,
     required this.createRepository,
     this.onActiveChanged,
+    this.liveMode = false,
   });
   final ConsoleRepositoryFactory createRepository;
   final ValueChanged<bool>? onActiveChanged;
+  final bool liveMode;
   @override
   State<ConsoleEntryScreen> createState() => _ConsoleEntryScreenState();
 }
 
 class _ConsoleEntryScreenState extends State<ConsoleEntryScreen> {
   bool _entering = false;
+  int _settingsRevision = 0;
   Future<void> _enter() async {
     if (_entering) return;
     setState(() => _entering = true);
     widget.onActiveChanged?.call(true);
-    final repository = widget.createRepository();
     try {
+      final repository = widget.createRepository();
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) =>
@@ -30,7 +34,12 @@ class _ConsoleEntryScreenState extends State<ConsoleEntryScreen> {
       );
     } finally {
       widget.onActiveChanged?.call(false);
-      if (mounted) setState(() => _entering = false);
+      if (mounted) {
+        setState(() {
+          _entering = false;
+          _settingsRevision++;
+        });
+      }
     }
   }
 
@@ -67,11 +76,24 @@ class _ConsoleEntryScreenState extends State<ConsoleEntryScreen> {
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                const Text('Prototype · simulated data'),
-                const SizedBox(height: 8),
-                const Text(
-                  'This preview uses simulated readings and controls. No ESP32 is connected. Pumps are read-only.',
+                Text(
+                  widget.liveMode
+                      ? 'Live ESP32 monitor · read only'
+                      : 'Prototype · simulated data',
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.liveMode
+                      ? 'Read reported sensor and equipment state over local Wi-Fi. All live controls are disabled in Phase 2A. Cloud availability does not affect local polling.'
+                      : 'This preview uses simulated readings and controls. No ESP32 is connected. Pumps are read-only.',
+                ),
+                if (widget.liveMode) ...[
+                  const SizedBox(height: 20),
+                  ConsoleEndpointSettings(
+                    key: ValueKey(_settingsRevision),
+                    createRepository: widget.createRepository,
+                  ),
+                ],
                 const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,

@@ -12,6 +12,8 @@ class ConsoleMetricCard extends StatelessWidget {
     required this.icon,
     required this.stale,
     this.attention = false,
+    this.isSimulated = true,
+    this.reportedStatus,
   });
   final String label;
   final String value;
@@ -19,21 +21,35 @@ class ConsoleMetricCard extends StatelessWidget {
   final IconData icon;
   final bool stale;
   final bool attention;
+  final bool isSimulated;
+  final String? reportedStatus;
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = stale
+    final highlight =
+        attention ||
+        (!isSimulated &&
+            reportedStatus != null &&
+            reportedStatus != 'NORMAL' &&
+            reportedStatus != 'CLEAR');
+    final statusColor =
+        stale || value == '—' || (!isSimulated && reportedStatus == null)
         ? ConsoleStyle.faint
-        : attention
+        : highlight
         ? ConsoleStyle.warning
         : ConsoleStyle.good;
-    final status = stale
+    final status = value == '—'
+        ? 'Unavailable'
+        : stale
         ? 'Last known'
+        : !isSimulated
+        ? reportedStatus ?? 'Status unknown'
         : attention
         ? 'Attention'
         : 'Normal';
     return Semantics(
-      label: '$label $value $unit. $status. Simulated reading.',
+      label:
+          '$label $value $unit. $status. ${isSimulated ? 'Simulated' : 'ESP32 reported'} reading.',
       child: Stack(
         children: [
           Positioned(
@@ -44,7 +60,7 @@ class ConsoleMetricCard extends StatelessWidget {
               duration: const Duration(milliseconds: 250),
               height: 3,
               decoration: BoxDecoration(
-                color: attention && !stale
+                color: highlight && !stale
                     ? ConsoleStyle.warning
                     : Colors.transparent,
                 borderRadius: const BorderRadius.vertical(
@@ -105,7 +121,7 @@ class ConsoleMetricCard extends StatelessWidget {
                               fontFeatures: ConsoleStyle.tabular,
                               color: stale
                                   ? ConsoleStyle.faint
-                                  : attention
+                                  : highlight
                                   ? ConsoleStyle.warning
                                   : ConsoleStyle.text,
                             ),

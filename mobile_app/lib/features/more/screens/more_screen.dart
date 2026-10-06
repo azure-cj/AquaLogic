@@ -85,13 +85,14 @@ class MoreScreen extends StatelessWidget {
                 key: const ValueKey('more-tank-console'),
                 icon: LucideIcons.monitor,
                 title: 'Tank Console',
-                subtitle: 'Mounted aquarium display · prototype',
+                subtitle: 'Mounted aquarium display · local monitor',
                 grouped: true,
                 onTap: () {
                   final console = ConsoleRepositoryScope.maybeOf(context);
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => ConsoleEntryScreen(
+                        liveMode: console?.liveMode ?? false,
                         createRepository:
                             console?.createRepository ??
                             createPrototypeConsoleRepository,

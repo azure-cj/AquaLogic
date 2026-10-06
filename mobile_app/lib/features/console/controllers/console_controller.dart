@@ -13,7 +13,11 @@ class ConsoleController extends ChangeNotifier {
   bool _submitting = false;
   StreamSubscription<ConsoleState>? _subscription;
   bool get busy => _submitting || state?.command?.status.isPending == true;
-  bool get canCommand => state?.localConnected == true && !busy;
+  bool get canCommand =>
+      !repository.isReadOnly &&
+      error == null &&
+      state?.localConnected == true &&
+      !busy;
   bool get hasScenarios => repository.prototypeControls != null;
 
   void start() {

@@ -1,9 +1,23 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-10-04
+Last reviewed: 2026-10-06
 
 ## Completed and working locally
+
+### Tank Console Phase 2A (2026-10-06)
+
+Production Console reads configured local ESP32 telemetry/equipment through an
+isolated repository; all live controls remain disabled. Host persistence,
+connection testing, serial polling and stale recovery are implemented. Cloud
+stays Unknown rather than being inferred from local connectivity. Physical
+verification is pending. See [Phase 2A](TANK_CONSOLE_PHASE_2A.md) and the
+[firmware contract](TANK_CONSOLE_FIRMWARE_CONTRACT.md).
+
+The integration-readiness pass adds immutable firmware fixtures, real HTTP
+socket failure/lifecycle tests and clearer Test Connection guidance. Pending
+socket disposal and setup-editor reload were hardened. See
+[readiness and collaborator setup](TANK_CONSOLE_INTEGRATION_READINESS.md).
 
 ### Chrome UI preview (2026-10-04)
 
@@ -19,9 +33,10 @@ Phase 1 adds More → Tank Console inside the existing Flutter APK, with an
 isolated mock repository, landscape dashboard, tracked command states,
 independent Local/Cloud availability, read-only pumps and scoped Android
 orientation/fullscreen/keep-awake handling. Notification navigation waits until
-console exit. No firmware, backend, gateway or local networking changes belong
-to this feature. Physical Android verification and UI approval remain pending;
-ESP32 integration and safety enforcement are deferred to Phase 2. Details and
+console exit. Phase 1 made no firmware, backend, gateway or local networking
+changes. Phase 2A now adds the read-only local monitor documented above;
+physical Android verification and live-control safety enforcement remain pending.
+Details and
 review steps: [`TANK_CONSOLE_PHASE_1.md`](TANK_CONSOLE_PHASE_1.md).
 
 ### Backend

@@ -1,6 +1,6 @@
 # AquaLogic Documentation Index
 
-Last reviewed: 2026-10-04
+Last reviewed: 2026-10-06
 
 This is the documentation entry point for people and coding agents. Read the
 root `AGENTS.md` first when changing the repository, then use this index to
@@ -24,6 +24,13 @@ link back here rather than duplicate a competing project status.
 | [`WORKFLOWS.md`](WORKFLOWS.md) | Local setup, validation, database, browser, and deployment workflows |
 
 ## Operational documentation
+
+- [Tank Console integration readiness](TANK_CONSOLE_INTEGRATION_READINESS.md):
+  firmware fixtures, real socket failure tests and collaborator setup.
+
+- [Tank Console Phase 2A](TANK_CONSOLE_PHASE_2A.md): local read-only telemetry,
+  host setup and stale state. [Primary firmware contract](TANK_CONSOLE_FIRMWARE_CONTRACT.md)
+  records current routes and response construction.
 
 - [Tank Console Phase 1](TANK_CONSOLE_PHASE_1.md): isolated Flutter prototype,
   command/connection semantics, display restoration and Android review checklist.

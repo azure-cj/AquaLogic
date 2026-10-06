@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Only the firmware's actual mDNS name; no public HTTP exception.
+         Dynamic private IPs use the separately restricted Dart local client. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">aqualogic.local</domain>
+    </domain-config>
+</network-security-config>

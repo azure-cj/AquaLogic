@@ -8,6 +8,8 @@ enum ConsoleWaterQuality {
   String get label => name.toUpperCase();
 }
 
+enum ConsoleLocalConnection { connecting, connected, degraded, disconnected }
+
 class ConsoleEquipmentState {
   const ConsoleEquipmentState({
     this.lightOn = true,
@@ -16,6 +18,8 @@ class ConsoleEquipmentState {
     this.lightConfirmed = true,
     this.uvConfirmed = true,
     this.feederConfirmed = true,
+    this.pumpAStatus = 'IDLE',
+    this.pumpBStatus = 'IDLE',
   });
   final bool lightOn;
   final bool uvOn;
@@ -23,9 +27,9 @@ class ConsoleEquipmentState {
   final bool lightConfirmed;
   final bool uvConfirmed;
   final bool feederConfirmed;
-  // Pumps deliberately have no writable state or command surface in Phase 1.
-  String get pumpAStatus => 'IDLE';
-  String get pumpBStatus => 'IDLE';
+  // Reported motion only: an idle motor does not mean dosing is safe.
+  final String pumpAStatus;
+  final String pumpBStatus;
 
   ConsoleEquipmentState copyWith({
     bool? lightOn,
@@ -34,6 +38,8 @@ class ConsoleEquipmentState {
     bool? lightConfirmed,
     bool? uvConfirmed,
     bool? feederConfirmed,
+    String? pumpAStatus,
+    String? pumpBStatus,
   }) => ConsoleEquipmentState(
     lightOn: lightOn ?? this.lightOn,
     uvOn: uvOn ?? this.uvOn,
@@ -41,6 +47,8 @@ class ConsoleEquipmentState {
     lightConfirmed: lightConfirmed ?? this.lightConfirmed,
     uvConfirmed: uvConfirmed ?? this.uvConfirmed,
     feederConfirmed: feederConfirmed ?? this.feederConfirmed,
+    pumpAStatus: pumpAStatus ?? this.pumpAStatus,
+    pumpBStatus: pumpBStatus ?? this.pumpBStatus,
   );
 }
 
@@ -58,20 +66,37 @@ class ConsoleState {
     this.equipment = const ConsoleEquipmentState(),
     this.command,
     this.isSimulated = true,
+    this.localStatus,
+    this.sensorStatuses = const {},
+    this.connectionMessage,
+    this.telemetryStale,
   });
 
   final String tankName;
-  final double temperature;
-  final double ph;
-  final double tds;
-  final double turbidity;
-  final DateTime observedAt;
-  final ConsoleWaterQuality quality;
+  final double? temperature;
+  final double? ph;
+  final double? tds;
+  final double? turbidity;
+
+  /// Local receipt time; firmware /data contains no sample timestamp.
+  final DateTime? observedAt;
+  final ConsoleWaterQuality? quality;
   final bool localConnected;
-  final bool cloudConnected;
+  final bool? cloudConnected;
   final bool isSimulated;
   final ConsoleEquipmentState equipment;
   final ConsoleCommand? command;
+  final ConsoleLocalConnection? localStatus;
+  final Map<String, String> sensorStatuses;
+  final String? connectionMessage;
+  final bool? telemetryStale;
+  ConsoleLocalConnection get connection =>
+      localStatus ??
+      (localConnected
+          ? ConsoleLocalConnection.connected
+          : ConsoleLocalConnection.disconnected);
+  bool get readingsStale =>
+      telemetryStale ?? connection != ConsoleLocalConnection.connected;
 
   ConsoleState copyWith({
     double? ph,
@@ -94,5 +119,9 @@ class ConsoleState {
     equipment: equipment ?? this.equipment,
     command: command ?? this.command,
     isSimulated: isSimulated,
+    localStatus: localStatus,
+    sensorStatuses: sensorStatuses,
+    connectionMessage: connectionMessage,
+    telemetryStale: telemetryStale,
   );
 }

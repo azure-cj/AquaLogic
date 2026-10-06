@@ -228,32 +228,43 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
     final metrics = [
       ConsoleMetricCard(
         label: 'Temperature',
-        value: state.temperature.toStringAsFixed(1),
+        value: state.temperature?.toStringAsFixed(1) ?? '—',
         unit: '°C',
         icon: Icons.thermostat_outlined,
-        stale: !state.localConnected,
+        stale: state.readingsStale,
+        isSimulated: state.isSimulated,
+        reportedStatus: state.sensorStatuses['temp'],
       ),
       ConsoleMetricCard(
         label: 'pH',
-        value: state.ph.toStringAsFixed(2),
+        value: state.ph?.toStringAsFixed(2) ?? '—',
         unit: '',
         icon: Icons.water_drop_outlined,
-        stale: !state.localConnected,
-        attention: state.quality != ConsoleWaterQuality.normal,
+        stale: state.readingsStale,
+        isSimulated: state.isSimulated,
+        reportedStatus: state.sensorStatuses['ph'],
+        attention: state.isSimulated
+            ? state.quality != ConsoleWaterQuality.normal
+            : state.sensorStatuses['ph'] != null &&
+                  state.sensorStatuses['ph'] != 'NORMAL',
       ),
       ConsoleMetricCard(
         label: 'TDS',
-        value: state.tds.toStringAsFixed(0),
+        value: state.tds?.toStringAsFixed(0) ?? '—',
         unit: 'ppm',
         icon: Icons.bubble_chart_outlined,
-        stale: !state.localConnected,
+        stale: state.readingsStale,
+        isSimulated: state.isSimulated,
+        reportedStatus: state.sensorStatuses['tds'],
       ),
       ConsoleMetricCard(
         label: 'Turbidity',
-        value: state.turbidity.toStringAsFixed(1),
+        value: state.turbidity?.toStringAsFixed(1) ?? '—',
         unit: 'NTU',
         icon: Icons.waves_outlined,
-        stale: !state.localConnected,
+        stale: state.readingsStale,
+        isSimulated: state.isSimulated,
+        reportedStatus: state.sensorStatuses['turbidity'],
       ),
     ];
     final controls = [
@@ -400,7 +411,9 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
   }
 
   Widget _header(ConsoleState state, bool wide) {
-    final updated = TimeOfDay.fromDateTime(state.observedAt).format(context);
+    final updated = state.observedAt == null
+        ? 'unavailable'
+        : TimeOfDay.fromDateTime(state.observedAt!).format(context);
     return Row(
       children: [
         const Icon(
@@ -422,7 +435,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
             ),
           ),
         ),
-        if (wide) ...[
+        if (wide && MediaQuery.sizeOf(context).width >= 960) ...[
           const SizedBox(width: 20),
           Text(
             'Updated $updated',
@@ -457,6 +470,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
         ConsoleConnectionIndicator(
           label: 'Local',
           connected: state.localConnected,
+          status: state.isSimulated ? null : _title(state.connection.name),
           compact: true,
         ),
         const SizedBox(width: 20),
@@ -575,7 +589,9 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
         ],
         Expanded(
           child: Text(
-            command == null
+            !state.isSimulated
+                ? 'Live ESP32 · read only · controls disabled'
+                : command == null
                 ? 'Command idle'
                 : 'Command ${command.status.label.toLowerCase()} — ${command.message}',
             key: const ValueKey('console-command-status'),

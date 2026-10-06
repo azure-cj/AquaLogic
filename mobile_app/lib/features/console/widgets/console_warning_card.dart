@@ -13,23 +13,35 @@ class ConsoleWarningCard extends StatelessWidget {
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
-    final offline = !state.localConnected;
+    final offline = state.readingsStale;
     final color = offline
         ? ConsoleStyle.muted
         : switch (state.quality) {
             ConsoleWaterQuality.normal => ConsoleStyle.good,
             ConsoleWaterQuality.attention => ConsoleStyle.warning,
             ConsoleWaterQuality.critical => ConsoleStyle.critical,
+            null => ConsoleStyle.muted,
           };
     final label = offline
-        ? 'Local device offline'
+        ? (state.connection == ConsoleLocalConnection.degraded
+              ? 'Local data degraded'
+              : state.connection == ConsoleLocalConnection.connecting
+              ? 'Connecting to ESP32'
+              : 'Local device offline')
         : switch (state.quality) {
             ConsoleWaterQuality.normal => 'Water quality is good',
             ConsoleWaterQuality.attention => 'Water quality needs attention',
             ConsoleWaterQuality.critical => 'Water quality is critical',
+            null => 'Water quality unavailable',
           };
     final description = offline
-        ? 'Last reading ${TimeOfDay.fromDateTime(state.observedAt).format(context)}. Controls disabled until local connection returns.'
+        ? (state.observedAt == null
+              ? 'No valid readings received. Live controls remain disabled.'
+              : 'Last received ${TimeOfDay.fromDateTime(state.observedAt!).format(context)}. Last-known data; live controls disabled.')
+        : !state.isSimulated
+        ? (state.quality == null
+              ? 'The ESP32 has not reported a usable classification.'
+              : 'ESP32 reported ${state.quality!.label.toLowerCase()}. Live controls remain disabled.')
         : switch (state.quality) {
             ConsoleWaterQuality.normal =>
               'All four simulated parameters are within the configured range.',
@@ -37,6 +49,7 @@ class ConsoleWarningCard extends StatelessWidget {
               'Simulated pH needs attention. Check the water before taking action.',
             ConsoleWaterQuality.critical =>
               'Immediate operator attention required in this simulated scenario.',
+            null => 'Water quality unavailable.',
           };
     final tinted = offline || state.quality != ConsoleWaterQuality.normal;
     return AnimatedContainer(

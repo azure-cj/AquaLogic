@@ -167,16 +167,14 @@ void main() {
     },
   );
 
-  test(
-    'future ESP32 adapter is unavailable and never selected implicitly',
-    () async {
-      final repository = Esp32ConsoleRepository();
-      expect(repository.prototypeControls, isNull);
-      await expectLater(repository.getState(), throwsUnsupportedError);
-      await expectLater(repository.feed(), throwsUnsupportedError);
-      await repository.dispose();
-    },
-  );
+  test('ESP32 adapter remains read only without configuration', () async {
+    final repository = Esp32ConsoleRepository();
+    expect(repository.prototypeControls, isNull);
+    expect((await repository.getState()).isSimulated, isFalse);
+    expect((await repository.getState()).temperature, isNull);
+    await expectLater(repository.feed(), throwsUnsupportedError);
+    await repository.dispose();
+  });
 
   test(
     'controller prevents duplicate taps and follows repository state',
@@ -319,72 +317,73 @@ void main() {
     },
   );
 
-  testWidgets('More opens console and deliberate exit returns to introduction', (
-    tester,
-  ) async {
-    const displayChannel = MethodChannel(
-      'com.aqualogic.mobile/console_display',
-    );
-    final displayCalls = <String>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      displayChannel,
-      (call) async {
-        displayCalls.add(call.method);
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  testWidgets(
+    'More opens console and deliberate exit returns to introduction',
+    (tester) async {
+      const displayChannel = MethodChannel(
+        'com.aqualogic.mobile/console_display',
+      );
+      final displayCalls = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         displayChannel,
-        null,
-      ),
-    );
-    await tester.binding.setSurfaceSize(const Size(844, 390));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MoreScreen(
-          snapshot: MockSensorFeed.snapshot(0),
-          user: const AuthUser(
-            id: 'owner',
-            name: 'Owner',
-            email: 'owner@aqualogic.local',
-            role: UserRole.admin,
+        (call) async {
+          displayCalls.add(call.method);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          displayChannel,
+          null,
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(844, 390));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MoreScreen(
+            snapshot: MockSensorFeed.snapshot(0),
+            user: const AuthUser(
+              id: 'owner',
+              name: 'Owner',
+              email: 'owner@aqualogic.local',
+              role: UserRole.admin,
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('more-tank-console')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const ValueKey('more-tank-console')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('enter-console')));
-    await tester.tap(find.byKey(const ValueKey('enter-console')));
-    await tester.pumpAndSettle();
-    expect(find.byType(TankConsoleScreen), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('console-settings')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Exit Console Mode'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Exit Console Mode'));
-    await tester.pumpAndSettle();
-    expect(find.text('Exit Console Mode?'), findsOneWidget);
-    await tester.tap(find.text('Stay in console'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TankConsoleScreen), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Exit console'));
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(displayCalls, containsAllInOrder(['enter', 'exit']));
-    expect(find.byKey(const ValueKey('enter-console')), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('more-tank-console')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const ValueKey('more-tank-console')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('enter-console')));
+      await tester.tap(find.byKey(const ValueKey('enter-console')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TankConsoleScreen), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('console-settings')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Exit Console Mode'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Exit Console Mode'));
+      await tester.pumpAndSettle();
+      expect(find.text('Exit Console Mode?'), findsOneWidget);
+      await tester.tap(find.text('Stay in console'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TankConsoleScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Exit console'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(displayCalls, containsAllInOrder(['enter', 'exit']));
+      expect(find.byKey(const ValueKey('enter-console')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'large text landscape remains readable without layout exceptions',
