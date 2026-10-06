@@ -39,7 +39,8 @@ describe('tank insights structure', () => {
       expect(within(card).getByText('Projected')).toBeInTheDocument();
     }
     expect(within(screen.getAllByRole('article')[0]).getByText(/^If the current trend continues/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Turbidity' }));
+    fireEvent.click(within(screen.getAllByRole('article')[2]).getByText('Observed'));
+    expect(screen.getByRole('button', { name: 'Turbidity' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('figure')).toHaveAccessibleName(/Turbidity: Rising/);
     expect(screen.getByRole('figure')).toHaveTextContent('Turbidity is not projected because it changes in sudden events');
     expect(within(screen.getByRole('figure')).queryByText('Projection if trend continues')).not.toBeInTheDocument();
@@ -103,7 +104,7 @@ describe('recent trend chart categories', () => {
     expect(container.querySelector('.recharts-reference-area')).toBeInTheDocument();
     expect(screen.getByText('Now')).toBeInTheDocument();
     const rows = recentTrendRows(parameterFixture());
-    expect(rows[0].timestamp).toBe(new Date('2026-10-13T06:00:00Z').getTime());
+    expect(rows[0].timestamp).toBe(new Date('2026-10-13T06:15:00Z').getTime());
     expect(rows[rows.length - 1]?.projectionRange).toEqual([27.5, 28.5]);
     expect(rows.filter((row) => row.observed != null)).toHaveLength(2);
   });

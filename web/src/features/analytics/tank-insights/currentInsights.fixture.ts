@@ -9,7 +9,7 @@ export function parameterFixture(parameter: CurrentParameter = 'temperature'): C
     trend: { status: 'rising', reason: null, rate_per_hour: .18, rate_ci_low: .12, rate_ci_high: .24,
       change_6h: 1.08, notable_change: .5, qualifying_buckets: 12, required_buckets: 10,
       fit_points: [{ t: '2026-10-13T06:15:00Z', value: 26, count: 60 }, { t: '2026-10-13T11:45:00Z', value: 27, count: 60 }],
-      fitted_start: { t: '2026-10-13T06:00:00Z', value: 26 }, fitted_end: { t: '2026-10-13T12:00:00Z', value: 27 }, sigma: .05 },
+      fitted_start: { t: '2026-10-13T06:15:00Z', value: 26 }, fitted_end: { t: '2026-10-13T12:00:00Z', value: 27 }, sigma: .05 },
     headroom: { side: 'upper', bound: 28, distance: 1, outside: false, reason: null },
     species_range: { status: 'ok', min: 24, max: 28, species_count: 2, conflict: null, compliance_percent_24h: 91.5,
       headroom: null, compliance_reason: null, compliance_readings: 60, required_readings: 30 },

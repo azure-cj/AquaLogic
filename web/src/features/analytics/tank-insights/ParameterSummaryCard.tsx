@@ -7,8 +7,8 @@ export function ParameterSummaryCard({ parameter, latest, selected, onSelect }: 
   parameter: CurrentParameterInsights; latest: CurrentLatest; selected: boolean; onSelect: () => void;
 }) {
   const name = metricOptions.find((option) => option.key === parameter.parameter)!.label;
-  return <article className="tank-insights-card">
-    <h3><button type="button" className="button button-secondary" aria-pressed={selected} onClick={onSelect}>{name}</button></h3>
+  return <article className="tank-insights-card" onClick={onSelect}>
+    <h3><button type="button" className="button button-secondary" aria-pressed={selected}>{name}</button></h3>
     <div><span className="status-badge">Observed</span>
       {parameter.observed ? <p>{formatNumber(parameter.observed.value)} {parameter.unit}<br />
         <time dateTime={parameter.observed.observed_at}>{formatAnalyticsDate(parameter.observed.observed_at)}</time>
