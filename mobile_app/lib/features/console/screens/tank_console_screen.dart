@@ -1014,7 +1014,6 @@ class _LockChipState extends State<_LockChip>
           onTap: locked ? null : () => widget.onChanged(true),
           child: Container(
             height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: locked ? ConsoleStyle.surface : ConsoleStyle.accentDim,
               borderRadius: BorderRadius.circular(22),
@@ -1024,8 +1023,6 @@ class _LockChipState extends State<_LockChip>
               alignment: Alignment.centerLeft,
               children: [
                 Positioned.fill(
-                  left: -16,
-                  right: -16,
                   child: AnimatedBuilder(
                     animation: _hold,
                     builder: (context, _) => FractionallySizedBox(
@@ -1035,29 +1032,32 @@ class _LockChipState extends State<_LockChip>
                     ),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      locked ? Icons.lock_outline : Icons.lock_open_rounded,
-                      size: 20,
-                      color: locked ? ConsoleStyle.text : ConsoleStyle.accent,
-                    ),
-                    if (!widget.compact) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        locked ? 'Hold to unlock' : 'Lock',
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1,
-                          fontWeight: FontWeight.w600,
-                          color: locked
-                              ? ConsoleStyle.text
-                              : ConsoleStyle.accent,
-                        ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        locked ? Icons.lock_outline : Icons.lock_open_rounded,
+                        size: 20,
+                        color: locked ? ConsoleStyle.text : ConsoleStyle.accent,
                       ),
+                      if (!widget.compact) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          locked ? 'Hold to unlock' : 'Lock',
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1,
+                            fontWeight: FontWeight.w600,
+                            color: locked
+                                ? ConsoleStyle.text
+                                : ConsoleStyle.accent,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ],
             ),
