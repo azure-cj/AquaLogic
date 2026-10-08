@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../controllers/console_controller.dart';
 import '../models/console_command.dart';
+import '../models/console_state.dart';
 import 'console_panel.dart';
 import 'console_style.dart';
 
@@ -64,17 +65,23 @@ class ConsoleCommandSheet extends StatelessWidget {
               : ConsoleAction.uvOn,
         _ => action,
       };
-      final text = actualAction == ConsoleAction.feed
-          ? 'Feed once'
-          : actualAction == ConsoleAction.lightOff ||
-                actualAction == ConsoleAction.uvOff
-          ? 'Turn off'
-          : 'Turn on';
       final enabled =
           actualAction != null &&
           controller.canSubmit(actualAction) &&
           current != 'Unknown' &&
           (actualAction != ConsoleAction.feed || current != 'Running');
+      // Says why the control is unavailable instead of a silent grey button.
+      final blocked = enabled
+          ? null
+          : command?.status.isPending == true
+          ? 'Command in progress. Waiting for the device to confirm.'
+          : state?.localConnected != true
+          ? 'Local device offline. Controls are disabled.'
+          : current == 'Unknown'
+          ? 'Equipment state unconfirmed. No command will be sent.'
+          : current == 'Running'
+          ? 'Feeding now.'
+          : 'Controls unavailable right now.';
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
         child: ConsoleStaggerColumn(
@@ -106,7 +113,7 @@ class ConsoleCommandSheet extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    _Tag(
+                    ConsoleTag(
                       icon: Icons.lock_outline,
                       label: 'Read only',
                       color: ConsoleStyle.muted,
@@ -160,16 +167,23 @@ class ConsoleCommandSheet extends StatelessWidget {
                     ),
                     const Spacer(),
                     if (state?.isSimulated == true)
-                      const _Tag(
+                      const ConsoleTag(
                         label: 'Simulated',
                         color: ConsoleStyle.warning,
                       ),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              ..._control(
+                blocked: blocked,
+                enabled: enabled,
+                active: active,
+                current: current,
+              ),
               const SizedBox(height: 24),
               const ConsoleSectionLabel('Last command'),
-              _CommandProgress(command: command),
+              ConsoleCommandProgress(command: command),
               if (controller.error != null) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -177,67 +191,187 @@ class ConsoleCommandSheet extends StatelessWidget {
                   style: const TextStyle(color: ConsoleStyle.warning),
                 ),
               ],
-              const SizedBox(height: 28),
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: enabled
-                      ? () async {
-                          if (actualAction == ConsoleAction.feed) {
-                            final approved = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('Feed once?'),
-                                content: Text(
-                                  state?.isSimulated == true
-                                      ? 'Prototype · simulated data. Preview one feed cycle without hardware. An uncertain request will not be repeated automatically.'
-                                      : 'Run one configured feed cycle. An uncertain request will not be repeated automatically.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    child: const Text('Feed once'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (approved != true || !context.mounted) return;
-                          }
-                          await controller.submit(actualAction);
-                        }
-                      : null,
-                  style: FilledButton.styleFrom(
-                    disabledBackgroundColor: ConsoleStyle.surface,
-                    disabledForegroundColor: ConsoleStyle.faint,
-                  ),
-                  child: Text(
-                    command?.status.isPending == true
-                        ? 'Command in progress'
-                        : state?.localConnected != true
-                        ? 'Local device offline'
-                        : current == 'Unknown'
-                        ? 'Equipment state unconfirmed'
-                        : text,
-                  ),
-                ),
-              ),
+              if (action == ConsoleAction.feed) ...[
+                const SizedBox(height: 24),
+                const ConsoleSectionLabel('Device reports'),
+                _FeederDetails(equipment: state?.equipment),
+              ],
             ],
           ],
         ),
       );
     },
   );
+
+  /// The panel's one control, directly under the current state.
+  List<Widget> _control({
+    required String? blocked,
+    required bool enabled,
+    required bool active,
+    required String current,
+  }) => [
+    if (blocked != null) ...[
+      Text(
+        blocked,
+        key: const ValueKey('console-sheet-blocked'),
+        style: const TextStyle(fontSize: 14, color: ConsoleStyle.muted),
+      ),
+      const SizedBox(height: 10),
+    ],
+    if (action == ConsoleAction.feed)
+      ConsoleHoldButton(
+        key: const ValueKey('console-feed-hold'),
+        label: 'Hold to feed',
+        icon: Icons.set_meal_outlined,
+        onHold: enabled ? () => controller.submit(ConsoleAction.feed) : null,
+      )
+    else
+      _OnOffSwitch(
+        on: current == 'Unknown' ? null : active,
+        onChanged: enabled
+            ? (value) => controller.submit(
+                action == ConsoleAction.lightOn ||
+                        action == ConsoleAction.lightOff
+                    ? (value ? ConsoleAction.lightOn : ConsoleAction.lightOff)
+                    : (value ? ConsoleAction.uvOn : ConsoleAction.uvOff),
+              )
+            : null,
+      ),
+  ];
+}
+
+/// Two large segments; the device-confirmed side is lit. Tapping the other
+/// side sends one command, and the highlight only moves once confirmed.
+class _OnOffSwitch extends StatelessWidget {
+  const _OnOffSwitch({required this.on, required this.onChanged});
+  final bool? on;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 64,
+    padding: const EdgeInsets.all(5),
+    decoration: BoxDecoration(
+      color: ConsoleStyle.background.withValues(alpha: .55),
+      borderRadius: BorderRadius.circular(ConsoleStyle.controlRadius + 4),
+      border: Border.all(color: ConsoleStyle.hairline),
+    ),
+    child: Row(
+      children: [
+        for (final value in [false, true])
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: on == value,
+              child: GestureDetector(
+                key: ValueKey('console-switch-${value ? 'on' : 'off'}'),
+                onTap: onChanged == null || on == value
+                    ? null
+                    : () => onChanged!(value),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: on == value
+                        ? (value ? ConsoleStyle.accent : ConsoleStyle.pressed)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(
+                      ConsoleStyle.controlRadius,
+                    ),
+                  ),
+                  child: Text(
+                    value ? 'On' : 'Off',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: on == value
+                          ? (value
+                                ? ConsoleStyle.background
+                                : ConsoleStyle.text)
+                          : onChanged == null
+                          ? ConsoleStyle.faint
+                          : ConsoleStyle.muted,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// Read-only feeder facts from /feeder/status. Portion and schedule are
+/// edited in the web app, not on the wall-mounted console.
+class _FeederDetails extends StatelessWidget {
+  const _FeederDetails({required this.equipment});
+  final ConsoleEquipmentState? equipment;
+
+  static String _time(ConsoleScheduleSlot slot) {
+    final hour = slot.hour % 12 == 0 ? 12 : slot.hour % 12;
+    final minute = slot.minute.toString().padLeft(2, '0');
+    return '$hour:$minute ${slot.hour < 12 ? 'AM' : 'PM'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final equipment = this.equipment;
+    final angle = equipment?.feederAngle;
+    final duration = equipment?.feederDurationMs;
+    final schedule = equipment?.feederSchedule ?? const [];
+    return ConsoleInset(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ConsoleFact('Feeds', equipment?.feedCount?.toString() ?? '—'),
+              ConsoleFact('Last fed', equipment?.lastFed ?? 'Not reported'),
+              ConsoleFact(
+                'Portion',
+                angle == null || duration == null
+                    ? 'Not reported'
+                    : '$angle° · ${(duration / 1000).toStringAsFixed(1)} s',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Schedule',
+            style: TextStyle(fontSize: 12, color: ConsoleStyle.faint),
+          ),
+          const SizedBox(height: 8),
+          if (schedule.isEmpty)
+            const Text('Not reported', style: TextStyle(fontSize: 15))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final slot in schedule)
+                  ConsoleTag(
+                    label: slot.enabled ? _time(slot) : '${_time(slot)} · off',
+                    color: slot.enabled
+                        ? ConsoleStyle.accent
+                        : ConsoleStyle.faint,
+                  ),
+              ],
+            ),
+          const SizedBox(height: 14),
+          const Text(
+            'Edit portion and schedule in the AquaLogic web app.',
+            style: TextStyle(fontSize: 13, color: ConsoleStyle.muted),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Live and simulated command stages, with failure states shown in amber.
-class _CommandProgress extends StatelessWidget {
-  const _CommandProgress({required this.command});
+class ConsoleCommandProgress extends StatelessWidget {
+  const ConsoleCommandProgress({super.key, required this.command});
   final ConsoleCommand? command;
 
   @override
@@ -344,8 +478,13 @@ class _Step extends StatelessWidget {
   );
 }
 
-class _Tag extends StatelessWidget {
-  const _Tag({required this.label, required this.color, this.icon});
+class ConsoleTag extends StatelessWidget {
+  const ConsoleTag({
+    super.key,
+    required this.label,
+    required this.color,
+    this.icon,
+  });
   final String label;
   final Color color;
   final IconData? icon;

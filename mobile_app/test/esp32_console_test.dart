@@ -511,6 +511,7 @@ void main() {
           home: TankConsoleScreen(
             repository: repository,
             displaySession: _Display(),
+            initiallyLocked: false,
           ),
         ),
       );
@@ -519,9 +520,9 @@ void main() {
       expect(find.textContaining('Live ESP32 · local control'), findsOneWidget);
       expect(find.text('Running'), findsOneWidget);
       expect(find.text('Simulated data'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('console-light')));
+      await tester.tap(find.byTooltip('Lighting details'));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Turn off'), findsOneWidget);
+      expect(find.byKey(const ValueKey('console-switch-off')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

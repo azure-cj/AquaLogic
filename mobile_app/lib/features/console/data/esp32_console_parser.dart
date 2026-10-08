@@ -25,10 +25,32 @@ class Esp32ConsoleParser {
         volumeKnown: boolean(data?['volume_known']),
         refillRequired: boolean(data?['refill_required']),
         clockSynced: boolean(data?['clock_synced']),
-        nextEligibleAt: data?['next_eligible_at'] is String
-            ? data!['next_eligible_at'] as String
-            : null,
+        nextEligibleAt: text(data?['next_eligible_at']),
+        lastDispensed: text(data?['last_dispensed']),
+        nextDoseAt: text(data?['next_dose_at']),
+        scheduleEvent: text(data?['schedule_event']),
       );
+
+  /// Firmware time strings; blank values count as not reported.
+  static String? text(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  /// Exactly three valid slots, or nothing; partial schedules are not shown.
+  static List<ConsoleScheduleSlot> schedule(Object? value) {
+    if (value is! List || value.length != 3) return const [];
+    final slots = <ConsoleScheduleSlot>[];
+    for (final slot in value) {
+      if (slot is! Map) return const [];
+      final hour = slot['hour'], minute = slot['minute'];
+      final enabled = slot['enabled'];
+      if (hour is! int || hour < 0 || hour > 23) return const [];
+      if (minute is! int || minute < 0 || minute > 59) return const [];
+      if (enabled is! bool) return const [];
+      slots.add(ConsoleScheduleSlot(hour, minute, enabled: enabled));
+    }
+    return slots;
+  }
+
   static String? status(Object? value) =>
       value is String ? value.toUpperCase() : null;
   static ConsoleWaterQuality? quality(Object? value) => switch (value) {
@@ -47,7 +69,8 @@ class Esp32ConsoleParser {
   ) {
     final light = boolean(responses['/led/status']?['led_on']);
     final uv = boolean(responses['/uv/status']?['led_on']);
-    final feeding = boolean(responses['/feeder/status']?['feeding']);
+    final feeder = responses['/feeder/status'];
+    final feeding = boolean(feeder?['feeding']);
     return ConsoleEquipmentState(
       lightOn: light == true,
       uvOn: uv == true,
@@ -59,7 +82,11 @@ class Esp32ConsoleParser {
       pumpBStatus: pump(responses['/syringeB/status']),
       pumpA: pumpDetails(responses['/syringeA/status']),
       pumpB: pumpDetails(responses['/syringeB/status']),
-      feedCount: counter(responses['/feeder/status']?['feed_count']),
+      feedCount: counter(feeder?['feed_count']),
+      lastFed: text(feeder?['last_fed']),
+      feederAngle: counter(feeder?['open_angle']),
+      feederDurationMs: counter(feeder?['duration_ms']),
+      feederSchedule: schedule(feeder?['schedule']),
     );
   }
 }

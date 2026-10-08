@@ -19,7 +19,10 @@ behavior are unchanged. Development-only preview accounts and the browser
 authentication boundary are documented in
 [`../../mobile_app/README.md`](../../mobile_app/README.md).
 
-Tank Console is entered through More. Production uses an isolated local ESP32
+Tank Console is entered through More. It opens in a locked Display mode and
+unlocks into Control mode by a hold; see
+[`../TANK_CONSOLE_DISPLAY_MODE.md`](../TANK_CONSOLE_DISPLAY_MODE.md) for modes,
+tile gestures and the mounted-tablet checklist. Production uses an isolated local ESP32
 repository for telemetry/status and live LED, UV, feeder and protected pump
 operations; previews simulate the same command stages and pump panel without
 networking or hardware. Mock settings include explicit equipment/cooldown reset,

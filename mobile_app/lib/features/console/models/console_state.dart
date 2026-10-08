@@ -10,6 +10,13 @@ enum ConsoleWaterQuality {
 
 enum ConsoleLocalConnection { connecting, connected, degraded, disconnected }
 
+/// One device-owned schedule slot, as reported by firmware.
+class ConsoleScheduleSlot {
+  const ConsoleScheduleSlot(this.hour, this.minute, {required this.enabled});
+  final int hour, minute;
+  final bool enabled;
+}
+
 class ConsolePumpState {
   const ConsolePumpState({
     this.active,
@@ -21,12 +28,17 @@ class ConsolePumpState {
     this.refillRequired,
     this.clockSynced,
     this.nextEligibleAt,
+    this.lastDispensed,
+    this.nextDoseAt,
+    this.scheduleEvent,
   });
   final bool? active;
   final int? doseCount;
   final double? volumeMl, remainingMl, capacityMl;
   final bool? volumeKnown, refillRequired, clockSynced;
   final String? nextEligibleAt;
+  // Firmware-formatted time strings; not guaranteed ISO timestamps.
+  final String? lastDispensed, nextDoseAt, scheduleEvent;
   bool get validDose =>
       volumeMl != null &&
       capacityMl != null &&
@@ -50,6 +62,10 @@ class ConsoleEquipmentState {
     this.pumpA = const ConsolePumpState(),
     this.pumpB = const ConsolePumpState(),
     this.feedCount,
+    this.lastFed,
+    this.feederAngle,
+    this.feederDurationMs,
+    this.feederSchedule = const [],
   });
   final bool lightOn;
   final bool uvOn;
@@ -62,6 +78,9 @@ class ConsoleEquipmentState {
   final String pumpBStatus;
   final ConsolePumpState pumpA, pumpB;
   final int? feedCount;
+  final String? lastFed;
+  final int? feederAngle, feederDurationMs;
+  final List<ConsoleScheduleSlot> feederSchedule;
 
   ConsoleEquipmentState copyWith({
     bool? lightOn,
@@ -75,6 +94,7 @@ class ConsoleEquipmentState {
     ConsolePumpState? pumpA,
     ConsolePumpState? pumpB,
     int? feedCount,
+    String? lastFed,
   }) => ConsoleEquipmentState(
     lightOn: lightOn ?? this.lightOn,
     uvOn: uvOn ?? this.uvOn,
@@ -87,6 +107,10 @@ class ConsoleEquipmentState {
     pumpA: pumpA ?? this.pumpA,
     pumpB: pumpB ?? this.pumpB,
     feedCount: feedCount ?? this.feedCount,
+    lastFed: lastFed ?? this.lastFed,
+    feederAngle: feederAngle,
+    feederDurationMs: feederDurationMs,
+    feederSchedule: feederSchedule,
   );
 }
 

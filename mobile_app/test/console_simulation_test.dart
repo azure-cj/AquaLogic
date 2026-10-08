@@ -212,6 +212,7 @@ void main() {
           home: TankConsoleScreen(
             repository: repository,
             displaySession: _Display(),
+            initiallyLocked: false,
           ),
         ),
       );

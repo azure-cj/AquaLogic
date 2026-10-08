@@ -41,6 +41,7 @@ class ConsolePanelRoute<T> extends PopupRoute<T> {
       type: MaterialType.transparency,
       child: DefaultTextStyle(
         style: const TextStyle(
+          fontFamily: 'Geist',
           color: ConsoleStyle.text,
           fontSize: 15,
           height: 1.35,
@@ -395,4 +396,131 @@ class ConsoleInset extends StatelessWidget {
     ),
     child: child,
   );
+}
+
+/// Label above a value; used in panel fact rows. Expands inside a [Row].
+class ConsoleFact extends StatelessWidget {
+  const ConsoleFact(this.label, this.value, {super.key, this.warn = false});
+  final String label;
+  final String value;
+  final bool warn;
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: ConsoleStyle.faint),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: warn ? ConsoleStyle.warning : ConsoleStyle.text,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Press and hold to act; releasing early cancels. The fill shows progress.
+class ConsoleHoldButton extends StatefulWidget {
+  const ConsoleHoldButton({
+    super.key,
+    required this.label,
+    required this.onHold,
+    this.icon,
+    this.duration = const Duration(seconds: 1),
+  });
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onHold;
+  final Duration duration;
+
+  @override
+  State<ConsoleHoldButton> createState() => _ConsoleHoldButtonState();
+}
+
+class _ConsoleHoldButtonState extends State<ConsoleHoldButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _hold =
+      AnimationController(vsync: this, duration: widget.duration)
+        ..addStatusListener((status) {
+          if (status != AnimationStatus.completed) return;
+          _hold.value = 0;
+          widget.onHold?.call();
+        });
+
+  @override
+  void dispose() {
+    _hold.dispose();
+    super.dispose();
+  }
+
+  void _release() {
+    if (_hold.isAnimating) _hold.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onHold != null;
+    final foreground = enabled ? ConsoleStyle.background : ConsoleStyle.faint;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      excludeSemantics: true,
+      child: Listener(
+        onPointerDown: enabled ? (_) => _hold.forward(from: 0) : null,
+        onPointerUp: enabled ? (_) => _release() : null,
+        onPointerCancel: enabled ? (_) => _release() : null,
+        child: Container(
+          height: 56,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: enabled
+                ? ConsoleStyle.accent.withValues(alpha: .55)
+                : ConsoleStyle.surface,
+            borderRadius: BorderRadius.circular(ConsoleStyle.controlRadius),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              AnimatedBuilder(
+                animation: _hold,
+                builder: (context, _) => FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: _hold.value,
+                  child: const ColoredBox(color: ConsoleStyle.accent),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.icon != null) ...[
+                    Icon(widget.icon, size: 20, color: foreground),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: foreground,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

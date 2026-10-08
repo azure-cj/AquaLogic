@@ -25,6 +25,10 @@ link back here rather than duplicate a competing project status.
 
 ## Operational documentation
 
+- [Tank Console Display and Control modes](TANK_CONSOLE_DISPLAY_MODE.md):
+  hold-to-unlock, idle relock, tile gestures, panels and the mounted-tablet
+  checklist for the Galaxy Tab A.
+
 - [Tank Console Phase 2B](TANK_CONSOLE_PHASE_2B.md): live local actuator
   contract, status confirmation, uncertain outcomes and physical validation.
 

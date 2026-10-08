@@ -1,9 +1,26 @@
 # AquaLogic Development Status
 
 Status: Current checkpoint
-Last reviewed: 2026-10-07
+Last reviewed: 2026-10-08
 
 ## Completed and working locally
+
+### Tank Console Display and Control modes (2026-10-08)
+
+Branch `feat/console-display-mode`. The Console starts in a locked Display mode
+(large readings, banner, equipment summary) and unlocks into Control mode by a
+hold; 60 s idle relocks except during pending commands or open panels.
+Lighting/UV toggle in one tap without optimistic state, feeding needs a 1 s
+hold, pumps keep confirmations, and failed/unknown outcomes stay flagged on the
+tile. Panels share one order; feeder and pump panels add device-reported counts,
+last activity, portion and schedules (read-only). Also fixes panel text falling
+back to the system font and shows critical readings in red. Firmware, gateway,
+backend and web are unchanged.
+
+Validation: analyze clean for Console code; 346 Flutter tests pass, including
+new mode, hold, idle-relock, no-optimistic-toggle and parser cases, plus a
+960×600 Galaxy Tab A render test. Release APK built. Mounted-tablet checks are
+pending: see [Display and Control modes](TANK_CONSOLE_DISPLAY_MODE.md).
 
 ### Tank Console simulated actuator rehearsal (2026-10-07)
 

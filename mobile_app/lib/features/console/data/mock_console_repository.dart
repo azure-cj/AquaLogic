@@ -18,6 +18,9 @@ class MockConsoleRepository extends ConsoleRepository
         pumpA: _pump(),
         pumpB: _pump(),
         feedCount: 0,
+        feederAngle: 129,
+        feederDurationMs: 2000,
+        feederSchedule: _feederSchedule,
       ),
     );
   }
@@ -31,6 +34,15 @@ class MockConsoleRepository extends ConsoleRepository
   var _disposed = false;
   DateTime? _nextDoseAt;
   ConsoleCommandStatus? _nextOutcome;
+  static const _feederSchedule = [
+    ConsoleScheduleSlot(8, 0, enabled: true),
+    ConsoleScheduleSlot(14, 10, enabled: true),
+    ConsoleScheduleSlot(18, 0, enabled: false),
+  ];
+  String _clockLabel() {
+    final now = _clock();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
 
   ConsolePumpState _pump({
     ConsolePumpState? previous,
@@ -179,6 +191,7 @@ class MockConsoleRepository extends ConsoleRepository
             updated = updated.copyWith(
               feederRunning: true,
               feedCount: (updated.feedCount ?? 0) + 1,
+              lastFed: _clockLabel(),
             );
           } else if (action.isPump) {
             if (action.isDispense) {
@@ -337,6 +350,9 @@ class MockConsoleRepository extends ConsoleRepository
             pumpA: _pump(),
             pumpB: _pump(),
             feedCount: 0,
+            feederAngle: 129,
+            feederDurationMs: 2000,
+            feederSchedule: _feederSchedule,
           ),
         ),
       );

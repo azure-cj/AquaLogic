@@ -422,6 +422,7 @@ void main() {
           repository: repository,
           ownsRepository: true,
           displaySession: _Display(),
+          initiallyLocked: false,
         );
         await tester.pumpWidget(MaterialApp(home: screen));
 
@@ -448,6 +449,7 @@ void main() {
               repository: repository,
               ownsRepository: true,
               displaySession: _Display(),
+              initiallyLocked: false,
             ),
           ),
         );

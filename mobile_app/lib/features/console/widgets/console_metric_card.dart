@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'console_style.dart';
 
@@ -12,6 +13,7 @@ class ConsoleMetricCard extends StatelessWidget {
     required this.icon,
     required this.stale,
     this.attention = false,
+    this.critical = false,
     this.isSimulated = true,
     this.reportedStatus,
   });
@@ -21,6 +23,9 @@ class ConsoleMetricCard extends StatelessWidget {
   final IconData icon;
   final bool stale;
   final bool attention;
+
+  /// Simulated critical scenario; live readings use the reported status.
+  final bool critical;
   final bool isSimulated;
   final String? reportedStatus;
 
@@ -32,11 +37,14 @@ class ConsoleMetricCard extends StatelessWidget {
             reportedStatus != null &&
             reportedStatus != 'NORMAL' &&
             reportedStatus != 'CLEAR');
+    final severe =
+        highlight && (isSimulated ? critical : reportedStatus == 'CRITICAL');
+    final tone = severe ? ConsoleStyle.critical : ConsoleStyle.warning;
     final statusColor =
         stale || value == '—' || (!isSimulated && reportedStatus == null)
         ? ConsoleStyle.faint
         : highlight
-        ? ConsoleStyle.warning
+        ? tone
         : ConsoleStyle.good;
     final status = value == '—'
         ? 'Unavailable'
@@ -44,6 +52,8 @@ class ConsoleMetricCard extends StatelessWidget {
         ? 'Last known'
         : !isSimulated
         ? reportedStatus ?? 'Status unknown'
+        : attention && critical
+        ? 'Critical'
         : attention
         ? 'Attention'
         : 'Normal';
@@ -60,9 +70,7 @@ class ConsoleMetricCard extends StatelessWidget {
               duration: const Duration(milliseconds: 250),
               height: 3,
               decoration: BoxDecoration(
-                color: highlight && !stale
-                    ? ConsoleStyle.warning
-                    : Colors.transparent,
+                color: highlight && !stale ? tone : Colors.transparent,
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(3),
                 ),
@@ -74,6 +82,14 @@ class ConsoleMetricCard extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final short = constraints.maxHeight < 130;
+                // Display mode gives the slab most of the screen: read across a room.
+                final tall = constraints.maxHeight >= 300;
+                // Columns share one width, so a width-derived size keeps every
+                // value the same height instead of each one shrinking to fit.
+                final valueSize = math.min(
+                  short ? 40.0 : (tall ? 84.0 : 68.0),
+                  constraints.maxWidth / 3.4,
+                );
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -81,7 +97,7 @@ class ConsoleMetricCard extends StatelessWidget {
                       children: [
                         Icon(
                           icon,
-                          size: short ? 16 : 20,
+                          size: short ? 16 : (tall ? 22 : 20),
                           color: stale
                               ? ConsoleStyle.faint
                               : ConsoleStyle.accent,
@@ -94,7 +110,7 @@ class ConsoleMetricCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               height: 1,
-                              fontSize: short ? 13 : 15,
+                              fontSize: short ? 13 : (tall ? 18 : 15),
                               fontWeight: FontWeight.w600,
                               letterSpacing: .3,
                               color: ConsoleStyle.muted,
@@ -115,14 +131,14 @@ class ConsoleMetricCard extends StatelessWidget {
                             key: ValueKey('$value$stale$attention'),
                             style: TextStyle(
                               height: 1,
-                              fontSize: short ? 40 : 68,
+                              fontSize: valueSize,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: short ? -.8 : -1.5,
+                              letterSpacing: short ? -.8 : (tall ? -2 : -1.5),
                               fontFeatures: ConsoleStyle.tabular,
                               color: stale
                                   ? ConsoleStyle.faint
                                   : highlight
-                                  ? ConsoleStyle.warning
+                                  ? tone
                                   : ConsoleStyle.text,
                             ),
                             TextSpan(
@@ -132,7 +148,7 @@ class ConsoleMetricCard extends StatelessWidget {
                                   TextSpan(
                                     text: ' $unit',
                                     style: TextStyle(
-                                      fontSize: short ? 15 : 20,
+                                      fontSize: short ? 15 : (tall ? 24 : 20),
                                       fontWeight: FontWeight.w500,
                                       letterSpacing: 0,
                                       color: ConsoleStyle.muted,
@@ -162,7 +178,7 @@ class ConsoleMetricCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: short ? 12 : 14,
+                              fontSize: short ? 12 : (tall ? 18 : 14),
                               height: 1,
                               fontWeight: FontWeight.w600,
                               color: statusColor,

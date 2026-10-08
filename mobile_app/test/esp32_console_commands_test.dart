@@ -828,7 +828,7 @@ void main() {
           ),
         );
         await tester.pump(const Duration(milliseconds: 800));
-        await tester.tap(find.text('Turn off'));
+        await tester.tap(find.byKey(const ValueKey('console-switch-off')));
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
@@ -847,7 +847,12 @@ void main() {
           await tester.pump();
         }
         expect(find.textContaining('CONFIRMED'), findsOneWidget);
-        expect(find.text('Off'), findsOneWidget);
+        expect(
+          tester
+              .widget<Text>(find.byKey(const ValueKey('console-sheet-current')))
+              .data,
+          'Off',
+        );
         expect(find.text('Completed'), findsNothing);
         await tester.pumpWidget(const SizedBox());
       }, Sockets(server));

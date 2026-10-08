@@ -1,7 +1,19 @@
 # AquaLogic Architecture Decisions
 
 Status: Living decision log
-Last reviewed: 2026-10-07
+Last reviewed: 2026-10-08
+
+## 2026-10-08 — Console locks into Display mode; quick actions by risk
+
+The mounted Console defaults to a read-only Display mode and unlocks into
+Control mode by a ~1 s hold, relocking after 60 s idle (never mid-command or
+with a panel open). The lock stops accidental touches only; it is not
+authorization and uses no PIN, because only staff can reach the tablet.
+Lighting/UV toggle in one tap, feeding needs a 1 s hold, pumps keep panel
+confirmations. Feeder portion/schedule stay read-only on the Console and are
+edited in the web app. No session command history: it would omit schedule and
+web activity, so panels show device-reported last fed/dosed instead. See
+[Display and Control modes](TANK_CONSOLE_DISPLAY_MODE.md).
 
 ## 2026-10-07 — Rehearse Phase 2B pump controls in the isolated preview
 

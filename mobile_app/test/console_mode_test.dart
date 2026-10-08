@@ -221,7 +221,14 @@ void main() {
       expect(find.textContaining('27.3', findRichText: true), findsOneWidget);
       expect(find.text('7.32', findRichText: true), findsOneWidget);
       expect(find.text('Simulated data'), findsOneWidget);
+      // Display mode: equipment summary only, no tiles or settings.
+      expect(find.textContaining('Pump A', findRichText: true), findsOneWidget);
+      expect(find.byKey(const ValueKey('console-pump-a')), findsNothing);
+      expect(find.byKey(const ValueKey('console-settings')), findsNothing);
+      await unlockConsole(tester);
       expect(find.text('Pump A'), findsOneWidget);
+      expect(find.byKey(const ValueKey('console-settings')), findsOneWidget);
+      expect(tester.takeException(), isNull);
       expect(display.enters, 1);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
@@ -241,13 +248,14 @@ void main() {
         home: TankConsoleScreen(
           repository: repository,
           displaySession: _Display(),
+          initiallyLocked: false,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('console-light')));
+    await tester.tap(find.byTooltip('Lighting details'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Turn off'));
+    await tester.tap(find.byKey(const ValueKey('console-switch-off')));
     await tester.pump();
     expect(find.textContaining('SENDING'), findsWidgets);
     await tester.pump(const Duration(milliseconds: 500));
@@ -279,6 +287,7 @@ void main() {
           home: TankConsoleScreen(
             repository: repository,
             displaySession: _Display(),
+            initiallyLocked: false,
           ),
         ),
       );
@@ -288,7 +297,7 @@ void main() {
             .widget<ConsoleEquipmentCard>(
               find.byKey(const ValueKey('console-feeder')),
             )
-            .onTap,
+            .onHold,
         isNull,
       );
       expect(find.text('Last known'), findsNWidgets(4));
@@ -300,7 +309,7 @@ void main() {
             .widget<ConsoleEquipmentCard>(
               find.byKey(const ValueKey('console-feeder')),
             )
-            .onTap,
+            .onHold,
         isNotNull,
       );
       expect(
@@ -363,6 +372,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('enter-console')));
       await tester.pumpAndSettle();
       expect(find.byType(TankConsoleScreen), findsOneWidget);
+      await unlockConsole(tester);
       await tester.tap(find.byKey(const ValueKey('console-settings')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Exit Console Mode'));
@@ -401,6 +411,7 @@ void main() {
           home: TankConsoleScreen(
             repository: repository,
             displaySession: _Display(),
+            initiallyLocked: false,
           ),
         ),
       );
@@ -440,6 +451,7 @@ void main() {
               home: TankConsoleScreen(
                 repository: repository,
                 displaySession: _Display(),
+                initiallyLocked: false,
               ),
             ),
           ),
@@ -462,4 +474,15 @@ void main() {
       });
     }
   }
+}
+
+/// Holds the console lock chip long enough to enter Control mode.
+Future<void> unlockConsole(WidgetTester tester) async {
+  final gesture = await tester.startGesture(
+    tester.getCenter(find.byKey(const ValueKey('console-lock'))),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 1000));
+  await gesture.up();
+  await tester.pumpAndSettle();
 }
