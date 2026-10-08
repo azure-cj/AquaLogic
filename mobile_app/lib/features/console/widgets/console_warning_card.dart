@@ -66,12 +66,7 @@ class ConsoleWarningCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            width: 4,
-            color: color,
-          ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           Icon(
             offline
                 ? Icons.wifi_off
