@@ -29,7 +29,11 @@ class ConsolePumpSheet extends StatelessWidget {
                       ? 'Retract full stroke?'
                       : 'Dispense configured dose?',
                 ),
-                content: Text(description),
+                content: Text(
+                  controller.state?.isSimulated == true
+                      ? 'Prototype · simulated data. No hardware action will occur.\n\n$description'
+                      : description,
+                ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
@@ -100,10 +104,19 @@ class ConsolePumpSheet extends StatelessWidget {
             ConsolePanelHeader(
               icon: Icons.science_outlined,
               title: pumpA ? 'Pump A' : 'Pump B',
-              subtitle: 'Firmware-controlled dosing and maintenance',
+              subtitle: state?.isSimulated == true
+                  ? 'Prototype · simulated data'
+                  : 'Firmware-controlled dosing and maintenance',
               closeTooltip: 'Close pump controls',
             ),
             const SizedBox(height: 20),
+            if (state?.isSimulated == true) ...[
+              const Text(
+                'Demo only · no ESP32 or physical dispensing. Simulates a 1 mL dose, 5 mL capacity and shared 2-hour cooldown. Reset simulated equipment in settings to repeat the demo.',
+                style: TextStyle(color: ConsoleStyle.warning),
+              ),
+              const SizedBox(height: 16),
+            ],
             ConsoleInset(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -8,6 +8,7 @@ enum ConsoleScenario {
   bothOffline('Both unavailable'),
   attention('Water needs attention'),
   critical('Critical water quality'),
+  resetSimulation('Reset simulated equipment / cooldown'),
   rejected('Next command rejected'),
   unknown('Next command unknown');
 

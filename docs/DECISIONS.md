@@ -3,6 +3,14 @@
 Status: Living decision log
 Last reviewed: 2026-10-07
 
+## 2026-10-07 — Rehearse Phase 2B pump controls in the isolated preview
+
+The owner authorized replacing the Phase 1 mock pump placeholders with explicitly
+simulated Phase 2B workflows. Reuse production panels and domain command stages,
+while all deterministic fake state changes remain in MockConsoleRepository.
+No mock behavior enters the live repository. A mock-only reset clears simulated
+equipment/cooldown for repeat demos; it never resets firmware safety state.
+
 ## 2026-10-07 — Console confirms firmware reports, never inferred delivery
 
 Phase 2B adapts to immutable `esp32` 248c698 using single-shot allowlisted GET

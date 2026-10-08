@@ -84,7 +84,11 @@ class ConsoleCommandSheet extends StatelessWidget {
             ConsolePanelHeader(
               icon: icon,
               title: title,
-              subtitle: readOnly ? 'Monitoring only' : 'Local control',
+              subtitle: readOnly
+                  ? 'Monitoring only'
+                  : state?.isSimulated == true
+                  ? 'Prototype · simulated data'
+                  : 'Local control',
               closeTooltip: 'Close controls',
             ),
             const SizedBox(height: 28),
@@ -112,7 +116,7 @@ class ConsoleCommandSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Dosing controls will be available in a later phase after local device integration and safety review.',
+                'Pump control is unavailable for this connection. Status remains read-only.',
                 style: TextStyle(color: ConsoleStyle.muted, height: 1.5),
               ),
             ] else ...[
@@ -179,14 +183,15 @@ class ConsoleCommandSheet extends StatelessWidget {
                 child: FilledButton(
                   onPressed: enabled
                       ? () async {
-                          if (actualAction == ConsoleAction.feed &&
-                              state?.isSimulated == false) {
+                          if (actualAction == ConsoleAction.feed) {
                             final approved = await showDialog<bool>(
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: const Text('Feed once?'),
-                                content: const Text(
-                                  'Run one configured feed cycle. An uncertain request will not be repeated automatically.',
+                                content: Text(
+                                  state?.isSimulated == true
+                                      ? 'Prototype · simulated data. Preview one feed cycle without hardware. An uncertain request will not be repeated automatically.'
+                                      : 'Run one configured feed cycle. An uncertain request will not be repeated automatically.',
                                 ),
                                 actions: [
                                   TextButton(
@@ -230,7 +235,7 @@ class ConsoleCommandSheet extends StatelessWidget {
   );
 }
 
-/// Accepted → Running → Completed, with failure states shown in amber.
+/// Live and simulated command stages, with failure states shown in amber.
 class _CommandProgress extends StatelessWidget {
   const _CommandProgress({required this.command});
   final ConsoleCommand? command;
@@ -261,7 +266,12 @@ class _CommandProgress extends StatelessWidget {
       ConsoleCommandStatus.confirmed => 3,
       _ => 0,
     };
-    final live = command.id.startsWith('local-');
+    final live = switch (command.status) {
+      ConsoleCommandStatus.accepted ||
+      ConsoleCommandStatus.running ||
+      ConsoleCommandStatus.completed => false,
+      _ => true,
+    };
     final steps = live
         ? ['Sending', 'Confirming', 'Confirmed']
         : ['Accepted', 'Running', 'Completed'];
@@ -270,22 +280,12 @@ class _CommandProgress extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!failed)
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 10,
               children: [
-                for (var i = 0; i < steps.length; i++) ...[
-                  if (i > 0)
-                    Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        height: 2,
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        color: i < reached
-                            ? ConsoleStyle.accent
-                            : ConsoleStyle.hairline,
-                      ),
-                    ),
+                for (var i = 0; i < steps.length; i++)
                   _Step(label: steps[i], done: i < reached),
-                ],
               ],
             ),
           if (!failed) const SizedBox(height: 14),

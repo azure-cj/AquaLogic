@@ -5,6 +5,23 @@ Last reviewed: 2026-10-07
 
 ## Completed and working locally
 
+### Tank Console simulated actuator rehearsal (2026-10-07)
+
+The explicit preview entry now reuses the Phase 2B pump controls and simulates
+Sending → Confirming → Confirmed for LED/UV, feeder and A/B dispense, stop,
+retract and refill. Simulation is labeled in panels and dialogs; it opens no
+network connection. Fixed 1 mL/5 mL pump data, shared two-hour cooldown,
+mutual exclusion, rejection/unknown scenarios and settings-only simulated reset
+support repeat demos. Pending commands cancel on exit without replay; stopping
+a simulated dose retains its uncertain delivery result. Live firmware transport,
+gateway, cloud repositories and push behavior are unchanged.
+
+Validation: formatting and diff checks pass; analyze reports no issues.
+129 focused Console/preview tests and 335 full Flutter tests pass, including
+13 new simulation cases covering all eight pump operations, cooldown/refill,
+stop/unknown history, outage/cancellation and the landscape confirmation flow.
+Chrome preview and Android release builds also pass (APK 61.4 MB).
+
 ### Tank Console Phase 2B: local actuator controls (2026-10-07)
 
 Local main adds single-shot LED/UV ON/OFF, feed, and A/B normal dispense,

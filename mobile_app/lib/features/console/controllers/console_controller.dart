@@ -27,7 +27,6 @@ class ConsoleController extends ChangeNotifier {
         state?.readingsStale == true) {
       return false;
     }
-    if (state?.isSimulated == true) return canCommand && !action.isPump;
     final commands = state!.commands;
     if (action.isStop) {
       return repository.supportsPumpControls &&

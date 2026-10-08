@@ -35,14 +35,14 @@ class _Display implements ConsoleDisplaySession {
 
 void main() {
   test(
-    'mock command IDs track accepted running completed without optimistic state',
+    'mock command IDs track sending confirming confirmed without optimistic state',
     () async {
       final repository = MockConsoleRepository();
       addTearDown(() {
         unawaited(repository.dispose());
       });
       final command = await repository.setLight(false);
-      expect(command.status, ConsoleCommandStatus.accepted);
+      expect(command.status, ConsoleCommandStatus.sending);
       expect((await repository.getState()).equipment.lightOn, isTrue);
       final transitions = <ConsoleCommandStatus>[];
       final subscription = repository
@@ -52,15 +52,15 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 450));
       expect(
         (await repository.getCommand(command.id))?.status,
-        ConsoleCommandStatus.running,
+        ConsoleCommandStatus.confirming,
       );
       expect((await repository.getState()).equipment.lightOn, isTrue);
       await Future<void>.delayed(const Duration(milliseconds: 1250));
       expect((await repository.getState()).equipment.lightOn, isFalse);
       expect(transitions, [
-        ConsoleCommandStatus.accepted,
-        ConsoleCommandStatus.running,
-        ConsoleCommandStatus.completed,
+        ConsoleCommandStatus.sending,
+        ConsoleCommandStatus.confirming,
+        ConsoleCommandStatus.confirmed,
       ]);
       await subscription.cancel();
     },
@@ -75,7 +75,7 @@ void main() {
       });
       await repository.applyScenario(ConsoleScenario.cloudOffline);
       final command = await repository.setUV(false);
-      expect(command.status, ConsoleCommandStatus.accepted);
+      expect(command.status, ConsoleCommandStatus.sending);
       await Future<void>.delayed(const Duration(seconds: 2));
       expect((await repository.getState()).equipment.uvOn, isFalse);
       expect((await repository.getState()).cloudConnected, isFalse);
@@ -137,7 +137,7 @@ void main() {
       expect((await repository.getState()).equipment.uvOn, isTrue);
       expect((await repository.getState()).equipment.uvConfirmed, isFalse);
       final otherCommand = await repository.setLight(false);
-      expect(otherCommand.status, ConsoleCommandStatus.accepted);
+      expect(otherCommand.status, ConsoleCommandStatus.sending);
       await Future<void>.delayed(const Duration(seconds: 2));
       expect((await repository.getState()).equipment.uvConfirmed, isFalse);
       expect(
@@ -162,7 +162,7 @@ void main() {
       await Future<void>.delayed(const Duration(seconds: 2));
       expect(
         (await repository.getCommand(first.id))?.status,
-        ConsoleCommandStatus.completed,
+        ConsoleCommandStatus.confirmed,
       );
     },
   );
@@ -187,7 +187,7 @@ void main() {
       final command = await first;
       await Future<void>.delayed(const Duration(seconds: 2));
       expect(controller.state?.command?.id, command?.id);
-      expect(controller.state?.command?.status, ConsoleCommandStatus.completed);
+      expect(controller.state?.command?.status, ConsoleCommandStatus.confirmed);
       expect(controller.state?.equipment.lightOn, isFalse);
       controller.dispose();
       await repository.dispose();
@@ -230,43 +230,42 @@ void main() {
     });
   }
 
-  testWidgets(
-    'controls show command progress and pumps have no action button',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(844, 390));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final repository = MockConsoleRepository();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: TankConsoleScreen(
-            repository: repository,
-            displaySession: _Display(),
-          ),
+  testWidgets('controls show live-style progress and simulated pump controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(844, 390));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final repository = MockConsoleRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TankConsoleScreen(
+          repository: repository,
+          displaySession: _Display(),
         ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('console-light')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Turn off'));
-      await tester.pump();
-      expect(find.textContaining('ACCEPTED'), findsWidgets);
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.textContaining('RUNNING'), findsWidgets);
-      await tester.pump(const Duration(milliseconds: 1300));
-      expect(find.textContaining('COMPLETED'), findsWidgets);
-      await tester.tap(find.byTooltip('Close controls'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('console-pump-a')));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Dosing controls will be available'),
-        findsOneWidget,
-      );
-      expect(find.byType(FilledButton), findsNothing);
-      await tester.pumpWidget(const SizedBox());
-      await repository.dispose();
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('console-light')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Turn off'));
+    await tester.pump();
+    expect(find.textContaining('SENDING'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('CONFIRMING'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 1300));
+    expect(find.textContaining('CONFIRMED'), findsWidgets);
+    await tester.tap(find.byTooltip('Close controls'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('console-pump-a')));
+    await tester.pumpAndSettle();
+    expect(find.text('Prototype · simulated data'), findsOneWidget);
+    expect(find.text('Dispense 1.00 mL'), findsOneWidget);
+    expect(find.text('Stop motor'), findsOneWidget);
+    expect(find.text('Retract full stroke'), findsOneWidget);
+    expect(find.text('Confirm refill'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await repository.dispose();
+  });
 
   testWidgets(
     'offline disables controls, retains metrics and retry preserves cloud status',

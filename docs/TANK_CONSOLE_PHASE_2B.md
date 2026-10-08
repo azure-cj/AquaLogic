@@ -71,7 +71,14 @@ Every poll follows actual reports. Console adds no permanent override/arbitratio
 
 `ConsoleRepository` remains the UI boundary. Production gains the separate
 `ConsoleCommandTransport` capability; read-only injected transports cannot send
-commands. Mock transitions stay isolated; mock pumps remain read-only.
+commands. Mock transitions stay isolated. The subsequent simulated-preview update
+reuses the pump panel and Sending → Confirming → Confirmed stages for all
+actuators, with explicit simulation labels and no networking. It models a fixed
+1 mL dose, 5 mL capacity, shared two-hour cooldown and mutual exclusion. Settings
+can reset simulated equipment/cooldown for repeat demonstrations; that operation
+exists only in the mock adapter. Rejected/unknown scenarios and session
+interruption never automatically replay a simulated command. This UI rehearsal
+does not prove firmware behavior or physical liquid delivery.
 
 `Esp32ConsoleCommands` returns a typed client command ID, then tracks
 SENDING → CONFIRMING → CONFIRMED / REJECTED / FAILED / UNKNOWN. IDs are local,

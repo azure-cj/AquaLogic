@@ -1,7 +1,7 @@
 # Mobile Area Guide
 
 Status: M6.2 registration and M6.3 FID sender are verified in production; M6.4's physical Android delivery gate passed; M6.5 event triggers and M6.6 authenticated notification navigation are deployed, and the M6.6 physical tap checks passed
-Last reviewed: 2026-10-06
+Last reviewed: 2026-10-07
 
 ## Read first
 
@@ -21,7 +21,9 @@ authentication boundary are documented in
 
 Tank Console is entered through More. Production uses an isolated local ESP32
 repository for telemetry/status and live LED, UV, feeder and protected pump
-operations; previews retain labeled simulation with read-only pumps. See
+operations; previews simulate the same command stages and pump panel without
+networking or hardware. Mock settings include explicit equipment/cooldown reset,
+rejection and unknown-outcome scenarios. See
 [`../TANK_CONSOLE_PHASE_2B.md`](../TANK_CONSOLE_PHASE_2B.md) for command evidence,
 firmware limitations and physical validation, and
 [`../TANK_CONSOLE_PHASE_2A.md`](../TANK_CONSOLE_PHASE_2A.md) and
