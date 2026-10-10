@@ -12,12 +12,8 @@ class ConsoleStatusBar extends StatelessWidget {
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
       ConsoleConnectionIndicator(
-        label: 'Local ESP32',
+        label: 'Tank controller',
         connected: state.localConnected,
-      ),
-      ConsoleConnectionIndicator(
-        label: 'Cloud',
-        connected: state.cloudConnected,
       ),
     ],
   );

@@ -437,9 +437,9 @@ void main() {
 
         expect(find.textContaining('27.3', findRichText: true), findsOneWidget);
         expect(find.text('Running'), findsOneWidget);
-        expect(find.textContaining('Cloud · Unknown'), findsOneWidget);
+        expect(find.textContaining('Cloud'), findsNothing);
         expect(
-          find.textContaining('Live ESP32 · local control'),
+          find.textContaining('Live · connected to the tank controller'),
           findsOneWidget,
         );
         final count = server.requests.length;

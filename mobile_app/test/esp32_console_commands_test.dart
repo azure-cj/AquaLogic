@@ -375,8 +375,8 @@ void main() {
             (await repository.getCommand(command.id))!.message,
             contains(
               action.isPump || action == ConsoleAction.feed
-                  ? 'unverified'
-                  : 'reports',
+                  ? 'confirm delivery'
+                  : 'Controller confirmed',
             ),
           );
           expect(server.paths.where((p) => p == action.path).length, 1);
@@ -420,7 +420,7 @@ void main() {
       );
       expect(
         (await repository.getCommand(command.id))!.message,
-        contains('attribution are unverified'),
+        contains('may have been a scheduled one'),
       );
       expect(server.paths.where((p) => p == '/feeder/feed').length, 1);
     }),
@@ -854,6 +854,11 @@ void main() {
           'Off',
         );
         expect(find.text('Completed'), findsNothing);
+        // Drain real socket work before leaving the widget test's async scope.
+        await tester.runAsync(() async {
+          await repository.retryLocalConnection();
+          await repository.dispose();
+        });
         await tester.pumpWidget(const SizedBox());
       }, Sockets(server));
     },

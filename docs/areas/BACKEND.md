@@ -25,8 +25,9 @@ Last reviewed: 2026-10-07
   Threshold comparisons are strict at configured boundaries; active alerts can
   escalate, downgrade, and resolve automatically on the next fresh normal
   value for the same parameter. It uses the tank's complete override when
-  present and otherwise the global default. Only a newly inserted Alert row
-  enqueues its deterministic creation event in the same transaction.
+  present and otherwise the global default. Newly inserted Alert rows
+  enqueue their deterministic creation event; warning-to-critical transitions
+  enqueue one escalation event per alert identity in the same transaction.
 - `backend/app/services/monitoring_incidents.py`: outage detection and
   idempotent incident resolution. Newly created incidents enqueue one opened
   event; only a successful `reporting_recovered` transition enqueues recovery.
@@ -69,6 +70,9 @@ Last reviewed: 2026-10-07
   bearer token; the response never includes the FCM token.
 - `backend/app/services/push_devices.py`: recipient eligibility filtered by
   active device, active admin/staff account, and unrevoked, unexpired session.
+- `backend/app/services/push_insight.py`: bounded advisory alert, outage and
+  recovery copy; callers isolate composition failures with savepoints and logged
+  fallback. Trend queries reuse the six-hour fit gates for one tank/parameter.
 - `backend/app/services/push_notifications.py`: transaction-owned idempotent
   event enqueueing, per-device delivery rows, PostgreSQL skip-locked claims,
   lease recovery, SQLite compare-and-set test behavior, eligibility rechecks,
@@ -179,8 +183,8 @@ Last reviewed: 2026-10-07
 - Alert freshness is based on server `received_at` with a 90-second window.
   Missing values are unavailable; a fresh reading uses the worst present,
   enabled severity and becomes offline when no usable value exists. M6.5
-  transactionally records one push event per new Alert, monitoring outage, or
-  true reporting recovery; in-app records remain authoritative and Firebase is
+  transactionally records one push event per new Alert, first warning-to-critical escalation, monitoring
+  outage, or true reporting recovery; in-app records remain authoritative and Firebase is
   only the transport.
 - Runtime packages belong in `requirements.txt`; pytest, HTTP clients, and
   audit tooling belong in `requirements-dev.txt`.

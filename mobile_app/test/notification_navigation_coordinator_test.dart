@@ -10,6 +10,45 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'escalation navigates to alert detail and dedupes repeated taps',
+    () async {
+      final auth = _FakeAuthService(AuthStatus.authenticated);
+      final push = _FakePushNotificationService();
+      final navigations = <PushNotificationIntent?>[];
+      final coordinator = NotificationNavigationCoordinator(
+        authService: auth,
+        pushNotificationService: push,
+        navigate: (intent) {
+          navigations.add(intent);
+          return true;
+        },
+      )..start();
+      coordinator.onAuthenticatedShellReady();
+      final event = PushNotificationOpenEvent(
+        data: {
+          'schema_version': '1',
+          'type': 'water_quality_alert_escalated',
+          'event_key': 'water_quality_alert:42:escalated',
+          'alert_id': '42',
+          'tank_id': '7',
+        },
+      );
+      push.opens.add(event);
+      await Future<void>.delayed(Duration.zero);
+      push.opens.add(event);
+      await Future<void>.delayed(Duration.zero);
+      expect(navigations, hasLength(1));
+      expect(
+        navigations.single!.kind,
+        PushNotificationIntentKind.waterQualityAlert,
+      );
+      expect(navigations.single!.recordId, '42');
+      await coordinator.dispose();
+      auth.dispose();
+    },
+  );
+
+  test(
     'console suspends push navigation and resumes the retained tap once',
     () async {
       final auth = _FakeAuthService(AuthStatus.authenticated);

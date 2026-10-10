@@ -51,7 +51,9 @@ class ConsoleMetricCard extends StatelessWidget {
         : stale
         ? 'Last known'
         : !isSimulated
-        ? reportedStatus ?? 'Status unknown'
+        // Firmware grades turbidity as MODERATE; show the shared scale.
+        ? (reportedStatus == 'MODERATE' ? 'WARNING' : reportedStatus) ??
+              'Status unknown'
         : attention && critical
         ? 'Critical'
         : attention
@@ -59,7 +61,7 @@ class ConsoleMetricCard extends StatelessWidget {
         : 'Normal';
     return Semantics(
       label:
-          '$label $value $unit. $status. ${isSimulated ? 'Simulated' : 'ESP32 reported'} reading.',
+          '$label $value $unit. $status. ${isSimulated ? 'Simulated' : 'Live'} reading.',
       child: Stack(
         children: [
           Positioned(

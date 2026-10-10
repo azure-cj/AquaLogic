@@ -17,6 +17,10 @@ from app.models import MonitoringIncident, RegisteredDevice, SensorReading, Tank
 from app.services.auth_security import audit_event
 from app.services.actuator_commands import reconcile_all_actuator_commands
 from app.services.push_notifications import enqueue_push_notification
+from app.services.push_insight import (
+    compose_outage_push, compose_recovery_push, OUTAGE_FALLBACK_TITLE,
+    OUTAGE_FALLBACK_BODY, RECOVERY_FALLBACK_TITLE, RECOVERY_FALLBACK_BODY,
+)
 from app.security import utc_now
 
 
@@ -86,13 +90,19 @@ def resolve_active_monitoring_incident(
     if reason == "reporting_recovered":
         tank = db.get(Tank, incident.tank_id)
         tank_name = tank.name if tank is not None else f"Tank {incident.tank_id}"
+        try:
+            with db.begin_nested():
+                title, body = compose_recovery_push(db, tank, incident, now=resolved_value)
+        except Exception:
+            logger.exception("Recovery push composition failed; using fallback")
+            title, body = RECOVERY_FALLBACK_TITLE, RECOVERY_FALLBACK_BODY.format(tank=tank_name[:160])
         enqueue_push_notification(
             db,
             event_type="monitoring_recovered",
             source_id=incident.id,
             tank_id=incident.tank_id,
-            title="Monitoring restored",
-            body=f"{tank_name} has resumed reporting. View Monitoring history in AquaLogic.",
+            title=title,
+            body=body,
             now=resolved_value,
         )
     return incident
@@ -222,13 +232,19 @@ def detect_monitoring_incidents(
                             else None,
                         },
                     )
+                    try:
+                        with db.begin_nested():
+                            title, body = compose_outage_push(db, tank, incident, now=now)
+                    except Exception:
+                        logger.exception("Outage push composition failed; using fallback")
+                        title, body = OUTAGE_FALLBACK_TITLE, OUTAGE_FALLBACK_BODY.format(tank=tank.name[:160])
                     enqueue_push_notification(
                         db,
                         event_type="monitoring_incident",
                         source_id=incident.id,
                         tank_id=tank.id,
-                        title="Monitoring outage",
-                        body=f"{tank.name} has stopped reporting. Open Monitoring in AquaLogic for outage history.",
+                        title=title,
+                        body=body,
                         now=now,
                     )
                 created += 1

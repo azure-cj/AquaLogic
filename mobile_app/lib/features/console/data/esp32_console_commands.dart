@@ -229,12 +229,12 @@ class Esp32ConsoleCommands {
         if (known && on == wanted) {
           confirmed = true;
           message =
-              'Device reports ${on ? 'ON' : 'OFF'}. Physical output is not measured.';
+              'Controller confirmed ${on ? 'on' : 'off'}.';
         } else if (known) {
           _set(
             command,
             ConsoleCommandStatus.unknown,
-            'Device reports ${on ? 'ON' : 'OFF'}, different from the request. Outcome uncertain; schedules/external commands may apply.',
+            'Controller reports ${on ? 'on' : 'off'}, not what was requested. A schedule or another command may have changed it; check the equipment.',
           );
         }
       } else {
@@ -250,7 +250,7 @@ class Esp32ConsoleCommands {
         if (action.isStop) {
           confirmed = active == false;
           message =
-              'Device reports motor idle. Delivered amount is unverified.';
+              'Controller reports the motor finished. Check the tank to confirm delivery.';
         } else if (action.isRefill) {
           confirmed =
               evidence.acknowledged &&
@@ -259,7 +259,7 @@ class Esp32ConsoleCommands {
               pump.capacityMl != null &&
               (pump.remainingMl! - pump.capacityMl!).abs() <= .001;
           message =
-              'Device reports refill recorded. No motor movement; cooldown unchanged.';
+              'Refill recorded. The pump did not run.';
         } else if (action.isRetract) {
           if (active == true) evidence.observedActive = true;
           confirmed = evidence.observedActive && active == false;
@@ -275,7 +275,7 @@ class Esp32ConsoleCommands {
           }
           confirmed = evidence.observedStart && active == false;
           message =
-              'Device reports a new ${action == ConsoleAction.feed ? 'feed' : 'dose'} start and is now idle. Delivery and command attribution are unverified.';
+              'Controller reports a ${action == ConsoleAction.feed ? 'feed' : 'dose'} ran (it may have been a scheduled one) and is now idle. Check the tank to confirm delivery.';
         }
         if (!confirmed &&
             (evidence.observedStart || evidence.observedActive) &&
@@ -283,7 +283,7 @@ class Esp32ConsoleCommands {
           _set(
             command,
             ConsoleCommandStatus.confirming,
-            'Device reports activity. Waiting for reported idle; physical delivery is unverified.',
+            'Running. Waiting for the controller to report it finished.',
           );
         }
       }

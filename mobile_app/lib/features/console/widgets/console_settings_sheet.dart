@@ -44,26 +44,14 @@ class _ConsoleSettingsSheetState extends State<ConsoleSettingsSheet> {
                 children: [
                   _ConnectionRow(
                     icon: Icons.memory_rounded,
-                    title: 'Local ESP32',
+                    title: 'Tank controller',
                     detail: state?.isSimulated == false
-                        ? 'Direct local telemetry and control'
+                        ? 'Live readings and equipment control over Wi-Fi'
                         : 'Controls the tank equipment',
                     connected: state?.localConnected ?? false,
                     status: state?.isSimulated == false
                         ? state?.connection.name
                         : null,
-                  ),
-                  const Divider(
-                    height: 1,
-                    indent: 16,
-                    endIndent: 16,
-                    color: ConsoleStyle.hairline,
-                  ),
-                  _ConnectionRow(
-                    icon: Icons.cloud_outlined,
-                    title: 'Cloud',
-                    detail: 'History, alerts, analytics and sync',
-                    connected: state?.cloudConnected,
                   ),
                 ],
               ),
@@ -114,6 +102,12 @@ class _ConsoleSettingsSheetState extends State<ConsoleSettingsSheet> {
                   ),
                 ),
                 items: ConsoleScenario.values
+                    // Cloud status is no longer shown in the console.
+                    .where(
+                      (scenario) =>
+                          scenario != ConsoleScenario.cloudOffline &&
+                          scenario != ConsoleScenario.bothOffline,
+                    )
                     .map(
                       (scenario) => DropdownMenuItem(
                         value: scenario,

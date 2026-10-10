@@ -728,15 +728,10 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
         ],
         const Spacer(),
         ConsoleConnectionIndicator(
-          label: 'Local',
+          label: state.isSimulated
+              ? 'Simulated'
+              : _title(state.connection.name),
           connected: state.localConnected,
-          status: state.isSimulated ? null : _title(state.connection.name),
-          compact: true,
-        ),
-        const SizedBox(width: 20),
-        ConsoleConnectionIndicator(
-          label: 'Cloud',
-          connected: state.cloudConnected,
           compact: true,
         ),
         const SizedBox(width: 16),
@@ -880,7 +875,7 @@ class _TankConsoleScreenState extends State<TankConsoleScreen> {
               command == null
                   ? state.isSimulated
                         ? 'Command idle'
-                        : 'Live ESP32 · local control · device reports authoritative'
+                        : 'Live · connected to the tank controller'
                   : 'Command ${command.status.label.toLowerCase()} — ${command.message}',
               key: const ValueKey('console-command-status'),
               maxLines: 1,

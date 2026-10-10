@@ -36,9 +36,13 @@ class PushNotificationIntent {
 
     switch (type) {
       case 'water_quality_alert':
+      case 'water_quality_alert_escalated':
         final alertId = _positiveId(data['alert_id']);
+        final suffix = type == 'water_quality_alert_escalated'
+            ? 'escalated'
+            : 'created';
         if (alertId == null ||
-            eventKey != 'water_quality_alert:$alertId:created') {
+            eventKey != 'water_quality_alert:$alertId:$suffix') {
           return null;
         }
         return PushNotificationIntent(
