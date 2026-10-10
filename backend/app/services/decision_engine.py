@@ -1,4 +1,5 @@
 """Single ingestion and status-evaluation path for sensor data."""
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,7 +9,23 @@ from app.services.auth_security import audit_event
 from app.services.reading_freshness import is_reading_current
 from app.services.monitoring_incidents import resolve_active_monitoring_incident
 from app.services.push_notifications import enqueue_push_notification
+from app.services.push_insight import ALERT_FALLBACK_BODY, ALERT_FALLBACK_TITLE, compose_alert_push
 from app.services.thresholds import EffectiveThreshold, resolve_effective_thresholds
+
+logger = logging.getLogger(__name__)
+
+
+def _alert_push_copy(db, alert, reading, tank, *, escalated):
+    try:
+        # Context SQL failures must roll back only composition, not the alert.
+        with db.begin_nested():
+            return compose_alert_push(db, alert, reading, tank, escalated=escalated, now=reading.received_at)
+    except Exception:
+        logger.exception("Alert push composition failed; using fallback")
+        return ALERT_FALLBACK_TITLE, ALERT_FALLBACK_BODY.format(
+            tank=tank.name[:160], parameter=alert.parameter.replace("_", " ").title(),
+            severity=alert.severity.value)[:300]
+
 
 PARAMETERS = ("temperature", "ph", "turbidity", "dissolved_oxygen", "tds", "ammonia")
 PUBLIC_PARAMETERS = ("temperature", "ph", "turbidity", "tds")
@@ -121,23 +138,28 @@ def ingest_reading(
                 db.add(alert)
                 db.flush()
                 tank = db.get(Tank, tank_id)
-                tank_name = tank.name if tank is not None else f"Tank {tank_id}"
+                title, body = _alert_push_copy(db, alert, reading, tank, escalated=False)
                 enqueue_push_notification(
                     db,
                     event_type="water_quality_alert",
                     source_id=alert.id,
                     tank_id=tank_id,
-                    title="Water-quality alert",
-                    body=(
-                        f"{tank_name}: {parameter.replace('_', ' ').title()} {severity.value}. "
-                        "Open AquaLogic for details and suggested checks."
-                    ),
+                    title=title,
+                    body=body,
                     now=reading.received_at,
                 )
             elif alert.severity != severity or alert.reading_id != reading.id:
+                escalated = alert.severity == AlertSeverity.warning and severity == AlertSeverity.critical
                 alert.severity = severity
                 alert.reading_id = reading.id
                 alert.message = message
+                if escalated:
+                    tank = db.get(Tank, tank_id)
+                    title, body = _alert_push_copy(db, alert, reading, tank, escalated=True)
+                    enqueue_push_notification(
+                        db, event_type="water_quality_alert_escalated", source_id=alert.id,
+                        tank_id=tank_id, title=title, body=body, now=reading.received_at,
+                    )
             continue
 
         # Missing values are unavailable rather than normal and must not close

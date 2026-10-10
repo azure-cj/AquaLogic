@@ -1454,3 +1454,24 @@ backend Python files and Analytics types/utilities unchanged during this pass.
 Browser confirmed compact details, grouped temperature findings, access to exact
 pH evidence/limitations and no console errors. Screenshot:
 evidence/analytics-concepts/consolidated-overview.png.
+
+
+## 2026-10-10: Advisory push insights and one escalation per alert
+
+Operational pushes now include configured-bound context and the first advisory
+checks from the shared operator guidance. Optional trends reuse the six-hour
+observation-time median/Sen-fit reliability gates through a one-tank,
+one-parameter stream. Current species context retains its existing freshness
+and observation gates. Species, trend, then the second check are removed when
+necessary to preserve the breached bound and first check within transport limits.
+
+Warning-to-critical transitions enqueue `water_quality_alert_escalated` with
+`water_quality_alert:{id}:escalated`, so the existing unique outbox key allows
+one escalation per alert even after flapping. Mobile routes it to alert detail.
+No push is sent on downgrade or water-quality resolution. Existing String(40)
+event types need no schema migration. Outage and recovery copy uses receipt-time
+durations and threshold context, never diagnoses or dosing instructions.
+
+Composition runs in a savepoint with logged fallback to existing plain copy;
+failed context queries must not abort source writes. Firebase delivery remains
+outside the source transaction. See [payload contract](API_CONTRACT.md#operational-push-payloads).

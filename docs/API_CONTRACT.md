@@ -52,6 +52,34 @@ User creation and reset responses return one-time `setup_url` values rather
 than plaintext passwords. Setup links are fragment tokens and expire after 30
 minutes. Password changes and resets revoke existing sessions.
 
+## Operational push payloads
+
+Schema version `1` uses string-valued data fields: `schema_version`, `type`,
+`event_key`, `tank_id`, and the source record ID. Mobile validates the exact
+key and opens the existing authenticated alert or monitoring target.
+
+| Type | Source field | Exact event key |
+| --- | --- | --- |
+| `water_quality_alert` | `alert_id` | `water_quality_alert:{alert_id}:created` |
+| `water_quality_alert_escalated` | `alert_id` | `water_quality_alert:{alert_id}:escalated` |
+| `monitoring_incident` | `incident_id` | `monitoring_incident:{incident_id}:opened` |
+| `monitoring_recovered` | `incident_id` | `monitoring_incident:{incident_id}:recovered` |
+
+Warning-to-critical escalation sends at most once per alert identity, including
+critical/warning flapping. Downgrade and resolution send no water-quality push.
+Escalation uses the same alert-detail navigation as creation. Outbox enqueueing
+and the source transition share a transaction; Firebase dispatch stays separate.
+
+Titles are limited to 160 characters and bodies to 300. Water-quality copy
+includes the breached configured bound and initial advisory checks, with reliable
+observation-time trends and current assigned-species comfort context when
+available. Optional copy drops species, trend, then the second check to fit.
+Outage/recovery copy uses server receipt times and configured-threshold status;
+missing readings remain unavailable. Composition failures log and use the
+existing plain copy without aborting the source transaction. Dissolved oxygen
+and ammonia retain generic copy. Push text is a snapshot; in-app records remain
+authoritative.
+
 ## Authenticated Android push-device registration
 
 `PUT /push/devices/current` requires a completed, authenticated `admin` or

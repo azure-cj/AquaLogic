@@ -167,7 +167,7 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
       id: ++_nextLocalNotificationId,
       title: message.title,
       body: message.body,
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           aqualogicAlertsChannelId,
           aqualogicAlertsChannelName,
@@ -175,6 +175,11 @@ class FirebasePushNotificationPlatform implements PushNotificationPlatform {
           icon: aqualogicNotificationIcon,
           importance: Importance.high,
           priority: Priority.high,
+          // Insight bodies run 2-3 sentences; expand instead of truncating
+          // the first check behind a single line.
+          styleInformation: message.body == null
+              ? null
+              : BigTextStyleInformation(message.body!),
         ),
       ),
       payload: payload,

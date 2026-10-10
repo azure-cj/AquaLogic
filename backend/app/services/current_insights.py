@@ -480,3 +480,36 @@ def build_current_insights(db: Session, tank_ids=(), *, now=None, use_cache=True
     if cache_enabled:
         _remember(bind, cache_key, response)
     return response
+
+
+def build_parameter_trend(db: Session, tank_id: int, parameter: str, *, now):
+    """Use the same fit gates for one push parameter, streaming only six hours.
+
+    Real observations take precedence over mock data across the tank's fit
+    window, matching TankWindow. Receipt times exclude reports not yet received.
+    """
+    if parameter not in PARAMETERS:
+        raise ValueError("Unsupported trend parameter")
+    now = aware(now)
+    end = bucket_start(now)
+    buckets = defaultdict(lambda: defaultdict(lambda: ([], set())))
+    sources = defaultdict(set)
+    real_fit = False
+    column = getattr(SensorReading, parameter)
+    rows = db.execute(select(SensorReading.timestamp, SensorReading.device_id,
+        SensorReading.is_mock, column.label('value')).where(
+        SensorReading.tank_id == tank_id,
+        SensorReading.timestamp >= stamp(end - FIT_BUCKETS * BUCKET_SECONDS),
+        SensorReading.timestamp < stamp(end), SensorReading.received_at <= now
+    ).execution_options(yield_per=1000))
+    for row in rows:
+        real_fit |= not row.is_mock
+        if row.value is None or not isfinite(row.value):
+            continue
+        observed = aware(row.timestamp)
+        values, times = buckets[row.is_mock][bucket_start(observed)]
+        values.append(row.value)
+        if len(times) < MIN_BUCKET_READINGS:
+            times.add(observed)
+        sources[row.is_mock].add((row.device_id, row.is_mock))
+    return build_trend(parameter, buckets[not real_fit], sources[not real_fit], end)[0]

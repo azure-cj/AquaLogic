@@ -1,5 +1,26 @@
 # AquaLogic Development Status
 
+
+## 2026-10-10: Insightful operational push copy and escalation
+
+Implemented locally: bounded alert push copy with breached bounds, reliable
+observation-time trends, current species comfort context and initial advisory
+checks; receipt-based outage/recovery durations and range status; and one
+warning-to-critical escalation push per alert identity. Mobile strictly validates
+the escalation payload and uses existing alert-detail navigation. Composition
+failures preserve the source transaction and use logged plain-text fallbacks.
+These working-tree changes include no schema migration or deployment; physical
+Android verification of the new copy/escalation remains pending.
+See [decision](DECISIONS.md#2026-10-10-advisory-push-insights-and-one-escalation-per-alert)
+and [payload contract](API_CONTRACT.md#operational-push-payloads).
+
+Validation: backend 454 passed and one optional test skipped (existing Firebase
+token deprecation warning); Flutter 358 tests passed and analysis reported no
+issues; Markdown links and `git diff --check` passed. The existing live lighting
+widget test now drains its real socket poll before disposal in `runAsync`,
+preventing a connection-cancellation exception after the test completes.
+
+
 Status: Current checkpoint
 Last reviewed: 2026-10-08
 

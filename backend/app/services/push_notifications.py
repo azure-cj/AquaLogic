@@ -35,6 +35,7 @@ RETRY_MAX_SECONDS = 3600
 CONFIGURATION_RECHECK_SECONDS = 60
 
 _EVENT_CONTRACTS = {
+    "water_quality_alert_escalated": ("alert", "alert_id", "water_quality_alert", "escalated"),
     "water_quality_alert": ("alert", "alert_id", "water_quality_alert", "created"),
     "monitoring_incident": (
         "monitoring_incident",

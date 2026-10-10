@@ -131,15 +131,24 @@ def test_alert_creation_enqueues_once_per_alert_identity(client, auth_headers, d
     assert len(events) == 1
     assert events[0].event_key == f"water_quality_alert:{alert.id}:created"
     assert events[0].source_id == str(alert.id)
-    assert "Alert event lifecycle" in events[0].body
-    assert "Temperature" in events[0].body
-    assert "details and suggested checks" in events[0].body
+    assert "Alert event lifecycle" in events[0].title
+    assert "Temperature" in events[0].title
+    assert "First check: confirm the measurement" in events[0].body
     assert _delivery_count(db_session, events[0].id) == 1
 
     # Escalation and later abnormal readings update this Alert identity only.
     ingest_reading(db_session, tank.id, _reading_values(31.0))
     db_session.refresh(alert)
     assert alert.severity.value == "critical"
+    escalations = _events(db_session, "water_quality_alert_escalated")
+    assert len(escalations) == 1
+    assert escalations[0].event_key == f"water_quality_alert:{alert.id}:escalated"
+    assert escalations[0].payload == {
+        "schema_version": "1", "type": "water_quality_alert_escalated",
+        "event_key": f"water_quality_alert:{alert.id}:escalated",
+        "tank_id": str(tank.id), "alert_id": str(alert.id),
+    }
+    assert _delivery_count(db_session, escalations[0].id) == 1
     ingest_reading(db_session, tank.id, _reading_values(31.5))
     assert len(_events(db_session, "water_quality_alert")) == 1
 
@@ -208,8 +217,8 @@ def test_new_monitoring_outage_enqueues_once_and_snapshots_recipients(
     events = _events(db_session, "monitoring_incident")
     assert len(events) == 1
     assert events[0].event_key == f"monitoring_incident:{incident.id}:opened"
-    assert tank.name in events[0].body
-    assert "stopped reporting" in events[0].body
+    assert tank.name in events[0].title
+    assert "stopped reporting" in events[0].title
     assert _delivery_count(db_session, events[0].id) == 1
 
     repeated = detect_monitoring_incidents(
@@ -242,8 +251,8 @@ def test_reporting_recovery_enqueues_once_only_after_successful_transition(
     events = _events(db_session, "monitoring_recovered")
     assert len(events) == 1
     assert events[0].event_key == f"monitoring_incident:{incident.id}:recovered"
-    assert tank.name in events[0].body
-    assert "resumed reporting" in events[0].body
+    assert tank.name in events[0].title
+    assert "reporting again" in events[0].title
     assert _delivery_count(db_session, events[0].id) == 1
 
     assert (
@@ -382,3 +391,31 @@ def test_firebase_failure_does_not_rollback_monitoring_incident(
     )
     assert delivery is not None
     assert delivery.status == "retry"
+
+
+@pytest.mark.parametrize("composer", ["compose_outage_push", "compose_recovery_push"])
+def test_monitoring_composer_failure_keeps_incident_and_fallback_push(
+    client, auth_headers, db_session, monkeypatch, caplog, composer
+):
+    from app.services import monitoring_incidents
+    from app.services import push_insight
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("monitoring composition failed")
+
+    monkeypatch.setattr(monitoring_incidents, composer, fail)
+    tank, device, detected_at, incident = _prepare_outage(client, auth_headers, db_session)
+    if composer == "compose_outage_push":
+        event = _events(db_session, "monitoring_incident")[0]
+        assert incident.resolved_at is None
+        assert event.title == push_insight.OUTAGE_FALLBACK_TITLE
+        assert event.body == push_insight.OUTAGE_FALLBACK_BODY.format(tank=tank.name)
+    else:
+        ingest_reading(db_session, tank.id, _reading_values(), device_id=device['device_id'],
+                       received_at=detected_at + timedelta(seconds=1))
+        db_session.refresh(incident)
+        event = _events(db_session, "monitoring_recovered")[0]
+        assert incident.resolution_reason == "reporting_recovered"
+        assert event.title == push_insight.RECOVERY_FALLBACK_TITLE
+        assert event.body == push_insight.RECOVERY_FALLBACK_BODY.format(tank=tank.name)
+    assert "using fallback" in caplog.text
