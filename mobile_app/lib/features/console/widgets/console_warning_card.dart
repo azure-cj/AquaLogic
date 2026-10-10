@@ -26,7 +26,7 @@ class ConsoleWarningCard extends StatelessWidget {
         ? (state.connection == ConsoleLocalConnection.degraded
               ? 'Local data degraded'
               : state.connection == ConsoleLocalConnection.connecting
-              ? 'Connecting to ESP32'
+              ? 'Connecting to the tank controller'
               : 'Local device offline')
         : switch (state.quality) {
             ConsoleWaterQuality.normal => 'Water quality is good',
@@ -40,8 +40,8 @@ class ConsoleWarningCard extends StatelessWidget {
               : 'Last received ${TimeOfDay.fromDateTime(state.observedAt!).format(context)}. Last-known data; live controls disabled.')
         : !state.isSimulated
         ? (state.quality == null
-              ? 'The ESP32 has not reported a usable classification.'
-              : 'ESP32 reported ${state.quality!.label.toLowerCase()}. Check water conditions before dosing.')
+              ? 'The tank controller has not reported a water-quality status yet.'
+              : _liveDescription(state))
         : switch (state.quality) {
             ConsoleWaterQuality.normal =>
               'All four simulated parameters are within the configured range.',
@@ -128,4 +128,32 @@ class ConsoleWarningCard extends StatelessWidget {
       ),
     );
   }
+}
+
+const _sensorLabels = {
+  'temp': 'Temperature',
+  'ph': 'pH',
+  'tds': 'TDS',
+  'turbidity': 'Turbidity',
+};
+
+String _liveDescription(ConsoleState state) {
+  if (state.quality == ConsoleWaterQuality.normal) {
+    return 'All reported readings are within the normal range.';
+  }
+  final flagged = [
+    for (final entry in _sensorLabels.entries)
+      if (state.sensorStatuses[entry.key] case final String status
+          when status != 'NORMAL' && status != 'CLEAR')
+        entry.value,
+  ];
+  final subject = switch (flagged.length) {
+    0 => 'A reading is',
+    1 => '${flagged.single} is',
+    _ =>
+      '${flagged.sublist(0, flagged.length - 1).join(', ')} and ${flagged.last} are',
+  };
+  return state.quality == ConsoleWaterQuality.critical
+      ? '$subject at a critical level. Check the tank now and hold off on dosing.'
+      : '$subject outside the normal range. Check the water before dosing.';
 }

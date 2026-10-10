@@ -313,12 +313,8 @@ void main() {
         isNotNull,
       );
       expect(
-        tester
-            .widget<ConsoleConnectionIndicator>(
-              find.widgetWithText(ConsoleConnectionIndicator, 'Cloud'),
-            )
-            .connected,
-        isFalse,
+        find.widgetWithText(ConsoleConnectionIndicator, 'Cloud'),
+        findsNothing,
       );
       await tester.pumpWidget(const SizedBox());
       await repository.dispose();

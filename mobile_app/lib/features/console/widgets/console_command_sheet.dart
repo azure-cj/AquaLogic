@@ -380,7 +380,7 @@ class ConsoleCommandProgress extends StatelessWidget {
     if (command == null) {
       return const ConsoleInset(
         child: Text(
-          'No command submitted.',
+          'No commands sent yet.',
           key: ValueKey('console-sheet-command'),
           style: TextStyle(color: ConsoleStyle.muted),
         ),

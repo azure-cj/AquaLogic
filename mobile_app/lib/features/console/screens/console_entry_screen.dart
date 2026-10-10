@@ -78,14 +78,14 @@ class _ConsoleEntryScreenState extends State<ConsoleEntryScreen> {
                 const SizedBox(height: 8),
                 Text(
                   widget.liveMode
-                      ? 'Live ESP32 · local command center'
+                      ? 'Live · local command center'
                       : 'Prototype · simulated data',
                 ),
                 const SizedBox(height: 8),
                 Text(
                   widget.liveMode
-                      ? 'Read sensors and control equipment over local Wi-Fi. Device reports and firmware safeguards remain authoritative. Cloud availability does not affect local operation.'
-                      : 'This preview uses simulated readings and controls. No ESP32 is connected. Pumps are read-only.',
+                      ? 'Read sensors and control equipment over local Wi-Fi. Works even when the internet is down, and the controller’s built-in safety limits always apply.'
+                      : 'This preview uses simulated readings and controls. No tank controller is connected. Pumps are read-only.',
                 ),
                 if (widget.liveMode) ...[
                   const SizedBox(height: 20),

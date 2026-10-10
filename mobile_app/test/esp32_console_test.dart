@@ -516,8 +516,8 @@ void main() {
         ),
       );
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.textContaining('Cloud · Unknown'), findsOneWidget);
-      expect(find.textContaining('Live ESP32 · local control'), findsOneWidget);
+      expect(find.textContaining('Cloud'), findsNothing);
+      expect(find.textContaining('Live · connected to the tank controller'), findsOneWidget);
       expect(find.text('Running'), findsOneWidget);
       expect(find.text('Simulated data'), findsNothing);
       await tester.tap(find.byTooltip('Lighting details'));
